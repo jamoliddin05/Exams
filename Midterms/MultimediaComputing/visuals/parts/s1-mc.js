@@ -462,7 +462,7 @@ QV.register('s1-mc5', function (q) {
     drawTape(p);
   });
 
-  // Figure 2: interval ladder for CAEE$ (slide 5 table, Fig. 7.8)
+  // Figure 3: interval ladder for CAEE$ (slide 5 table, Fig. 7.8)
   const SYMS = [['A', 0.2], ['B', 0.1], ['C', 0.2], ['D', 0.05], ['E', 0.3], ['F', 0.05], ['$', 0.1]];
   const RANGE = {};
   let acc = 0;
@@ -532,7 +532,184 @@ QV.register('s1-mc5', function (q) {
     }
   });
 
-  // Figure 3: bit ledger for CAEE$
+  // Figure 2: the same encoding as one zoom per step, after a decimal-digit warm-up
+  const num = v => String(+v.toPrecision(10));
+  const ZOOM = [{ syms: '0123456789'.split('').map(d => [d, 0.1]), lo: 0, hi: 1, pick: 3, label: 'digits', tokens: ['3', '7'], cur: 0, tail: '→ 0.37…' }];
+  let zlo = 0, zhi = 1;
+  MSG.forEach((sym, i) => {
+    ZOOM.push({ syms: SYMS, lo: zlo, hi: zhi, pick: SYMS.findIndex(([t]) => t === sym), label: 'message', tokens: MSG, cur: i });
+    const r = zhi - zlo;
+    [zlo, zhi] = [zlo + r * RANGE[sym][0], zlo + r * RANGE[sym][1]];
+  });
+  // Procedure 7.2 (slide 8): try a 1 in each bit, drop it if the value passes high
+  const trace = [];
+  let zcode = 0, zbits = '';
+  for (let k = 1; zcode < zlo; k++) {
+    const t = zcode + 2 ** -k, keep = t <= zhi;
+    trace.push({ k, tried: zbits + '1', t, keep });
+    if (keep) zcode = t;
+    zbits += keep ? '1' : '0';
+  }
+  const lo7 = Math.floor(zlo * 128) / 128, hi7 = lo7 + 1 / 128;
+  const bin = (v, n) => '0.' + Math.round(v * 2 ** n).toString(2).padStart(n, '0');
+
+  const Z = { x0: 70, x1: 740, top: 62, bh: 38, bot: 182 };
+  const zoom = svg(viz('zoom'), 760, 248, { label: 'Arithmetic encoding of CAEE$ one step at a time: the current interval cut into symbol slices, and the chosen slice stretched into the next interval', minWidth: 580 });
+  const zg = s('g', {}, zoom);
+  const zx = f => Z.x0 + Math.min(f, 1) * (Z.x1 - Z.x0);
+  const zt = (x, y, text, cls, anchor) => s('text', { x, y, dy: '0.35em', 'text-anchor': anchor, class: cls }, zg, text);
+
+  function strip(st) {
+    zt(0, 13, st.label, 't-fg t-bold');
+    st.tokens.forEach((t, i) => {
+      const [f, c] = i < st.cur ? ['f-pri-soft', 't-pri'] : i === st.cur ? ['f-pri', 't-on t-bold'] : ['f-seg', 't-muted'];
+      s('rect', { x: Z.x0 + i * 30, y: 2, width: 26, height: 22, rx: 3, class: f }, zg);
+      zt(Z.x0 + i * 30 + 13, 13, t, c, 'middle');
+    });
+    if (st.tail) zt(Z.x0 + st.tokens.length * 30 + 6, 13, st.tail, 't-fg');
+  }
+
+  function drawSlices(st) {
+    const { syms, lo, hi, pick } = st, r = hi - lo, cum = [0];
+    syms.forEach(([, p]) => cum.push(cum[cum.length - 1] + p));
+    const c0 = cum[pick], c1 = cum[pick + 1], p = syms[pick][1], nlo = lo + r * c0, nhi = lo + r * c1, yb = Z.top + Z.bh;
+    zt(0, Z.top + Z.bh / 2, 'current', 't-fg t-bold');
+    syms.forEach(([t], i) => {
+      const x = zx(cum[i]), w = zx(cum[i + 1]) - x, on = i === pick;
+      s('rect', { x, y: Z.top, width: w, height: Z.bh, class: (on ? 'f-pri' : 'f-seg') + ' sep' }, zg);
+      zt(x + w / 2, Z.top + Z.bh / 2, t, on ? 't-on t-bold' : 't-fg', 'middle');
+    });
+    // two label rows so neighbouring cut points (0.5 / 0.55, 0.85 / 0.9) don't collide
+    cum.forEach((c, i) => {
+      const on = i === pick || i === pick + 1, y = i % 2 ? 36 : 50;
+      s('line', { x1: zx(c), x2: zx(c), y1: y + 7, y2: Z.top, class: on ? 's-pri' : 's-line', style: on ? 'stroke-width: 1.5' : null }, zg);
+      zt(zx(c), y, num(lo + r * c), on ? 't-pri t-bold' : null, i === 0 ? 'start' : i === cum.length - 1 ? 'end' : 'middle');
+    });
+    s('polygon', { points: `${zx(c0)},${yb} ${zx(c1)},${yb} ${Z.x1},${Z.bot} ${Z.x0},${Z.bot}`, class: 'area-pri' }, zg);
+    [[zx(c0), Z.x0], [zx(c1), Z.x1]].forEach(([a, b]) => s('line', { x1: a, y1: yb, x2: b, y2: Z.bot, class: 's-pri dash', style: 'stroke-width: 1' }, zg));
+    zt(((zx(c0) + zx(c1)) / 2 + (Z.x0 + Z.x1) / 2) / 2, (yb + Z.bot) / 2, `stretch × ${num(+(1 / p).toFixed(2))} = 1 / ${num(p)}`, 't-pri t-bold halo', 'middle');
+    zt(0, Z.bot + Z.bh / 2, 'next', 't-fg t-bold');
+    s('rect', { x: Z.x0, y: Z.bot, width: Z.x1 - Z.x0, height: Z.bh, class: 'f-pri-soft outline-pri' }, zg);
+    zt((Z.x0 + Z.x1) / 2, Z.bot + Z.bh / 2, `[${num(nlo)}, ${num(nhi)}) · width ${num(nhi - nlo)}`, 't-pri t-bold', 'middle');
+    zt(Z.x0, Z.bot + Z.bh + 14, 'low′ = ' + num(nlo), 't-pri');
+    zt(Z.x1, Z.bot + Z.bh + 14, 'high′ = ' + num(nhi), 't-pri', 'end');
+    return { r, c0, c1, p, nlo, nhi };
+  }
+
+  function drawCode() {
+    const d0 = 0.327, d1 = 0.337, yb = Z.top + Z.bh;
+    const cx = v => Z.x0 + (v - d0) / (d1 - d0) * (Z.x1 - Z.x0);
+    zt(0, Z.top + Z.bh / 2, 'final', 't-fg t-bold');
+    s('rect', { x: Z.x0, y: Z.top, width: Z.x1 - Z.x0, height: Z.bh, class: 'f-seg' }, zg);
+    s('rect', { x: cx(zlo), y: Z.top, width: cx(zhi) - cx(zlo), height: Z.bh, class: 'f-pri' }, zg);
+    zt(Z.x0, 50, String(d0), null, 'start');
+    zt(Z.x1, 50, String(d1), null, 'end');
+    zt(cx(zlo) - 4, 50, 'low ' + num(zlo), 't-pri t-bold', 'end');
+    zt(cx(zhi) + 4, 50, 'high ' + num(zhi), 't-pri t-bold');
+    [[lo7, 7, 'bad', 'below low'], [zcode, zbits.length, 'ok', 'inside'], [hi7, 7, 'bad', 'above high']].forEach(([v, n, c, where]) => {
+      s('line', { x1: cx(v), x2: cx(v), y1: Z.top - 4, y2: yb + 6, class: 's-' + c }, zg);
+      zt(cx(v), yb + 18, num(v), 't-' + c + ' t-bold', 'middle');
+      zt(cx(v), yb + 32, bin(v, n) + '₂ · ' + where, 't-' + c, 'middle');
+    });
+    zt(0, Z.bot + Z.bh / 2, 'code', 't-fg t-bold');
+    zbits.split('').forEach((b, i) => {
+      s('rect', { x: Z.x0 + i * 30, y: Z.bot + 4, width: 26, height: 30, rx: 3, class: b === '1' ? 'f-ok' : 'f-seg' }, zg);
+      zt(Z.x0 + i * 30 + 13, Z.bot + Z.bh / 2, b, b === '1' ? 't-on t-bold' : 't-fg', 'middle');
+    });
+    zt(Z.x0 + zbits.length * 30 + 8, Z.bot + Z.bh / 2, `= ${num(zcode)}, the whole message in ${zbits.length} bits`, 't-fg t-bold');
+  }
+
+  // Algorithm 7.6 (slides 9-10): find the slice holding the value, output it, stretch the slice back to [0, 1)
+  const dec = [];
+  for (let v = zcode, n = 0; n < 10; n++) {
+    const i = SYMS.findIndex(([t]) => v >= RANGE[t][0] && v < RANGE[t][1]);
+    const [sym, p] = SYMS[i], [a, b] = RANGE[sym];
+    const next = sym === '$' ? null : +num((v - a) / p);
+    dec.push({ v, i, sym, p, a, b, next });
+    if (next === null) break;
+    v = next;
+  }
+
+  function drawDecode() {
+    const D = { x0: 130, x1: 560, y0: 60, rh: 26, gap: 56 };
+    const dx = f => D.x0 + Math.min(f, 1) * (D.x1 - D.x0);
+    strip({ label: 'decoded', tokens: dec.map(d => d.sym), cur: dec.length, tail: 'from ' + bin(zcode, zbits.length) + '₂ = ' + num(zcode) });
+    zt(118, 38, 'value', 't-fg t-bold', 'end');
+    zt(D.x0, 38, 'the slide-5 table on [0, 1)', 't-fg t-bold');
+    zt(576, 38, 'output', 't-fg t-bold');
+    dec.forEach((d, r) => {
+      const y = D.y0 + r * D.gap, vx = dx(d.v);
+      let cum = 0;
+      SYMS.forEach(([t, p], i) => {
+        const x = dx(cum), w = dx(cum + p) - x, on = i === d.i;
+        // keep the chosen letter clear of the value mark
+        const lx = !on || Math.abs(x + w / 2 - vx) > 10 ? x + w / 2 : (vx - x > x + w - vx ? (x + vx) / 2 : (vx + x + w) / 2);
+        s('rect', { x, y, width: w, height: D.rh, class: (on ? 'f-pri' : 'f-seg') + ' sep' }, zg);
+        zt(lx, y + D.rh / 2, t, on ? 't-on t-bold' : 't-fg', 'middle');
+        cum += p;
+      });
+      zt(118, y + D.rh / 2, num(d.v), 't-ok t-bold', 'end');
+      s('polygon', { points: `${vx - 5},${y - 9} ${vx + 5},${y - 9} ${vx},${y - 2}`, class: 'f-ok' }, zg);
+      s('line', { x1: vx, x2: vx, y1: y - 2, y2: y + D.rh, class: 's-ok', style: 'stroke-width: 2' }, zg);
+      zt(576, y + D.rh / 2, '→ ' + d.sym, 't-pri t-bold t-lg');
+      zt(612, y + D.rh / 2, d.next === null ? 'terminator, stop' : `in [${num(d.a)}, ${num(d.b)})`);
+      if (d.next === null) return;
+      const yb = y + D.rh, yn = y + D.gap;
+      s('polygon', { points: `${dx(d.a)},${yb} ${dx(d.b)},${yb} ${D.x1},${yn} ${D.x0},${yn}`, class: 'area-pri' }, zg);
+      [[dx(d.a), D.x0], [dx(d.b), D.x1]].forEach(([a, b]) => s('line', { x1: a, y1: yb, x2: b, y2: yn, class: 's-pri dash', style: 'stroke-width: 1' }, zg));
+      s('line', { x1: vx, y1: yb, x2: dx(d.next), y2: yn - 9, class: 's-ok dash', style: 'stroke-width: 1.5' }, zg);
+      zt(576, (yb + yn) / 2, `stretch × ${num(+(1 / d.p).toFixed(2))}`, 't-pri t-sm');
+    });
+  }
+
+  const zcalc = role('zoom-calc'), znote = role('zoom-note'), zkey = role('zoom-key'), keyText = zkey.textContent;
+  const row = (a, b, c) => a.padEnd(28) + '= ' + b.padEnd(24) + '= ' + c;
+  const pct = v => num(v * 100) + '%';
+  steps(viz('zoom-steps'), ['Idea', '1 · C', '2 · A', '3 · E', '4 · E', '5 · $', 'Code', 'Decode'], k => {
+    const CODE = ZOOM.length, DECODE = ZOOM.length + 1;
+    zg.textContent = '';
+    zoom.setAttribute('viewBox', `0 0 760 ${k === DECODE ? 318 : 248}`);
+    role('zoom-stats').hidden = k === DECODE;
+    zkey.textContent = k === CODE
+      ? 'Top bar: a close-up of the number line from 0.327 to 0.337, with the final interval in blue. Each bit halves the candidates, so 7 bits can only land on multiples of 1/128, and 8 bits on multiples of 1/256. Bottom row: the 8 bits that are sent.'
+      : k === DECODE
+        ? 'Each row is the slide-5 table on [0, 1). The green mark is the current value and the blue slice is the symbol it falls in. The shaded band stretches that slice back to [0, 1) for the next row, which moves the mark. This is Algorithm 7.6 (slides 9-10).'
+        : keyText;
+    if (k === DECODE) {
+      drawDecode();
+      znote.textContent = `Decoding runs the zoom backwards. The decoder knows the table and receives ${num(zcode)}. It finds the slice that holds the value and outputs that symbol: ${num(zcode)} is in C's slice [0.3, 0.5). Then it stretches that slice back to [0, 1), value′ = (value − low) / p, and repeats. It stops at $, the terminator. Without one it would need to be told the message length.`;
+      zcalc.textContent = ['value'.padEnd(13) + 'slice'.padEnd(15) + 'output  ' + 'next value = (value − low) / p'].concat(dec.map(d =>
+        num(d.v).padEnd(13) + `[${num(d.a)}, ${num(d.b)})`.padEnd(15) + d.sym.padEnd(8) + (d.next === null ? 'terminator, stop' : `(${num(d.v)} − ${num(d.a)}) / ${num(d.p)}`.padEnd(27) + '= ' + num(d.next)))).join('\n');
+      return;
+    }
+    if (k === CODE) {
+      strip({ label: 'message', tokens: MSG, cur: MSG.length, tail: '→ ' + zbits });
+      drawCode();
+      role('zoom-w').textContent = num(zhi - zlo);
+      role('zoom-b').textContent = Math.log2(1 / (zhi - zlo)).toFixed(2);
+      znote.textContent = `Send one number from [${num(zlo)}, ${num(zhi)}). Procedure 7.2 (slide 8) finds the shortest binary fraction inside it. The nearest 7-bit fractions, ${num(lo7)} and ${num(hi7)}, both miss. With 8 bits, ${num(zcode)} lands inside, so CAEE$ is sent as ${zbits}: ${zbits.length} bits for 5 symbols.`;
+      zcalc.textContent = ['k'.padEnd(4) + 'try bit k = 1'.padEnd(17) + 'value'.padEnd(14) + 'vs high ' + num(zhi)].concat(trace.map(({ k, tried, t, keep }) =>
+        String(k).padEnd(4) + ('0.' + tried).padEnd(17) + num(t).padEnd(14) + (keep ? 'ok, keep 1' : 'above high, bit 0') + (k === trace.length ? `, now ≥ low ${num(zlo)}: stop` : ''))).join('\n');
+      return;
+    }
+    const st = ZOOM[k];
+    strip(st);
+    const { r, c0, c1, p, nlo, nhi } = drawSlices(st);
+    const sym = st.syms[st.pick][0];
+    role('zoom-w').textContent = num(nhi - nlo);
+    role('zoom-b').textContent = Math.log2(1 / (nhi - nlo)).toFixed(2);
+    znote.textContent = k === 0
+      ? 'The idea, with decimal digits. Cut [0, 1) into ten equal slices. The digit 3 keeps [0.3, 0.4), and that slice is stretched to full width so the next digit, 7, can cut it into tenths again and keep [0.37, 0.38). The number 0.37… lies inside every interval on the way.'
+      : `Step ${k}, ${sym}. In the table ${sym} owns [${num(c0)}, ${num(c1)}), the part from ${pct(c0)} to ${pct(c1)} of the way along. Cut [${num(st.lo)}, ${num(st.hi)}) at the same places and keep that part, [${num(nlo)}, ${num(nhi)}). The width is multiplied by p(${sym}) = ${num(p)}, which adds −log₂ ${num(p)} = ${(-Math.log2(p)).toFixed(2)} bits.` + (sym === '$' ? ' $ is the terminator, so the message is complete.' : '');
+    zcalc.textContent = [
+      k === 0 ? `digit 3: slice [${num(c0)}, ${num(c1)}), every digit has p = 0.1` : `${sym}: slice [${num(c0)}, ${num(c1)}) in the table, p(${sym}) = ${num(p)}`,
+      row('range = high − low', `${num(st.hi)} − ${num(st.lo)}`, num(r)),
+      row(`low′  = low + range × ${num(c0)}`, `${num(st.lo)} + ${num(r)} × ${num(c0)}`, num(nlo)),
+      row(`high′ = low + range × ${num(c1)}`, `${num(st.lo)} + ${num(r)} × ${num(c1)}`, num(nhi)),
+    ].join('\n');
+  }, 0);
+
+  // Figure 4: bit ledger for CAEE$
   const ledger = svg(viz('ledger'), 700, 160, { label: 'Bits for CAEE$: Huffman 12 bits in whole-bit blocks, information content 11.44 bits, arithmetic codeword 8 bits', minWidth: 560 });
   const G = { lab: 110, px: 40, rowH: 30, rows: [10, 52, 94], axis: 134, max: 13 };
   for (let b = 0; b <= G.max; b++) {

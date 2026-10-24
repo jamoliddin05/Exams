@@ -27,3 +27,6 @@ secrets*
 
 # Exam visualizer build output
 **/visuals/dist/
+
+# Claude Code git worktrees
+.claude/worktrees/

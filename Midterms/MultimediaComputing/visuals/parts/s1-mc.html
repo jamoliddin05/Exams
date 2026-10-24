@@ -320,9 +320,26 @@
   <figure class="fig">
     <div class="fig-head">
       <span class="fig-no">Figure 2</span>
+      <h4>Encoding and decoding CAEE$ step by step: each symbol zooms into its slice</h4>
+    </div>
+    <p class="fig-lede">Arithmetic coding works like writing a decimal number digit by digit. Each digit picks one tenth of the current interval, and that tenth is cut into tenths again by the next digit. Arithmetic coding does the same with the slide-5 table, where each symbol's slice is as wide as its probability. Start with Idea, step through the five symbols and the code, then see how Decode gets CAEE$ back from that one number.</p>
+    <div data-viz="zoom-steps"></div>
+    <p class="step-note" data-role="zoom-note" aria-live="polite"></p>
+    <div data-viz="zoom"></div>
+    <p class="fig-lede" data-role="zoom-key">Top bar: the current interval, cut at the table's boundaries. The numbers above it are the cut points, low + range × boundary. Bottom bar: the chosen slice stretched to full width. It is the interval for the next step.</p>
+    <pre class="calc" data-role="zoom-calc"></pre>
+    <div class="stats" data-role="zoom-stats">
+      <div class="stat"><span class="label">Interval width</span><span class="v pri" data-role="zoom-w">0.1</span><span class="sub">the product of the probabilities so far</span></div>
+      <div class="stat"><span class="label">Information so far</span><span class="v" data-role="zoom-b">3.32</span><span class="sub">bits, log₂(1 / width)</span></div>
+    </div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 3</span>
       <h4>CAEE$ becomes one interval</h4>
     </div>
-    <p class="fig-lede">The slide-5 table splits [0, 1) into one slice per symbol, sized by its probability. Each symbol picks its slice of the current interval, and the next column redraws that slice at full height. The whole message ends up as one interval, [0.33184, 0.3322).</p>
+    <p class="fig-lede">The same five steps side by side, as in slide 6. The slide-5 table splits [0, 1) into one slice per symbol, sized by its probability. Each symbol picks its slice of the current interval, and the next column redraws that slice at full height. The whole message ends up as one interval, [0.33184, 0.3322).</p>
     <div data-viz="ladder-steps"></div>
     <p class="step-note" data-role="step-note" aria-live="polite"></p>
     <div data-viz="ladder"></div>
@@ -333,7 +350,7 @@
 
   <figure class="fig">
     <div class="fig-head">
-      <span class="fig-no">Figure 3</span>
+      <span class="fig-no">Figure 4</span>
       <h4>Where the bits go for CAEE$</h4>
     </div>
     <p class="fig-lede">Huffman lengths come from one valid Huffman tree for the slide-5 table: A 3, B 3, C 2, D 4, E 2, F 4, $ 3 bits, 2.6 bits per symbol on average against an entropy of 2.55. Grid lines mark whole bits.</p>
