@@ -1,7 +1,7 @@
 {
   "title": "Multimedia Midterm Visuals",
   "kicker": "Multimedia Computing · Midterm prep",
-  "lede": "All five sample midterms, every question: 10 multiple-choice and 8 written questions each. Each question has the answer, the picture that makes it click, and the line to remember for the exam. Numbers come from the lecture slides and were checked in Python.",
+  "lede": "All five sample midterms, every question: 10 multiple-choice and 8 written questions each. The Topics tab explains every lecture from zero with figures and lists the sample questions on it. Each question has the answer, the picture that makes it click, and the line to remember for the exam. Numbers come from the lecture slides and were checked in Python.",
   "foot": "Sources: the course slides (L = lecture, p = slide) and the study notes in Midterms/MultimediaComputing/notes.",
   "artifact": "https://claude.ai/artifact/FFfagp6CpEJvE15eAPJ6Zf",
   "out": "dist/multimedia-midterm-visuals.html",
@@ -12,14 +12,67 @@
     "slides": "../slides/"
   },
   "parts": [
-    { "key": "mc", "title": "Part 1 · Multiple choice", "index": "Part 1", "chip": "num" },
-    { "key": "w", "title": "Part 2 · Written", "index": "Part 2", "chip": "topic" }
+    {
+      "key": "mc",
+      "title": "Part 1 · Multiple choice",
+      "index": "Part 1",
+      "chip": "num"
+    },
+    {
+      "key": "w",
+      "title": "Part 2 · Written",
+      "index": "Part 2",
+      "chip": "topic"
+    },
+    {
+      "key": "tp",
+      "title": "Lectures 2–12",
+      "index": "Lectures",
+      "chip": "name"
+    }
   ],
   "sections": [
-    { "id": "s1", "tab": "1", "title": "Sample 1", "meta": "Lectures 2–12 (not 1, 8, 13) · 100 pts · Part 1: 10 multiple choice × 2 pts · Part 2: 8 written questions × 10 pts" },
-    { "id": "s2", "tab": "2", "title": "Sample 2", "meta": "Lectures 2–12 (not 1, 8, 13) · 100 pts · Part 1: 10 multiple choice × 2 pts · Part 2: 8 written questions × 10 pts" },
-    { "id": "s3", "tab": "3", "title": "Sample 3", "meta": "Lectures 2–12 (not 1, 8, 13) · 100 pts · Part 1: 10 multiple choice × 2 pts · Part 2: 8 written questions × 10 pts" },
-    { "id": "s4", "tab": "4", "title": "Sample 4", "meta": "Lectures 2–12 (not 1, 8, 13) · 100 pts · Part 1: 10 multiple choice × 2 pts · Part 2: 8 written questions × 10 pts" },
-    { "id": "s5", "tab": "5", "title": "Sample 5", "meta": "Lectures 2–12 (not 1, 8, 13) · 100 pts · Part 1: 10 multiple choice × 2 pts · Part 2: 8 written questions × 10 pts" }
-  ]
+    {
+      "id": "topics",
+      "tab": "Topics",
+      "tabPrefix": "",
+      "noun": "tab",
+      "idPrefix": {
+        "tp": "topic"
+      },
+      "title": "Topics",
+      "meta": "Lectures 2–12 (not 8), the whole midterm scope, one beginner explainer per lecture in course order. Each explainer ends with every sample question on that lecture: open one to see the answer, or jump to its full explanation."
+    },
+    {
+      "id": "s1",
+      "tab": "1",
+      "title": "Sample 1",
+      "meta": "Lectures 2–12 (not 1, 8, 13) · 100 pts · Part 1: 10 multiple choice × 2 pts · Part 2: 8 written questions × 10 pts"
+    },
+    {
+      "id": "s2",
+      "tab": "2",
+      "title": "Sample 2",
+      "meta": "Lectures 2–12 (not 1, 8, 13) · 100 pts · Part 1: 10 multiple choice × 2 pts · Part 2: 8 written questions × 10 pts"
+    },
+    {
+      "id": "s3",
+      "tab": "3",
+      "title": "Sample 3",
+      "meta": "Lectures 2–12 (not 1, 8, 13) · 100 pts · Part 1: 10 multiple choice × 2 pts · Part 2: 8 written questions × 10 pts"
+    },
+    {
+      "id": "s4",
+      "tab": "4",
+      "title": "Sample 4",
+      "meta": "Lectures 2–12 (not 1, 8, 13) · 100 pts · Part 1: 10 multiple choice × 2 pts · Part 2: 8 written questions × 10 pts"
+    },
+    {
+      "id": "s5",
+      "tab": "5",
+      "title": "Sample 5",
+      "meta": "Lectures 2–12 (not 1, 8, 13) · 100 pts · Part 1: 10 multiple choice × 2 pts · Part 2: 8 written questions × 10 pts"
+    }
+  ],
+  "barLabel": "Midterm"
 }

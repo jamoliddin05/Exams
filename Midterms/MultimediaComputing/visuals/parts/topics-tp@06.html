@@ -1,0 +1,397 @@
+<article class="q" id="topic6" data-part="tp" data-num="6" data-topic="Image basics">
+  <div class="q-head">
+    <p class="eyebrow">Lecture 6 · Week 3 · 9 sample questions</p>
+    <h3 class="q-title">Digital Images from Zero</h3>
+    <p class="fig-lede">A digital image is a grid of numbers. This lecture follows light from the scene to that grid: what the eye can tell apart, how a lens and a sensor form the picture, how sampling and quantization make it digital, and how many bits it takes. It ends with the first operations on those numbers: resampling, point transformations and the histogram. Lecture 2 did sampling and quantization for sound; here the same two steps happen in two dimensions.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Words you need</h4>
+    <div class="why-grid">
+      <div class="mini"><h5>Image f(x, y) and pixel</h5><p>"An image is a 2D function f(x, y)". x, y say where; f(x, y) is the intensity (gray level) there. One grid cell is a pixel, a picture element.</p></div>
+      <div class="mini"><h5>k bits, L levels</h5><p>Each pixel stores k bits, so it takes one of L = 2<sup>k</sup> gray levels, 0 (black) to L − 1 (white). k = 8 gives 0 to 255.</p></div>
+      <div class="mini"><h5>Rods and cones</h5><p>The two receptors in the retina. Cones: fovea, color, good light. Rods: no color, dim light.</p></div>
+      <div class="mini"><h5>Weber ratio ΔI<sub>c</sub>/I</h5><p>The smallest visible brightness change ΔI<sub>c</sub> divided by the background I. Small ratio = good discrimination.</p></div>
+      <div class="mini"><h5>Sampling</h5><p>"Digitizing the coordinate values": which points (x, y) are kept. It fixes M × N.</p></div>
+      <div class="mini"><h5>Quantization</h5><p>"Digitizing the amplitude values": each value is rounded to one of L levels. It fixes k.</p></div>
+      <div class="mini"><h5>Spatial resolution</h5><p>"Smallest discernible detail", in line pairs or dots (pixels) per unit distance, for example dpi.</p></div>
+      <div class="mini"><h5>Intensity resolution</h5><p>"Smallest discernible change in intensity level", given as the number of levels L.</p></div>
+      <div class="mini"><h5>Interpolation</h5><p>Estimating a value between known pixels. Needed whenever an image is resampled.</p></div>
+      <div class="mini"><h5>Point operation, LUT</h5><p>Each new pixel depends only on the same old pixel, through a fixed table of 256 entries, the look-up table (LUT).</p></div>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. The eye: two receptors, two kinds of vision (slides 3–5)</h4>
+    <p>"Human visual perception plays a key role in selecting a technique" (slide 4), so the lecture starts with the eye. The cornea and lens focus light on the retina, which has two receptors.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l"></th><th class="l">Cones</th><th class="l">Rods</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Where</td><td class="l">in the fovea, the center of the retina</td><td class="l">spread over the retina, "a general overall picture of the view"</td></tr>
+          <tr><td class="l">Respond to</td><td class="l">highly sensitive to color</td><td class="l">insensitive to color, sensitive to low levels of illumination</td></tr>
+          <tr><td class="l">Vision</td><td class="l">photopic, good light: color</td><td class="l">scotopic, low light: black and white</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Slide 5: "Scotopic vision uses only rods to see, meaning that objects are visible, but appear in black and white, whereas photopic vision uses cones and provides color."</li>
+      <li>Brightness adaptation (Fig. 2.4). The eye works from the scotopic threshold up to the glare limit, but "the total range of distinct intensity levels the eye can discriminate simultaneously is rather small". It adapts to one brightness adaptation level B<sub>a</sub> at a time.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. The Weber ratio: how small a change can you see? (slides 6–7)</h4>
+    <ul>
+      <li>Experiment (slide 6): a background of intensity I, with a circle flashed at I + ΔI. "ΔI starts at zero and is increased slowly" until the observer sees the circle.</li>
+      <li>That ΔI is the just noticeable difference ΔI<sub>c</sub>. "The ratio ∆I/I is called the Weber ratio."</li>
+    </ul>
+    <p class="formula">Weber ratio = ΔIc / I      small → good brightness discrimination · large → poor</p>
+    <pre class="calc">background I = 100
+circle seen at ΔIc = 2:    2 / 100 = 0.02   a 2% change is visible    → good
+circle seen at ΔIc = 20:  20 / 100 = 0.2    a 20% change is needed    → poor
+ΔIc goes on top. 100 / 2 = 50 is the ratio upside down.</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Try it: the Weber ratio from dim to bright light</h4></div>
+      <p class="fig-lede">The curve is traced from Fig. 2.6 on slide 7, so the values are approximate. Drag log I. The ratio falls as the light grows: rods give the upper branch, cones the lower one.</p>
+      <div data-viz="weber-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Background I</span><span class="v" data-role="w-i"></span><span class="sub">log I on the slider</span></div>
+        <div class="stat"><span class="label">Weber ratio</span><span class="v pri" data-role="w-r"></span><span class="sub">read from the curve</span></div>
+        <div class="stat"><span class="label">Receptor</span><span class="v sec" data-role="w-rec"></span><span class="sub" data-role="w-vis"></span></div>
+      </div>
+      <div data-viz="weber"></div>
+      <p class="step-note" data-role="weber-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. Seeing is not measuring (slides 8–11)</h4>
+    <ul>
+      <li>"Perceived intensity is not a simple function of the actual intensity" (slide 8).</li>
+      <li>Mach band effect (Fig. 2.7): the actual intensity is a staircase of flat bands. The perceived intensity undershoots and overshoots at each boundary, so edges look sharper than they are.</li>
+      <li>Simultaneous contrast (Fig. 2.8, slide 9): all the inner squares have the same intensity. They appear progressively darker as the background becomes lighter.</li>
+      <li>Object perception (slides 10–11) works in levels: features, then groups of features, then objects, then scenes.</li>
+      <li>Bottom-up processing is data-driven: the sensation reaches the brain, then the brain makes sense of it. Top-down processing: what we know informs the sensation, as when you walk to the refrigerator in the middle of the night.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. How a lens forms the image (slides 12–16)</h4>
+    <ul>
+      <li>Acquisition records geometry (size, location) and appearance (color, intensity) (slide 12).</li>
+      <li>The image on the retina or the image plane is upside down (Fig. 2.3, slide 13). Similar triangles give its size.</li>
+    </ul>
+    <pre class="calc">15 m tree, 100 m away, 17 mm from the lens center C to the retina
+15 / 100 = h / 17   →   h = 17 × 15 / 100 = 2.55 mm      (textbook context)</pre>
+    <p class="formula">thin lens  1/S₁ + 1/S₂ = 1/f        field of view  ω = 2 arctan(d / f)</p>
+    <pre class="calc">f = 50 mm, object at S₁ = 2000 mm:   1/S₂ = 1/50 − 1/2000 = 0.0195   →   S₂ = 51.28 mm
+d = 18 mm (half of a 36 mm frame, textbook context):
+  f = 28 → ω = 65.5°    f = 50 → 39.6°    f = 70 → 28.8°    f = 210 → 9.8°</pre>
+    <ul>
+      <li>S₁ is the object distance, S₂ the image distance, f the focal length, d the half-size measured from the optical axis.</li>
+      <li>Slide 14: "Increasing the distance from the object to the lens will reduce the size of image". "Large focus length will give a small FOV."</li>
+      <li>Depth of field (DOF, slide 15) is proportional to S₁ and inversely proportional to f. "The longer the focal length, the narrower the angle of view and the higher the magnification." Slide 16 shows it with 28, 50, 70 and 210 mm lenses.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Light and the EM spectrum (slides 17–19)</h4>
+    <ul>
+      <li>The sun releases energy in "rays" with properties of particles and of waves: electromagnetic radiation.</li>
+      <li>By wavelength (slide 17): radio 10³ m, microwave 10⁻² m, infrared 10⁻⁵ m, visible 10⁻⁶ m, ultraviolet 10⁻⁸ m, X-ray 10⁻¹⁰ m, gamma 10⁻¹² m. Frequencies run from 10⁴ to 10²⁰ Hz.</li>
+    </ul>
+    <p class="formula">λ = c / ν,  c = 2.998 × 10⁸ m/s        E = h ν,  h = 6.626068 × 10⁻³⁴ m² kg/s</p>
+    <pre class="calc">ν = 5 × 10¹⁴ Hz:  λ = 2.998 × 10⁸ / 5 × 10¹⁴ = 5.996 × 10⁻⁷ m = 599.6 nm   (visible)
+                  E = 6.626068 × 10⁻³⁴ × 5 × 10¹⁴ = 3.313 × 10⁻¹⁹ J
+higher frequency → shorter wavelength → more energy</pre>
+    <ul>
+      <li>Diffraction limit (slide 19): the Airy disk is "the best-focused spot of light that a perfect lens with a circular aperture can make". Its size ∼ λ · f/d (f/d is the f-number). Smaller detail cannot be seen.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. From light to numbers: f(x, y) and f = i · r (slides 20–23)</h4>
+    <ul>
+      <li>Sensing (slide 20): incoming energy becomes a voltage, which is digitized. Sensors: single, line or array (Fig. 2.12).</li>
+      <li>A digital image has x, y and f(x, y) all finite, for example x ∈ {1, …, M}, y ∈ {1, …, N}, f ∈ {0, …, 255} (slide 21).</li>
+      <li>Spatial domain model (slide 22): g(x, y) = T[f(x, y)]. T works on a neighborhood of (x, y), for example 3 × 3. With a 1 × 1 neighborhood T is a point operation (sections 11–12).</li>
+    </ul>
+    <p class="formula">f(x, y) = i(x, y) · r(x, y)      0 &lt; i &lt; ∞ illumination (source) · 0 &lt; r &lt; 1 reflectance (object)</p>
+    <ul>
+      <li>i: sunlight 10,000 lm/m² (cloudy), 90,000 lm/m² (clear day); office 1000 lm/m². r: black velvet 0.01, white pall 0.8, snow 0.93.</li>
+      <li>Since r &lt; 1, always f &lt; i. In practice L<sub>min</sub> &lt; f &lt; L<sub>max</sub> with L<sub>min</sub> = i<sub>min</sub>r<sub>min</sub>, L<sub>max</sub> = i<sub>max</sub>r<sub>max</sub>.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Try it: illumination times reflectance</h4></div>
+      <p class="fig-lede">A log scale, so every factor of 10 is the same distance. The dashed line is the illumination i, and each dot is f = i · r for one material. Change the light: all dots move by the same distance, so the ratios between materials stay the same.</p>
+      <div data-viz="ir-steps"></div>
+      <div data-viz="ir"></div>
+      <pre class="calc" data-role="ir-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Sampling, quantization and dynamic range (slides 24–26)</h4>
+    <ul>
+      <li>"Sampling = digitizing the coordinate values". The sensor usually decides it (slide 25: the image is projected onto a CCD array).</li>
+      <li>"Quantization = digitizing the amplitude values". Each sample is rounded to the nearest of L levels.</li>
+    </ul>
+    <p class="formula">0 ≤ f(x, y) ≤ L − 1,    L = 2^k      (k bits per pixel)</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Try it: sample and quantize one scan line (Fig. 2.16)</h4></div>
+      <p class="fig-lede">The dashed curve is the intensity along a line from A to B. Each stem is one sample. The faint lines are the L = 2<sup>k</sup> allowed levels, and each blue dot snaps to the nearest one; the red tick is the rounding error. The strip below is the digital scan line, one pixel per sample.</p>
+      <div data-viz="scan-n"></div>
+      <div data-viz="scan-k"></div>
+      <div data-viz="scan"></div>
+      <p class="step-note" data-role="scan-note" aria-live="polite"></p>
+    </figure>
+    <ul>
+      <li>Dynamic range (contrast ratio, slide 26): "the ratio of the maximum detectable intensity level (saturation) to the minimum detectable intensity level (noise)".</li>
+    </ul>
+    <p class="formula">DR = I_max / I_min      (saturation / noise)</p>
+    <pre class="calc">sensor: saturation 60,000, noise 20   →   DR = 60,000 / 20 = 3,000
+with the values of Figure 2:
+  office, black velvet       10                 below 20        → lost in noise
+  cloudy day, all three      100 to 9,300       inside          → recorded
+  clear day, pall and snow   72,000 and 83,700  above 60,000    → clipped</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. Storing an image (slides 27–28)</h4>
+    <ul>
+      <li>Slide 27 writes f(x, y) with x = 0, …, M − 1 and y = 0, …, N − 1. The origin is the top-left corner, x counts rows downward and y counts columns to the right. Slide 21 draws x to the right instead, so say which you use.</li>
+      <li>Fig. 2.18 shows one image three ways: a surface plot, a visual intensity array ("suitable for visualization") and a 2D numerical array (for "processing and algorithm development").</li>
+    </ul>
+    <p class="formula">b = M × N × k bits        (square image: b = N² k)        bytes = b / 8</p>
+    <pre class="calc">1024 × 1024, 256 levels:  k = log₂ 256 = 8
+  b = 1024 × 1024 × 8 = 8,388,608 bits = 1,048,576 bytes = 1 MiB
+512 × 512, 32 levels:  k = 5,  b = 1,310,720 bits = 163,840 bytes
+100 levels:  2⁶ = 64 is too few, so k = 7 (2⁷ = 128)
+RGB, 8 bits per channel = 24 bits per pixel:
+  1920 × 1080 × 3 = 6,220,800 bytes;  960 × 540 × 3 = 1,555,200 bytes (halve both sides → 1/4)</pre>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th>N (Table 2.1)</th><th>k = 1</th><th>k = 5</th><th>k = 7</th><th>k = 8</th></tr></thead>
+        <tbody>
+          <tr><td>32</td><td>1,024</td><td>5,120</td><td>7,168</td><td>8,192</td></tr>
+          <tr><td>512</td><td>262,144</td><td>1,310,720</td><td>1,835,008</td><td>2,097,152</td></tr>
+          <tr><td>1024</td><td>1,048,576</td><td>5,242,880</td><td>7,340,032</td><td>8,388,608</td></tr>
+          <tr><td>2048</td><td>4,194,304</td><td>20,971,520</td><td class="hl">29,360,128</td><td>33,554,432</td></tr>
+          <tr><td>8192</td><td>67,108,864</td><td>335,544,320</td><td>469,762,048</td><td class="hl">536,870,912</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>The slide prints 29,369,128 for 2048 at k = 7; 2048² × 7 = 29,360,128. The circled 8192² × 8 = 536,870,912 bits = 64 MiB.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Spatial and intensity resolution (slides 29–31)</h4>
+    <ul>
+      <li>Spatial resolution = "smallest discernible detail", in line pairs or dots (pixels) per unit distance. Print uses dpi: newspaper, then magazines, then books. Fig. 2.20 shows one image at 1250, 300, 150 and 72 dpi.</li>
+      <li>"Large image size itself does not mean high spatial resolution!" What counts is how many pixels the object covers.</li>
+      <li>Intensity resolution = "smallest discernible change in intensity level", the number of levels L.</li>
+      <li>Too few levels turn smooth shading into flat bands with false edges: false contouring (the skull at 256 down to 2 levels). The slide says undersampling; strictly it is coarse quantization (textbook context).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Try it: samples per side and bits per pixel</h4></div>
+      <p class="fig-lede">Left: the scene. Right: your digital image. Each pixel is the average of the scene over its square, then rounded to L levels. Drag N: the stripes melt into flat gray once a pixel is wider than a stripe. Drag k: the ball breaks into bands. The storage b changes with both.</p>
+      <div data-viz="res-n"></div>
+      <div data-viz="res-k"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Samples</span><span class="v pri" data-role="res-nn"></span><span class="sub">spatial resolution</span></div>
+        <div class="stat"><span class="label">Levels L = 2^k</span><span class="v sec" data-role="res-l"></span><span class="sub">intensity resolution</span></div>
+        <div class="stat"><span class="label">Bits b = N × N × k</span><span class="v ok" data-role="res-b"></span><span class="sub" data-role="res-by"></span></div>
+      </div>
+      <div data-viz="res"></div>
+    </figure>
+    <ul>
+      <li>Isopreference curves (Fig. 2.22–2.23, slide 31): N and k are varied together, and each curve joins the (N, k) pairs of equal subjective quality. Test images: Face (low detail), Cameraman (medium), Crowd (high).</li>
+      <li>The Crowd curve is nearly vertical: a detailed image needs fewer intensity levels for the same quality (textbook context).</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Sets, neighbours and adjacency (slides 32–35)</h4>
+    <ul>
+      <li>Set notation (slide 32): a ∈ A, a ∉ A, subset A ⊆ B, union A ∪ B, intersection A ∩ B, disjoint when A ∩ B = ∅, difference A − B = {w | w ∈ A, w ∉ B}, and the set universe of all elements.</li>
+      <li>"A region in an image is represented by a set of coordinates within the region" (slide 33). Union, intersection, complement and difference then work on regions. Lecture 10 builds morphology on this.</li>
+    </ul>
+    <pre class="calc">p = (x, y), x = row:
+N₄(p) = (x−1, y) (x+1, y) (x, y−1) (x, y+1)                up, down, left, right
+N_D(p) = (x−1, y−1) (x−1, y+1) (x+1, y−1) (x+1, y+1)      the 4 diagonals
+N₈(p) = N₄(p) ∪ N_D(p)
+p = (2, 3):  N₄ = (1,3) (3,3) (2,2) (2,4)    N_D = (1,2) (1,4) (3,2) (3,4)
+slide 34 prints the bottom-left diagonal as (x−1, y+1); it is (x+1, y−1)</pre>
+    <ul>
+      <li>Adjacency (slide 35) needs a set V of values that count, V = {1} in a binary image. Both f(p) and f(q) must be in V.</li>
+      <li>4-adjacent: q ∈ N₄(p). 8-adjacent: q ∈ N₈(p). m-adjacent: q ∈ N₄(p), or q ∈ N_D(p) and N₄(p) ∩ N₄(q) holds no pixel with a value in V.</li>
+      <li>Slide example, rows 011 / 010 / 001, p = (1, 1): q = (0, 2) is 8-adjacent but not m-adjacent, because the shared 4-neighbour (0, 1) is 1. q = (2, 2) is m-adjacent, because (1, 2) and (2, 1) are 0. m-adjacency removes the double path that 8-adjacency creates. Lecture 7 covers this in full.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. Resampling and interpolation (slide 36)</h4>
+    <p>"Need to resample the image when": rescaling; geometrical transformation; "the output image coordinates are not discrete". In each case a new pixel lands between old pixel centers, and its value is estimated from the pixels around it.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Method</th><th class="l">Pixels read (textbook)</th><th class="l">Slide 36</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Nearest neighbor</td><td class="l">1, the closest</td><td class="l">"Fast and simple", "Loss of sharpness", "Artifacts (checkerboard)"</td></tr>
+          <tr><td class="l">Bilinear</td><td class="l">4, the 2 × 2 around the point</td><td class="l">no bullets; smoother than nearest neighbor (textbook)</td></tr>
+          <tr><td class="l">Bicubic</td><td class="l">16, the 4 × 4 around the point</td><td class="l">"Images are sharpest", "Fine details are preserved", "Slow"</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Linear interpolation in 1D: a point a of the way from v₀ to v₁ gets v₀ + a(v₁ − v₀). Bilinear does it along both rows, then once between them. The slide gives no formula; this is textbook context.</p>
+    <p class="formula">f = (1−a)(1−b) f₀₀ + a(1−b) f₁₀ + (1−a)b f₀₁ + ab f₁₁       a = offset across, b = offset down</p>
+    <pre class="calc">f₀₀ = 10   f₁₀ = 20   (top row)          a = 0.3, b = 0.6
+f₀₁ = 30   f₁₁ = 60   (bottom row)
+top row     10 + 0.3 × (20 − 10) = 13
+bottom row  30 + 0.3 × (60 − 30) = 39
+between     13 + 0.6 × (39 − 13) = 28.6
+check       0.28 × 10 + 0.12 × 20 + 0.42 × 30 + 0.18 × 60 = 28.6    (weights sum to 1)
+nearest     a = 0.3 → left, b = 0.6 → bottom   → f₀₁ = 30</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>Try it: bilinear is three straight-line readings</h4></div>
+      <p class="fig-lede">Left: the four pixels and the new point P. Right: each 1D interpolation on a number line from 0 to 60. Drag a and b. The top and bottom rows give T and B, and the line between T and B gives P. The ringed corner is the nearest neighbour.</p>
+      <div data-viz="bil-a"></div>
+      <div data-viz="bil-b"></div>
+      <div data-viz="bil"></div>
+      <pre class="calc" data-role="bil-calc"></pre>
+    </figure>
+    <ul>
+      <li>(OpenCV context, for the homework) cv2.INTER_LINEAR maps back with x_src = (x_dst + 0.5) · scale − 0.5. Halving an image then gives the mean of each 2 × 2 block: rows 10 20 30 40 / 50 60 70 80 / 90 … 160 become 35 55 / 115 135.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. Point operations: stretching, threshold, negative, gamma (slides 37–57)</h4>
+    <p>"Intensity transformation is a point process that converts an old pixel into a new pixel based on some predefined function", "implemented with the LUT" (slides 45, 49). The function is computed once for the 256 inputs, then each pixel is a table look-up.</p>
+    <p class="formula">contrast stretching:  0 for x ≤ low · 255 (x − low)/(high − low) between · 255 for x ≥ high</p>
+    <pre class="calc">low = 50, high = 150:   x = 30 → 0    x = 80 → 255 × 30/100 = 76.5    x = 100 → 127.5    x = 200 → 255
+general form (slide 38), B bits:  y = (2^B − 1) / (x_max − x_min) · (x − x_min)
+negative (slide 45):  y = −x + 255     100 → 155</pre>
+    <ul>
+      <li>Slide 39: basic stretching vs end-in search, which lets a small share of pixels clip at each end (textbook context). Slide 40: the stretched histogram has gaps (a comb); no new levels appear. Slide 41: color images stretch R, G and B separately.</li>
+      <li>Threshold (slides 42–43): 0 below m, 255 above. A lower m makes more pixels white (m = 128 and 100 on the slides).</li>
+      <li>Negative: applications are display of medical images and producing negative prints. Intensity level slicing highlights a range [a, b], for segmentation of certain gray-level regions (slide 44).</li>
+      <li>Posterizing reduces the number of gray levels; thresholding is posterizing to 2 levels. A bounded ("bounced") threshold thresholds only a limited range and leaves the rest as the null transform (slide 46).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Try it: the catalogue of slides 44–57 as LUTs</h4></div>
+      <p class="fig-lede">The curve maps input r (across) to output s (up). The top ramp is every input level, the bottom ramp the same levels after the LUT. Pick a transformation. Breakpoints the slides do not give are illustrative.</p>
+      <div data-viz="lut-steps"></div>
+      <p class="step-note" data-role="lut-note" aria-live="polite"></p>
+      <div data-viz="lut"></div>
+    </figure>
+    <ul>
+      <li>Gamma correction "is important for displaying images on a screen correctly, to prevent bleaching or darkening of images when viewed from different types of monitors". "Our eyes perceive images in a gamma-shaped curve, whereas cameras capture images in a linear fashion" (slide 47).</li>
+      <li>Slide 47 code: <code>np.array(255*(img/255)**gamma, dtype='uint8')</code>. uint8 truncates the fraction.</li>
+      <li>Two conventions. Slides 47–48 use s = 255(r/255)<sup>γ</sup>: γ &lt; 1 brightens (0.45 brighter, 2.20 darker). Slide 49 writes output = input<sup>1/γ</sup> and slide 53 follows it, so there 0.45 darkens. Write the formula you use.</li>
+    </ul>
+    <pre class="calc">r = 64, s = 255 (r/255)^γ
+γ = 0.5:  255 × (64/255)^0.5 = 127.75   → uint8 127    brighter
+γ = 2.2:  255 × (64/255)^2.2 = 12.18    → 12           darker
+log transform (textbook context, not on the slides): s = c log(1 + r), c = 255 / log 256
+  r = 3 → 63.75     r = 15 → 127.5     (dark values lifted; the log base does not matter)</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>Try it: one γ, two conventions</h4></div>
+      <p class="fig-lede">Blue: s = 255(r/255)<sup>γ</sup> (slides 47–48). Plum: s = 255(r/255)<sup>1/γ</sup> (slide 49). The dashed diagonal is γ = 1. Drag γ: the two curves mirror each other across the diagonal, so the same γ brightens in one convention and darkens in the other.</p>
+      <div data-viz="gam-slider"></div>
+      <div data-viz="gam"></div>
+      <pre class="calc" data-role="gam-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. The histogram (slides 58–64)</h4>
+    <ul>
+      <li>Histogram: "a simple bar graph that stands for pixel intensities". Intensities on the x-axis, the number of occurrences on the y-axis. It shows contrast and the overall intensity distribution (slide 58).</li>
+    </ul>
+    <pre class="calc">slide 58 image (4 × 4, levels 0–7)      level   0  1  2  3  4  5  6  7
+4 4 3 3                                  count   1  2  2  6  5  0  0  0     (sum 16)
+4 4 3 3
+4 1 2 3
+0 1 2 3</pre>
+    <ul>
+      <li>Slide 59: a dark image has a narrow histogram on the left, a washed-out image a narrow one on the right, a high-contrast image a spread one.</li>
+      <li>Slide 60: +40 shifts the histogram right (spike at 255 from clipping), −40 shifts it left (spike at 0). Slide 61: ×1.2 stretches it (gaps), /1.2 compresses it.</li>
+      <li>Slides 62–63: an RGB image has 3 histograms, a gray image 1.</li>
+      <li>Histogram equalization (slide 64): the goal is "a uniform histogram for the output image". Steps: compute the histogram; calculate the normalized sum of the histogram; transform the input image to the output image. Lecture 9 does it with numbers.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Mistakes that cost marks</h4>
+    <ul>
+      <li>Multiplying by L instead of k. 64 levels means k = log₂ 64 = 6, so 512 × 512 × 6 bits. Divide by 8 for bytes.</li>
+      <li>Inverting the Weber ratio. It is ΔI<sub>c</sub>/I, and small is good.</li>
+      <li>Swapping rods and cones. Scotopic (dim) = rods, black and white. Photopic (bright) = cones, color, fovea.</li>
+      <li>Swapping sampling and quantization. Sampling → coordinates, M × N, spatial resolution. Quantization → amplitude, k, intensity resolution, false contouring.</li>
+      <li>"More pixels = more detail." Large image size itself does not mean high spatial resolution.</li>
+      <li>Bilinear: a goes with the column, b with the row; check the four weights sum to 1. Nearest neighbour rounds each offset.</li>
+      <li>Gamma without the convention. With s = 255(r/255)<sup>γ</sup>, γ &lt; 1 brightens; slide 49's input<sup>1/γ</sup> reverses it. The uint8 code truncates (127.75 → 127).</li>
+      <li>A diagonal neighbour is m-adjacent only if the shared 4-neighbours hold no value in V. N_D's bottom-left is (x+1, y−1).</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Cheat sheet</h4>
+    <div data-viz="cheat"></div>
+  </div>
+
+  <div class="sol-part">
+    <h4>How to write it on the exam</h4>
+    <pre class="calc">IMAGE REPRESENTATION
+  1. Sampling = digitizing the coordinate values; quantization = digitizing the amplitude values.
+  2. Spatial resolution = smallest discernible detail (dpi);
+     intensity resolution = smallest discernible change in intensity level (L levels).
+  3. k = log₂ L (round up); gray values 0 … L − 1.
+  4. b = M × N × k bits, written out; ÷ 8 = bytes.
+  5. Fewer levels: new k and b; artifact = false contouring, spatial resolution unchanged.
+
+PERCEPTION AND IMAGE FORMATION
+  1. Rods vs cones table: where, respond to, scotopic / photopic.
+  2. Weber ratio = ΔIc / I per case; smaller = better; dim light → rods.
+  3. f = i · r in a table; the ratio between objects = ratio of r (i cancels); f &lt; i.
+  4. DR = I_max / I_min = saturation / noise; check brightest &lt; saturation, darkest &gt; noise.
+
+RESAMPLING AND INTERPOLATION
+  1. When: rescaling; geometrical transformation; output coordinates not discrete.
+  2. NN 1 pixel (fast, simple, loss of sharpness, checkerboard) · bilinear 4 · bicubic 16 (sharpest, slow).
+  3. Offsets a (column), b (row); two row interpolations, one between; weight check.
+  4. NN: round the coordinates, read that pixel.  Resized storage: halving both sides → 1/4.
+
+INTENSITY TRANSFORMATIONS
+  1. Definition: point process, old pixel → new pixel by a predefined function, LUT.
+  2. Negative s = 255 − r; medical images, negative prints.
+  3. Gamma: state s = 255 (r/255)^γ, compute each value; γ &lt; 1 brightens.
+  4. Stretching: 0 below low, 255 above high, 255(x − low)/(high − low) between.
+  5. Say whether you round or truncate.</pre>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Cones: fovea, color, photopic. Rods: no color, low light, scotopic (black and white).</li>
+      <li>Weber ratio ΔI<sub>c</sub>/I: 2/100 = 0.02 good, 20/100 = 0.2 poor. The rod branch is high, the cone branch falls to about 10<sup>−1.6</sup> ≈ 0.025.</li>
+      <li>f = i · r with 0 &lt; r &lt; 1: office × snow = 1000 × 0.93 = 930. Changing i scales every value; object ratios stay.</li>
+      <li>Sampling = coordinates, quantization = amplitude. L = 2<sup>k</sup>, 0 ≤ f ≤ L − 1. DR = saturation / noise.</li>
+      <li>b = M × N × k: 1024² × 8 = 8,388,608 bits = 1 MiB. Table 2.1 error: 2048² × 7 = 29,360,128.</li>
+      <li>Too few levels → false contouring. Large image size does not mean high spatial resolution.</li>
+      <li>Resample when rescaling, after a geometrical transformation, or when output coordinates are not discrete. NN 1 pixel, bilinear 4, bicubic 16 (sharpest, slow).</li>
+      <li>Bilinear 10, 20, 30, 60 at a = 0.3, b = 0.6 → 13, 39, 28.6; nearest neighbour 30.</li>
+      <li>Stretch 50–150: 80 → 76.5. Negative 255 − r. Gamma r = 64: γ = 0.5 → 127, γ = 2.2 → 12.</li>
+      <li>Lens: 1/S₁ + 1/S₂ = 1/f, ω = 2 arctan(d/f), longer f → smaller FOV. λ = c/ν, E = hν.</li>
+    </ul>
+    <p class="source">Slides: L6 p.3–64 · Notes: 06_Week3_Image_Basics_Perception_Resampling.md</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lecture</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

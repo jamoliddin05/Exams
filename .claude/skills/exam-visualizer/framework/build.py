@@ -3,8 +3,12 @@
 Usage:
   python3 -I build.py <project_dir>                                  # full page -> project.json "out"
   python3 -I build.py <project_dir> --only s2-w --out <path.html>    # one or more scopes, for checking
+
+A scope is parts/<scope>.html + .js, optionally followed by chunks parts/<scope>@<tag>.html + .js
+(sorted by tag), so several authors can write one scope.
 """
 import argparse
+import glob
 import html
 import json
 import os
@@ -21,12 +25,14 @@ def read(path):
         return f.read()
 
 
-def lint(scope, frag, js, problems, warnings):
+def lint(scope, prefix, frag, js, problems, warnings):
     for name, text in ((scope + '.html', frag), (scope + '.js', js)):
         for i, ln in enumerate(text.split('\n'), 1):
             if '\t' in ln:
                 problems.append(f'{name}:{i}: tab character (use spaces)')
-            if re.search(r'#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(', ln) and 'data-color' not in ln and not re.search(r'href="#', ln):
+            # `r2, #160` and `udf #255` are assembly immediates, not colors
+            hexes = [m for m in re.finditer(r'(, |[a-z] )?#([0-9a-fA-F]{3,8})\b', ln) if not (m.group(1) and m.group(2).isdigit())]
+            if (hexes or re.search(r'rgba?\(|hsla?\(', ln)) and 'data-color' not in ln and not re.search(r'href="#', ln):
                 warnings.append(f'{name}:{i}: literal color; use theme classes/tokens or mark the line with data-color')
             if re.search(r'getBBox|getBoundingClientRect|clientWidth|offsetWidth|offsetHeight', ln):
                 problems.append(f'{name}:{i}: layout measurement; compute positions from numbers instead')
@@ -37,8 +43,8 @@ def lint(scope, frag, js, problems, warnings):
     ids = re.findall(r'\sid="([^"]+)"', frag)
     arts = re.findall(r'<article class="q"[^>]*\sid="([^"]+)"', frag)
     for a in arts:
-        if not re.fullmatch(re.escape(scope) + r'\d+', a):
-            problems.append(f'{scope}.html: article id {a} does not match {scope}<number>')
+        if not re.fullmatch(re.escape(prefix) + r'\d+', a):
+            problems.append(f'{scope}.html: article id {a} does not match {prefix}<number>')
     extra = [i for i in ids if i not in arts]
     if extra:
         problems.append(f'{scope}.html: element ids other than article ids: {extra[:5]} (use data-viz/data-role attributes)')
@@ -62,7 +68,7 @@ def lint(scope, frag, js, problems, warnings):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('project', help='project folder with project.json and parts/')
-    ap.add_argument('--only', help='comma-separated scopes, e.g. s2-w or s1-mc,s1-w')
+    ap.add_argument('--only', help='comma-separated scopes or chunks, e.g. s2-w or s1-mc,s1-w or s1-mc@07,topics-tp@07')
     ap.add_argument('--out', help='output html path (default: project.json "out")')
     args = ap.parse_args()
 
@@ -71,7 +77,7 @@ def main():
     parts_dir = os.path.join(proj, 'parts')
     scopes = [f"{sec['id']}-{p['key']}" for sec in cfg['sections'] for p in cfg['parts']]
     only = args.only.split(',') if args.only else scopes
-    unknown = [s for s in only if s not in scopes]
+    unknown = [s for s in only if s.split('@')[0] not in scopes]
     if unknown:
         sys.exit(f'unknown scopes {unknown}; known: {scopes}')
     if args.only and not args.out:
@@ -85,19 +91,28 @@ def main():
         body = []
         for p in cfg['parts']:
             scope = f"{sec['id']}-{p['key']}"
-            hp, jp = os.path.join(parts_dir, scope + '.html'), os.path.join(parts_dir, scope + '.js')
-            if scope not in only or not os.path.exists(hp):
-                continue
-            frag = read(hp)
-            js = read(jp) if os.path.exists(jp) else ''
-            all_ids += lint(scope, frag, js, problems, warnings)
-            body.append(f'<h3 class="part-title">{html.escape(p["title"])}</h3>\n{frag.strip()}')
-            if js.strip():
-                scripts.append(f"<script>\n/* {scope} */\ntry {{\n{js.rstrip()}\n}} catch (e) {{ QV.fail('{scope}', e); }}\n</script>")
+            chunks = [scope] if os.path.exists(os.path.join(parts_dir, scope + '.html')) else []
+            chunks += sorted(os.path.basename(f)[:-5] for f in glob.glob(os.path.join(parts_dir, glob.escape(scope) + '@*.html')))
+            chunks = [c for c in chunks if scope in only or c in only]
+            frags = []
+            for name in chunks:
+                frag = read(os.path.join(parts_dir, name + '.html'))
+                jp = os.path.join(parts_dir, name + '.js')
+                js = read(jp) if os.path.exists(jp) else ''
+                prefix = sec.get('idPrefix', scope)
+                if isinstance(prefix, dict):
+                    prefix = prefix.get(p['key'], scope)
+                all_ids += lint(name, prefix, frag, js, problems, warnings)
+                frags.append(frag.strip())
+                if js.strip():
+                    scripts.append(f"<script>\n/* {name} */\ntry {{\n{js.rstrip()}\n}} catch (e) {{ QV.fail('{name}', e); }}\n</script>")
+            if frags:
+                body.append(f'<h3 class="part-title">{html.escape(p["title"])}</h3>\n' + '\n'.join(frags))
         if not body:
             continue
+        extra = ''.join(f' data-{k}="{html.escape(sec[c])}"' for k, c in (('prefix', 'tabPrefix'), ('noun', 'noun')) if c in sec)
         sections.append(
-            f'<section class="sample" id="{sec["id"]}" data-tab="{html.escape(sec.get("tab", sec["id"]))}" hidden>\n'
+            f'<section class="sample" id="{sec["id"]}" data-tab="{html.escape(sec.get("tab", sec["id"]))}"{extra} hidden>\n'
             f'<div class="sample-head">\n<h2 class="sample-title">{html.escape(sec["title"])}</h2>\n'
             f'<p class="sample-meta">{html.escape(sec.get("meta", ""))}</p>\n'
             f'<nav class="qindex" data-role="qindex" aria-label="{html.escape(sec["title"])} questions"></nav>\n</div>\n'
@@ -112,7 +127,7 @@ def main():
     page = shell
     for key in ('TITLE', 'KICKER', 'LEDE', 'FOOT'):
         page = page.replace('{{' + key + '}}', html.escape(cfg.get(key.lower(), '')))
-    page = page.replace('{{TABLABEL}}', html.escape(cfg.get('tabLabel', 'Section')))
+    page = page.replace('{{TABLABEL}}', html.escape(cfg.get('barLabel', cfg.get('tabLabel', 'Section'))))
     page = page.replace('<!--CONFIG-->', config_tag)
     page = page.replace('<!--SAMPLES-->', '\n'.join(sections)).replace('<!--PARTS-->', '\n'.join(scripts))
     os.makedirs(os.path.dirname(out), exist_ok=True)

@@ -1,0 +1,476 @@
+<article class="q" id="topic4" data-part="tp" data-num="4" data-topic="Lossless coding">
+  <div class="q-head">
+    <p class="eyebrow">Lecture 4 · Week 2 · 10 sample questions</p>
+    <h3 class="q-title">Lossless Coding from Zero</h3>
+    <p class="fig-lede">How to store the same information in fewer bits and get every bit back. The lecture first measures how much information a source really holds (entropy), then builds codes that come close to that limit: run-length coding, Shannon-Fano, Huffman and the LZW dictionary. It starts from PCM (Lecture 3), the bits a sound becomes after sampling and quantization.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Words you need</h4>
+    <div class="why-grid">
+      <div class="mini"><h5>Symbol and alphabet</h5><p>One item of the data: a letter, a gray level, a quantized sample. The alphabet S = {s₁, …, sₙ} is the set of the n different symbols.</p></div>
+      <div class="mini"><h5>Codeword</h5><p>The bits written for one symbol. A fixed-length code gives every symbol the same number of bits. A variable-length code (VLC) gives frequent symbols fewer.</p></div>
+      <div class="mini"><h5>Lossless and lossy</h5><p>Lossless: decoding gives back exactly the original. Lossy: only a close approximation comes back.</p></div>
+      <div class="mini"><h5>Compression ratio</h5><p>B₀ / B₁, bits before compression divided by bits after. A ratio of 2 means the data became half as big.</p></div>
+      <div class="mini"><h5>Probability pᵢ</h5><p>How often symbol sᵢ occurs: its count divided by the total. In HELLO, p(L) = 2/5 = 0.4.</p></div>
+      <div class="mini"><h5>Self-information</h5><p>log₂(1/pᵢ) bits, the information in one sᵢ, "the number of bits needed to encode sᵢ". Rare symbols carry more.</p></div>
+      <div class="mini"><h5>Entropy η</h5><p>The average self-information, η = Σ pᵢ log₂(1/pᵢ), in bits per symbol. No lossless code can average fewer bits.</p></div>
+      <div class="mini"><h5>Average length l̄</h5><p>l̄ = Σ pᵢ lᵢ, with lᵢ the length of sᵢ's codeword. Efficiency = η / l̄, at most 1.</p></div>
+      <div class="mini"><h5>Prefix code</h5><p>No codeword is the start of another, so a bitstream splits into codewords in only one way.</p></div>
+      <div class="mini"><h5>Dictionary</h5><p>A numbered table of strings that encoder and decoder build the same way. LZW sends the number instead of the string.</p></div>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. Modulation: AM, FM and PM (slides 3–4)</h4>
+    <p>Slide 3: "modulation is the process of varying one or more properties of a periodic waveform, called the carrier signal, with a separate signal called the modulation signal that typically contains information to be transmitted."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Kind</th><th class="l">What changes</th><th class="l">Slide wording</th></tr></thead>
+        <tbody>
+          <tr><td class="l">AM</td><td class="l">height (amplitude)</td><td class="l">"The height of the signal carrier is varied to represent the data"</td></tr>
+          <tr><td class="l">FM</td><td class="l">frequency</td><td class="l">"The frequency of the carrier waveform is varied to reflect the frequency of the data"</td></tr>
+          <tr><td class="l">PM</td><td class="l">phase</td><td class="l">"the frequency is unchanged while the phase is changed relative to the base carrier frequency. It is similar to FM."</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Slide 4: "Modulation is the process of encoding information in a transmitted signal, while demodulation is the process of extracting information from the transmitted signal."</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. PCM again, and the three stages of compression (slides 5–9)</h4>
+    <ul>
+      <li>Coder mapping: "the boundaries for quantizer input intervals that will all be mapped into the same output level". Decoder mapping: "the representative values that are the output values from a quantizer" (slide 5).</li>
+      <li>Slide 5 then names this lecture's goal: "compress the data, by assigning a bitstream that uses fewer bits for the most prevalent signal values".</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Stage (slide 6)</th><th class="l">What happens</th><th class="l">Example</th></tr></thead>
+        <tbody>
+          <tr><td class="l">1. Transformation</td><td class="l">a new representation "easier or more efficient to compress"</td><td class="l">predictive coding: send the prediction error (section 3)</td></tr>
+          <tr><td class="l">2. Loss</td><td class="l">"Quantization is the main lossy step"</td><td class="l">fewer reconstruction levels; skipped by lossless coding</td></tr>
+          <tr><td class="l">3. Coding</td><td class="l">a codeword for each output level or symbol</td><td class="l">fixed-length, or variable-length such as Huffman</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Slide 7 (Fig. 3.7) codes a waveform with 3-bit PCM: input, sampling pulse, sampled signal (PAM), quantized signal, PCM pulses. Each sample falls in an interval [k, k + 1) and becomes level k.</p>
+    <pre class="calc">sample           1    2    3    4    5    6    7
+quantized level  4    6    7    6    4    2    1
+3-bit code      100  110  111  110  100  010  001
+bitstream = 100110111110100010001   7 samples × 3 bits = 21 bits</pre>
+    <p>Slides 8–9: the decoder turns the levels into a staircase signal and a low-pass filter smooths it. The full chain is bandlimiting filter, μ-law or A-law compressor, linear PCM, transmission, DAC, expander, low-pass filter (Lecture 3).</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. Predict, then send only the error: DPCM (slides 2, 6)</h4>
+    <p>Neighbouring samples are close. Send how far each sample is from a guess made from earlier samples. Those numbers are small and cluster around 0, so a variable-length code gives them short codewords. The deck lists differential coding, lossless predictive coding and DPCM on slide 2 but only slide 6 says how: "predict the next signal from previous ones and transmit the prediction error". The rest is (textbook context), Li and Drew 6.3.5–6.3.6.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Method</th><th class="l">Sent</th><th class="l">Decoder</th><th class="l">Lossless</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Differential coding</td><td class="l">f₁, then dₙ = fₙ − fₙ₋₁</td><td class="l">fₙ = fₙ₋₁ + dₙ</td><td class="l">yes</td></tr>
+          <tr><td class="l">Lossless predictive coding</td><td class="l">eₙ = fₙ − f̂ₙ, f̂ₙ from past values</td><td class="l">fₙ = f̂ₙ + eₙ</td><td class="l">yes</td></tr>
+          <tr><td class="l">DPCM</td><td class="l">ẽₙ = Q[eₙ], the quantized error</td><td class="l">f̃ₙ = f̂ₙ + ẽₙ</td><td class="l">no</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="calc">difference coding:  100 102 105 105 103  →  send 100, 2, 3, 0, −2
+decoder:            100, 100+2 = 102, 102+3 = 105, 105+0 = 105, 105−2 = 103
+
+predictor f̂ₙ = ⌊(fₙ₋₁ + fₙ₋₂)/2⌋ with f₀ = f₁ = 21:
+n = 2   f = 22   f̂ = ⌊(21+21)/2⌋ = 21   e = 1
+n = 3   f = 27   f̂ = ⌊(22+21)/2⌋ = 21   e = 6
+n = 4   f = 25   f̂ = ⌊(27+22)/2⌋ = 24   e = 1
+n = 5   f = 22   f̂ = ⌊(25+27)/2⌋ = 26   e = −4</pre>
+    <p class="formula">eₙ = fₙ − f̂ₙ     ẽₙ = Q[eₙ]     f̃ₙ = f̂ₙ + ẽₙ     reconstruction error fₙ − f̃ₙ = eₙ − ẽₙ</p>
+    <ul>
+      <li>f̂ is the prediction, e the prediction error, ẽ the quantized error, f̃ the reconstructed sample.</li>
+      <li>The decoder only has f̃. So the encoder predicts from f̃ too, and both sides make the same prediction. Each sample then carries only its own quantization error.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Try it: quantize the prediction error</h4></div>
+      <p class="fig-lede">Ten samples, predictor f̂ₙ = the previous reconstructed sample, error rounded to the nearest multiple of Δ. Drag Δ. Blue predicts from f̃ (DPCM) and stays close. Plum predicts from the original f, which the decoder does not have, so its errors add up.</p>
+      <div data-viz="dpcm-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">DPCM, largest error</span><span class="v pri" data-role="dpcm-max">2</span><span class="sub">at most Δ/2</span></div>
+        <div class="stat"><span class="label">Open loop, largest error</span><span class="v sec" data-role="dpcm-ol">6</span><span class="sub">grows sample by sample</span></div>
+      </div>
+      <div data-viz="dpcm"></div>
+      <div class="legend">
+        <span><i class="sw-seg"></i>original f</span>
+        <span><i class="sw-pri"></i>DPCM f̃</span>
+        <span><i class="sw-sec"></i>predicted from f</span>
+      </div>
+      <div data-viz="dpcm-table"></div>
+      <p class="step-note" data-role="dpcm-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. Compression, lossless and lossy, compression ratio (slides 10–11)</h4>
+    <ul>
+      <li>"Compression: the process of coding that will effectively reduce the total number of bits needed to represent certain information." Fig. 7.1: input data, encoder, storage or networks, decoder, output data.</li>
+      <li>"If the compression and decompression processes induce no information loss, then the compression scheme is lossless; otherwise, it is lossy."</li>
+      <li>Lossless: run-length, Shannon-Fano, Huffman, LZW, PNG. Lossy: JPEG, MP3 (Lecture 5). (class remark: JPG lossy, PNG lossless)</li>
+    </ul>
+    <p class="formula">compression ratio = B₀ / B₁      B₀ = bits before compression, B₁ = bits after</p>
+    <ul>
+      <li>A codec should have "a compression ratio much larger than 1.0". Higher is better "as long as it is computationally feasible".</li>
+      <li>The run-length and LZW examples on the slides count symbols, not bits. Say "in symbols" when you do that.</li>
+    </ul>
+    <pre class="calc">HELLO in 8-bit ASCII:  B₀ = 5 × 8 = 40 bits
+HELLO in Huffman code: B₁ = 10 bits            (section 8)
+compression ratio      = 40 / 10 = 4.0</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Entropy: the fewest bits the information needs (slides 12–13)</h4>
+    <p>A symbol that almost always occurs tells you little when it arrives. A rare one tells you a lot. Shannon measured this in bits as log₂(1/p). Entropy is its average over the source.</p>
+    <p class="formula">η = H(S) = Σ pᵢ log₂(1/pᵢ) = −Σ pᵢ log₂ pᵢ      bits per symbol      (7.2), (7.3)</p>
+    <ul>
+      <li>log₂(1/pᵢ) is "the amount of information (self-information as defined by Shannon) contained in sᵢ, which corresponds to the number of bits needed to encode sᵢ".</li>
+      <li>Calculator: log₂ x = log₁₀ x / 0.30103 = ln x / 0.69315.</li>
+    </ul>
+    <pre class="calc">HELLO: p(L) = 0.4, p(H) = p(E) = p(O) = 0.2
+L: log₂(1/0.4) = 1.3219 bits      H, E, O: log₂(1/0.2) = 2.3219 bits
+η = 0.4 × 1.3219 + 3 × 0.2 × 2.3219 = 0.5288 + 1.3932 = 1.922 bits/symbol
+whole word: at least 5 × 1.922 = 9.61 bits</pre>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Fig. 7.2</th><th class="l">Gray levels</th><th class="l">pᵢ</th><th class="l">η</th></tr></thead>
+        <tbody>
+          <tr><td class="l">(a)</td><td class="l">256, all equally likely</td><td class="l">1/256 each</td><td class="l">log₂ 256 = 8 bits (7.4)</td></tr>
+          <tr><td class="l">(b)</td><td class="l">2</td><td class="l">1/3 and 2/3</td><td class="l">(1/3)·log₂ 3 + (2/3)·log₂ 1.5 = 0.528 + 0.390 = 0.918 (slide: 0.92)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>η is largest when all N symbols are equally likely: η = log₂ N. Image (a) needs its full 8 bits per pixel and cannot be compressed losslessly.</li>
+      <li>η is 0 when one symbol is certain. The more skewed the histogram, the lower η.</li>
+      <li>η is the lower bound on the average code length, η ≤ l̄ (Eq. 7.5, cited on slide 30, textbook context).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Try it: the entropy of a two-gray-level image</h4></div>
+      <p class="fig-lede">Drag the probability of the light value. Left: the histogram and each value's self-information. Right: η, their weighted average, along the whole range. It peaks at 1 bit when both values are equally likely.</p>
+      <div data-viz="ent-slider"></div>
+      <div data-viz="ent"></div>
+      <p class="step-note" data-role="ent-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. Run-length coding (slides 14–15)</h4>
+    <ul>
+      <li>"Memoryless Source: an information source that is independently distributed. Namely, the value of the current symbol does not depend on the values of the previously appeared symbols."</li>
+      <li>"Instead of assuming memoryless source, Run-Length Coding (RLC) exploits memory present in the information source." If "symbols tend to form continuous groups, then such symbol and the length of the group can be coded." A group of equal symbols in a row is a run.</li>
+      <li>Each run becomes two entities, "a count suggesting the number of repeated symbols and the symbol itself": aaaaa becomes 5a.</li>
+    </ul>
+    <pre class="calc">BBBB EEEEEEEE CCCC D  AAAAA     22 symbols, 5 runs
+4B   8E       4C   1D 5A        10 symbols
+ratio = 22 / 10 = 2.2 (in symbols)
+
+no runs:  ABCDE  →  1A1B1C1D1E   5 → 10 symbols, ratio 0.5</pre>
+    <p>The single D still costs 1D. Without runs every symbol costs two, and the output doubles.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Repetition suppression and pattern substitution (slides 16–18)</h4>
+    <ul>
+      <li>Repetition suppression reserves "a specific symbol for a commonly occurring pattern". Slide 16: Abdcb followed by 44 a's becomes Abdcb and one flag symbol, 49 symbols into 6.</li>
+      <li>Pattern substitution groups "individual symbols into strings". Each string gets "a code, or an index, which is used every time the string appears".</li>
+      <li>"no pre-analysis of the message is required to create a dictionary of strings, but rather the strings are created as the message is scanned." Slide 18's pseudocode is the LZW algorithm of section 12.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. Shannon-Fano: split the sorted list from the top (slides 19–23)</h4>
+    <p>A variable-length code gives frequent symbols short codewords. Shannon-Fano builds the code tree "top-down", from the whole alphabet to single symbols.</p>
+    <pre class="calc">Shannon-Fano Algorithm, a top-down approach
+1. Sort the symbols according to the frequency count of their occurrences.
+2. Recursively divide the symbols into two parts, each with approximately
+   the same number of counts, until all parts contain only one symbol.
+Left branch = 0, right branch = 1. A code is the path from the root down.</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Shannon-Fano on HELLO: every row splits the row above</h4></div>
+      <p class="fig-lede">Widths are counts (L 2, H 1, E 1, O 1). At each split the possible cuts are marked with the difference between the two sides. The smallest difference wins. Two cuts tie at split 1, and the other choice gives Fig. 7.4.</p>
+      <div data-viz="sf-steps"></div>
+      <p class="step-note" data-role="sf-note" aria-live="polite"></p>
+      <div data-viz="sf"></div>
+    </figure>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Symbol</th><th>Count</th><th>log₂(1/p)</th><th class="l">Fig. 7.3 code</th><th>bits used</th><th class="l">Fig. 7.4 code</th><th>bits used</th></tr></thead>
+        <tbody>
+          <tr><td class="l">L</td><td>2</td><td>1.32</td><td class="l">0</td><td>2</td><td class="l">00</td><td>4</td></tr>
+          <tr><td class="l">H</td><td>1</td><td>2.32</td><td class="l">10</td><td>2</td><td class="l">01</td><td>2</td></tr>
+          <tr><td class="l">E</td><td>1</td><td>2.32</td><td class="l">110</td><td>3</td><td class="l">10</td><td>2</td></tr>
+          <tr><td class="l">O</td><td>1</td><td>2.32</td><td class="l">111</td><td>3</td><td class="l">11</td><td>2</td></tr>
+          <tr class="on"><td class="l">TOTAL</td><td>5</td><td></td><td class="l"></td><td>10</td><td class="l"></td><td>10</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>"# of bits used" = count × code length. Table 7.1 on slide 21 prints 1 for L; it is 2 × 1 = 2, and the total 10 is right.</li>
+      <li>Ties give different trees, so Shannon-Fano is not unique. Both spend 10 bits = 2 bits/symbol, against the bound 9.61 bits.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Huffman: merge the two rarest from the bottom (slides 24–29)</h4>
+    <ul>
+      <li>Slide 24: PCM gives every sample log₂ n bits for n distinct values. That "might not be the most efficient coding scheme because some symbols occur more commonly than others."</li>
+      <li>Huffman works "bottom-up": join the two least probable nodes, which "can be leaf nodes or new parent nodes", until one root is left. Sorting the leaves "is not necessary" (slide 25).</li>
+    </ul>
+    <pre class="calc">ALGORITHM 7.1 Huffman Coding, a bottom-up approach
+1. Put all symbols on a list sorted by frequency count.
+2. Repeat until the list has only one symbol left:
+   (1) pick the two lowest counts; make them children of a new parent
+   (2) parent count = sum of the children; insert it, keeping the order
+   (3) delete the children from the list
+3. Label branches 0 and 1 from the root; a leaf's codeword is its path.</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Huffman on slide 24's counts, merge by merge</h4></div>
+      <p class="fig-lede">The list sits on top, sorted by count. Each merge removes the two lowest and inserts their parent. Read a code from the root down to the leaf.</p>
+      <div data-viz="hf-steps"></div>
+      <p class="step-note" data-role="hf-note" aria-live="polite"></p>
+      <div data-viz="hf"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Huffman</span><span class="v pri">87 bits</span><span class="sub">l̄ = 87/39 = 2.23 bits/symbol</span></div>
+        <div class="stat"><span class="label">Fixed 3-bit</span><span class="v sec">117 bits</span><span class="sub">39 × 3</span></div>
+        <div class="stat"><span class="label">Shannon-Fano</span><span class="v ter">89 bits</span><span class="sub">A 00, B 01, C 10, D 110, E 111 (textbook context)</span></div>
+        <div class="stat"><span class="label">Entropy bound</span><span class="v ok">85.25 bits</span><span class="sub">39 × η, η = 2.186</span></div>
+      </div>
+    </figure>
+    <p>HELLO with Huffman (Fig. 7.5, slides 28–29). P1, P2, P3 are the new parent nodes.</p>
+    <pre class="calc">after initialization:          L H E O
+after (a) P1 = E + O = 2:      L P1 H
+after (b) P2 = H + P1 = 3:     L P2
+after (c) P3 = L + P2 = 5:     P3
+codes L 0, H 10, E 110, O 111:  2×1 + 1×2 + 1×3 + 1×3 = 10 bits</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Why Huffman works: prefix property, optimality, efficiency (slides 26, 30)</h4>
+    <ul>
+      <li>"Unique Prefix Property: No Huffman code is a prefix of any other Huffman code - precludes any ambiguity in decoding." Codewords end only at leaves.</li>
+    </ul>
+    <pre class="calc">HELLO, L = 0, H = 10, E = 110, O = 111:   stream 1011000111
+read until a codeword matches:  10 | 110 | 0 | 0 | 111  →  H E L L O
+with L = 0 and H = 01 (not prefix-free), "01" could be H or L + something</pre>
+    <ul>
+      <li>Optimality: a "minimum redundancy code", optimal "for a given, accurate, probability distribution".</li>
+      <li>"The two least frequent symbols will have the same length for their Huffman codes, differing only at the last bit."</li>
+      <li>"Symbols that occur more frequently will have shorter Huffman codes."</li>
+      <li>"The average code length for an information source S is strictly less than η + 1."</li>
+    </ul>
+    <p class="formula">η ≤ l̄ &lt; η + 1   (7.6)       l̄ = Σ pᵢ lᵢ       efficiency = η / l̄</p>
+    <pre class="calc">slide 26:  A 0.28 00   B 0.2 10   C 0.17 010   D 0.17 011
+           E 0.1 110   F 0.05 1110   G 0.02 11110   H 0.01 11111
+l̄ = 0.28×2 + 0.2×2 + 0.17×3 + 0.17×3 + 0.1×3 + 0.05×4 + 0.02×5 + 0.01×5
+  = 0.56 + 0.40 + 0.51 + 0.51 + 0.30 + 0.20 + 0.10 + 0.05 = 2.63 bits/symbol
+η = 2.575 (slide: 2.574)    efficiency = 2.575 / 2.63 = 0.9792
+a fixed 3-bit code:          efficiency = 2.575 / 3 = 0.858</pre>
+    <p>The slide's code-length column prints 1 for A and 3 for B. The codes 00 and 10 have 2 bits each. With the printed lengths l̄ would be 2.55, below η, which is impossible.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. Extended Huffman: code groups of symbols (slides 31–32)</h4>
+    <ul>
+      <li>"All codewords in Huffman coding have integer bit lengths. It is wasteful when pᵢ is very large and hence log₂(1/pᵢ) is close to 0." A symbol with p = 0.9 carries 0.152 bits and still costs 1 bit.</li>
+      <li>So group k symbols and give each group one codeword. The extended alphabet S⁽ᵏ⁾ = {s₁s₁…s₁, …, sₙsₙ…sₙ} has nᵏ symbols.</li>
+    </ul>
+    <p class="formula">η ≤ l̄ &lt; η + 1/k      bits per original symbol      (7.7)</p>
+    <ul>
+      <li>"An improvement over the original Huffman coding, but not much."</li>
+      <li>Problem: for k ≥ 3 and n ≫ 1, nᵏ "implies a huge symbol table", impractical. 256 gray levels with k = 3 need 256³ = 16,777,216 codewords.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>Try it: group k symbols of a skewed source</h4></div>
+      <p class="fig-lede">p(a) = 0.9, p(b) = 0.1, so η = 0.469 bits/symbol (textbook context). Drag k. Each bar is the Huffman code of the k-symbol groups, in bits per original symbol. The plum tick is the bound η + 1/k. The codeword lengths of the current k are listed below.</p>
+      <div data-viz="ext-slider"></div>
+      <div data-viz="ext"></div>
+      <div class="chips" data-role="ext-codes"></div>
+      <p class="step-note" data-role="ext-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. Adaptive Huffman: update the tree as symbols arrive (slides 33–36)</h4>
+    <p>Plain Huffman needs the probabilities before it starts. Adaptive Huffman coding: "statistics are gathered and updated dynamically as the data stream arrives".</p>
+    <pre class="calc">ENCODER                     DECODER
+Initial_code();             Initial_code();
+while not EOF               while not EOF
+{                           {
+    get(c);                     decode(c);
+    encode(c);                  output(c);
+    update_tree(c);             update_tree(c);
+}                           }</pre>
+    <ul>
+      <li>Initial_code assigns "initially agreed upon codes, without any prior knowledge of the frequency counts". update_tree "(a) increments the frequency counts for the symbols (including any new ones)" and "(b) updates the configuration of the tree".</li>
+      <li>"The encoder and decoder must use exactly the same initial_code and update_tree routines." They see the same symbols in the same order, so their trees stay identical.</li>
+      <li>"Nodes are numbered in order from left to right, bottom to top." Sibling property: "all nodes (internal and leaf) are arranged in the order of increasing counts".</li>
+      <li>"When a swap is necessary, the farthest node with count N is swapped with the node whose count has just been increased to N+1." In Fig. 7.6 the farthest node is the highest-numbered one with count N.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Fig. 7.6: two more A's, three swaps</h4></div>
+      <p class="fig-lede">Nodes are written number. symbol:(count). The strip underneath lists the counts in node order, which must never decrease. Plum arrows mark a swap, red a count that would break the order.</p>
+      <div data-viz="ah-steps"></div>
+      <p class="step-note" data-role="ah-note" aria-live="polite"></p>
+      <div data-viz="ah"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. LZW: one number for a whole string (slides 37–41)</h4>
+    <ul>
+      <li>"LZW uses fixed-length codewords to represent variable-length strings of symbols/characters that commonly occur together, e.g., words in English text."</li>
+      <li>"the LZW encoder and decoder build up the same dictionary dynamically while receiving the data." The dictionary is never sent.</li>
+      <li>Advantages over Huffman (slide 38): no prior knowledge of the input; "60 - 70% compression ratio for some text files"; better for repetitive data; a single pass.</li>
+    </ul>
+    <pre class="calc">ALGORITHM 7.2 LZW Compression
+s = next input character;
+while not EOF
+{
+    c = next input character;
+    if s + c exists in the dictionary
+        s = s + c;
+    else
+    {
+        output the code for s;
+        add string s + c to the dictionary with a new code;
+        s = c;
+    }
+}
+output the code for s;</pre>
+    <p>s is the longest known string so far and c the next character. s grows while s + c is known. The first unknown s + c ends the piece: send code(s), store s + c, restart from c.</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>Example 7.2: ABABBABCABABBA with 1 = A, 2 = B, 3 = C</h4></div>
+      <p class="fig-lede">Each button is one output code. Blue is the piece s that is sent, plum the character c that made s + c unknown. Green is the new entry s + c.</p>
+      <div data-viz="lzw-steps"></div>
+      <p class="step-note" data-role="lzw-note" aria-live="polite"></p>
+      <div data-viz="lzw"></div>
+      <div data-viz="lzw-table"></div>
+    </figure>
+    <p>"Instead of sending 14 characters, only 9 codes need to be sent (compression ratio = 14/9 = 1.56)." This counts codes against characters. In bits it depends on the code length (section 14).</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>14. LZW decoding and the code the decoder has not made yet (slides 42–45)</h4>
+    <pre class="calc">ALGORITHM 7.3 LZW Decompression (simple version)
+s = NIL;
+while not EOF
+{
+    k = next input code;
+    entry = dictionary entry for k;
+    output entry;
+    if (s != NIL)
+        add string s + entry[0] to dictionary with a new code;
+    s = entry;
+}</pre>
+    <pre class="calc">Example 7.3, codes 1 2 4 5 2 3 4 6 1, initial table 1 = A, 2 = B, 3 = C
+S     K   entry   adds
+NIL   1   A
+A     2   B       4 = AB
+B     4   AB      5 = BA
+AB    5   BA      6 = ABB
+BA    2   B       7 = BAB
+B     3   C       8 = BC
+C     4   AB      9 = CA
+AB    6   ABB    10 = ABA
+ABB   1   A      11 = ABBA       output ABABBABCABABBA</pre>
+    <ul>
+      <li>The decoder makes the encoder's entries one code later. It learns the last character of s + c only from the next code.</li>
+      <li>If the encoder uses an entry right after creating it, that code reaches the decoder first. ALGORITHM 7.4 adds an exception handler: <code>if (entry == NULL) entry = s + s[0];</code></li>
+      <li>Why s + s[0] (textbook context): the missing entry is the one about to be added, s + entry[0]. It starts with s, so entry[0] = s[0].</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 8</span><h4>Encoder and decoder side by side: ABABABA → 1 2 3 5</h4></div>
+      <p class="fig-lede">Dictionary 1 = A, 2 = B (textbook context). Columns are the four codes in order. Green entries are new. Code 5 is sent right after the encoder made it, so the decoder must build it with the exception.</p>
+      <div data-viz="dec-steps"></div>
+      <p class="step-note" data-role="dec-note" aria-live="polite"></p>
+      <div data-viz="dec"></div>
+    </figure>
+    <ul>
+      <li>Real applications (slide 45): the code length l stays in [l₀, l_max]. The dictionary starts with 2^l₀ entries. When it is full, l grows by 1, until l = l_max.</li>
+      <li>Then the dictionary "needs to be flushed (as in Unix compress)", or the LRU (least recently used) entries are removed.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Mistakes that cost marks</h4>
+    <ul>
+      <li>Entropy with log₁₀ or ln and no conversion. Use log₂ x = log₁₀ x / 0.30103. N equally likely symbols give log₂ N: 8 symbols → 3 bits, 256 levels → 8 bits.</li>
+      <li>Swapping the directions. Shannon-Fano is top-down (sort, split into equal counts). Huffman is bottom-up (merge the two smallest).</li>
+      <li>Huffman: after a merge the parent goes back into the list. Always take the two smallest of the current list, leaves and parents alike.</li>
+      <li>Copying the slide's tables. Slide 26's code lengths for A and B are 2 and 2 (l̄ = 2.63). Table 7.1's bits used for L is 2 × 1 = 2.</li>
+      <li>LZW encoding: the encoder outputs code(s), the old string, never the entry it just added. And it outputs code(s) once more at EOF.</li>
+      <li>LZW decoding: a code that is not in the dictionary yet is s + s[0]. Algorithm 7.3 fails there; Algorithm 7.4 handles it.</li>
+      <li>RLE on data without runs: every symbol becomes count + symbol, twice as long. RLC relies on memory in the source.</li>
+      <li>DPCM: predict from the reconstructed f̃. Predicting from the original f makes the decoder drift.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Cheat sheet</h4>
+    <div data-viz="cheat"></div>
+  </div>
+
+  <div class="sol-part">
+    <h4>How to write it on the exam</h4>
+    <pre class="calc">HUFFMAN (tree, codes, l̄, η, efficiency)
+1. Rule: merge the two smallest; smaller = 0, larger = 1.
+2. Merge table: step | two smallest | new node | list after.
+3. Draw the tree; read codes root → leaf. Check: prefix-free,
+   the two rarest have the same length.
+4. l̄ = Σ pᵢlᵢ = ... bits/symbol
+5. η = Σ pᵢ log₂(1/pᵢ) = ... bits/symbol
+6. Check η ≤ l̄ &lt; η + 1. Efficiency = η / l̄.
+7. Fixed length ⌈log₂ n⌉ bits: compare totals or efficiencies.
+
+SHANNON-FANO
+1. Sort by count.  2. Each split: list the cuts with |left − right|,
+   take the smallest; left = 0, right = 1.
+3. Table: count × length, TOTAL bits.
+4. Compare with fixed length N × ⌈log₂ n⌉: ratio B₀/B₁.
+
+RLE
+Runs as count, then symbol. Ratio = symbols before / symbols after.
+Say why: runs (memory) shrink; no runs double the length.
+
+LZW ENCODE   table: s | c | output | code | string
+s + c known → s = s + c; else output code(s), add s + c, s = c.
+EOF → output code(s). Give the code list and codes vs characters.
+
+LZW DECODE   table: s | k | entry/output | code | string
+entry = dict[k] (unknown → s + s[0]); output; add s + entry[0];
+s = entry. Check: encoding the result gives the codes back.
+
+ENTROPY, DPCM, RATIO
+η = Σ pᵢ log₂(1/pᵢ): "the lower bound on l̄ of any lossless code".
+Difference coding: send f₁, then fₙ − fₙ₋₁; decoder adds back.
+DPCM: f̂ₙ, eₙ = fₙ − f̂ₙ, ẽₙ = Q[eₙ], f̃ₙ = f̂ₙ + ẽₙ, error fₙ − f̃ₙ.
+Ratio B₀/B₁, B₀ = pixels × bits per pixel.</pre>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>η = Σ pᵢ log₂(1/pᵢ). Two values 1/3 and 2/3: 0.918. 256 equal levels: 8 bits. HELLO: 1.922 bits/symbol.</li>
+      <li>Compression ratio B₀/B₁: 4B8E4C1D5A gives 22/10 = 2.2 in symbols; LZW Example 7.2 gives 14/9 = 1.56.</li>
+      <li>RLC exploits memory (runs) and codes count then symbol. A memoryless source has no runs to exploit.</li>
+      <li>Shannon-Fano top-down, Huffman bottom-up. A15 B7 C6 D6 E5: Huffman 87 bits, Shannon-Fano 89, fixed 117.</li>
+      <li>l̄ = Σ pᵢlᵢ, efficiency η/l̄: slide 26 gives 2.575 / 2.63 = 0.9792.</li>
+      <li>η ≤ l̄ &lt; η + 1; extended Huffman η ≤ l̄ &lt; η + 1/k with nᵏ symbols. p = 0.9: 1 bit → 0.645 bits/symbol at k = 2.</li>
+      <li>Unique prefix property makes decoding unambiguous. The two rarest symbols have equal lengths and differ in the last bit.</li>
+      <li>Adaptive Huffman: sibling property; swap the farthest node with count N with the node going to N + 1. In Fig. 7.6 A goes 000 → 011 → 10.</li>
+      <li>LZW Example 7.2 outputs 1 2 4 5 2 3 4 6 1. Decoding 1 2 3 5 (1 = A, 2 = B) needs the exception and gives ABABABA.</li>
+      <li>DPCM: eₙ = fₙ − f̂ₙ, ẽₙ = Q[eₙ], f̃ₙ = f̂ₙ + ẽₙ; the predictor uses f̃, so errors stay within one quantization error.</li>
+    </ul>
+    <p class="source">Slides: L4 p.2–45 · Notes: 04_Week2_DPCM_Entropy_Huffman_LZW.md</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lecture</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

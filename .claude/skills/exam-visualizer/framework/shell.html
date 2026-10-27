@@ -43,7 +43,8 @@
 }
 
 [hidden] { display: none !important; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font-body); }
+/* JetBrains Mono draws -> == |= as ligatures via calt; the font shorthand can't reset feature settings, so this holds everywhere */
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font-body); font-feature-settings: "calt" 0; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
 .pad {
   max-width: 880px; margin: 0 auto;
@@ -206,8 +207,29 @@ h1 { font-stretch: 80%; font-weight: 800; font-size: clamp(2.1rem, 6vw, 3.2rem);
 
 .exam-line { display: grid; gap: 8px; padding: 16px 18px; background: var(--seg); border-radius: 8px; }
 .exam-line p { font-size: 15.5px; max-width: 70ch; }
+.exam-line ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: 15.5px; max-width: 70ch; }
 .source { font-size: 13.5px; color: var(--muted); }
 .viz-error { font-size: 13.5px; color: var(--bad); }
+
+.related { display: grid; gap: 18px; }
+.rel-group { display: grid; gap: 8px; }
+.rel { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 0; }
+.rel > summary {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: baseline;
+  padding: 10px 12px; cursor: pointer; list-style: none; font-size: 15px;
+}
+.rel > summary::-webkit-details-marker { display: none; }
+.rel > summary::after { content: "+"; font: 600 15px var(--font-mono); color: var(--muted); }
+.rel[open] > summary { border-bottom: 1px solid var(--line); }
+.rel[open] > summary::after { content: "\2212"; }
+.rel .qid {
+  font: 600 12px var(--font-mono); color: var(--pri); text-decoration: none; white-space: nowrap;
+  padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px;
+}
+.rel .qid:hover { border-color: var(--pri); }
+.rel-body { display: grid; gap: 14px; padding: 12px; }
+.rel-body > * { min-width: 0; }
+.rel-none { color: var(--muted); font-size: 15px; }
 
 .foot { padding-block: 0 48px; font-size: 13.5px; color: var(--muted); }
 
@@ -532,10 +554,10 @@ window.QV = (function () {
       const row = h('div', { class: 'qindex-row' }, nav);
       h('span', { class: 'label' }, row, p.index || p.title || p.key);
       const chips = h('div', { class: 'chips-nav' }, row);
-      const topic = p.chip === 'topic';
+      const topic = p.chip === 'topic' || p.chip === 'name';
       arts.forEach(a => {
         const link = h('a', { href: '#' + a.id, title: a.dataset.topic || '' }, chips);
-        h('span', { class: 'qid' }, link, topic ? 'Q' + a.dataset.num : a.dataset.num);
+        h('span', { class: 'qid' }, link, p.chip === 'topic' ? 'Q' + a.dataset.num : a.dataset.num);
         if (topic && a.dataset.topic) link.appendChild(document.createTextNode(a.dataset.topic));
       });
     });
@@ -571,7 +593,7 @@ window.QV = (function () {
       const row = h('div', { class: 'q-meta' });
       title.replaceWith(row);
       row.appendChild(title);
-      linkButton(row, sec.id, 'Copy link to this ' + TAB.toLowerCase());
+      linkButton(row, sec.id, 'Copy link to this ' + (sec.dataset.noun || TAB.toLowerCase()));
     }
     sec.querySelectorAll('article.q').forEach(a => {
       const eb = a.querySelector('.q-head .eyebrow');
@@ -593,6 +615,45 @@ window.QV = (function () {
   }
 
   function sectionOf(el) { return el && (el.matches('section.sample') ? el : el.closest('section.sample')); }
+
+  // An article with data-ref="topic3" is listed inside topic3's [data-role="related"] slot and links back to it
+  function buildRelated() {
+    const refs = [...document.querySelectorAll('article.q[data-ref]')];
+    refs.forEach(a => {
+      const ex = a.querySelector('.exam-line');
+      a.dataset.ref.split(/\s+/).forEach(tid => {
+        const t = document.getElementById(tid);
+        if (!t || !ex) return;
+        const p = h('p', { class: 'source' }, ex, 'Explained in ');
+        h('a', { href: '#' + tid }, p, 'Topic ' + t.dataset.num + ' · ' + (t.dataset.topic || tid));
+      });
+    });
+    document.querySelectorAll('article.q [data-role="related"]').forEach(host => {
+      const tid = host.closest('article.q').id;
+      host.classList.add('related');
+      const mine = refs.filter(a => a.dataset.ref.split(/\s+/).indexOf(tid) >= 0);
+      if (!mine.length) { h('p', { class: 'rel-none' }, host, 'No sample question is on this topic yet.'); return; }
+      let group = null, secId = null;
+      mine.forEach(a => {
+        const sec = sectionOf(a);
+        if (sec.id !== secId) {
+          secId = sec.id;
+          group = h('div', { class: 'rel-group' }, host);
+          const title = sec.querySelector('.sample-title');
+          h('p', { class: 'label' }, group, title ? title.textContent : sec.id);
+        }
+        const d = h('details', { class: 'rel' }, group);
+        const sum = h('summary', {}, d);
+        h('a', { class: 'qid', href: '#' + a.id }, sum, 'Q' + a.dataset.num);
+        const qt = a.querySelector('.q-title');
+        h('span', {}, sum, qt ? qt.textContent : a.id);
+        const body = h('div', { class: 'rel-body' }, d);
+        a.querySelectorAll('.q-head > pre, .options, .answer').forEach(x => body.appendChild(x.cloneNode(true)));
+        const more = h('p', { class: 'source' }, body);
+        h('a', { href: '#' + a.id }, more, 'Open the full explanation with figures');
+      });
+    });
+  }
 
   function fromHash() {
     const id = location.hash.slice(1);
@@ -621,6 +682,7 @@ window.QV = (function () {
 
   function start() {
     sections = [...document.querySelectorAll('section.sample')];
+    buildRelated();
     sections.forEach(fixMarks);
     const pending = new Set();
     new MutationObserver(recs => {
@@ -632,7 +694,8 @@ window.QV = (function () {
       buildIndex(sec);
       addLinks(sec);
       const b = h('button', { type: 'button', 'data-sid': sec.id, 'aria-pressed': 'false' }, tabHost);
-      h('span', { class: 'long' }, b, TAB + ' ');
+      const pre = sec.dataset.prefix != null ? sec.dataset.prefix : TAB + ' ';
+      if (pre) h('span', { class: 'long' }, b, pre);
       b.appendChild(document.createTextNode(sec.dataset.tab || sec.id));
       b.addEventListener('click', () => { show(sec.id); sec.scrollIntoView(); });
       tabs.push(b);

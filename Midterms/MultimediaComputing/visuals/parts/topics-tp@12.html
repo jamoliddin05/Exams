@@ -1,0 +1,296 @@
+<article class="q" id="topic12" data-part="tp" data-num="12" data-topic="Pattern recognition">
+  <div class="q-head">
+    <p class="eyebrow">Lecture 12 · Week 7 · 10 sample questions</p>
+    <h3 class="q-title">Pattern Recognition from Zero</h3>
+    <p class="fig-lede">How a machine measures an object, turns it into a few numbers, and decides which group it belongs to. The lecture follows one example, sorting salmon from sea bass on a conveyor, from the camera to the decision. Then it shows the classifiers that make the decision: nearest class mean, nearest neighbour and Bayes.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Words you need</h4>
+    <div class="why-grid">
+      <div class="mini"><h5>Pattern</h5><p>"An arrangement of descriptors" (slide 3). One object as the machine sees it, for example one fish.</p></div>
+      <div class="mini"><h5>Feature (descriptor)</h5><p>One measured number about a pattern: a fish's length, lightness or width, a character's number of holes.</p></div>
+      <div class="mini"><h5>Pattern class</h5><p>"A family of patterns that share some common properties" (slide 3): salmon, sea bass, the letter A.</p></div>
+      <div class="mini"><h5>Feature vector x</h5><p>The features of one pattern in a list, x = [x₁, x₂, …, x<sub>d</sub>]. Fish: x = [lightness, width].</p></div>
+      <div class="mini"><h5>Feature space</h5><p>A plot with one axis per feature. Every pattern is one point, and similar patterns land close together.</p></div>
+      <div class="mini"><h5>Decision boundary</h5><p>The border between class regions of feature space: a threshold x* for one feature, a line or curve for two.</p></div>
+      <div class="mini"><h5>Classifier</h5><p>"Assigns object to a class based on features" (slide 36), or to the reject class.</p></div>
+      <div class="mini"><h5>Reject class</h5><p>"A generic class for objects not in any of the designated known classes" (slide 36).</p></div>
+      <div class="mini"><h5>Training set</h5><p>Example patterns whose class is known. The classifier is built from them. New patterns are novel input.</p></div>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. Patterns, features and pattern classes (slides 2–3)</h4>
+    <p>Pattern recognition makes a machine do what you do when you recognise a face or a letter: measure an object, then name its group. The slide 2 contents: background, patterns and pattern classes, classification by prototype matching, template matching, the statistical classifier.</p>
+    <ul>
+      <li>"A <b>pattern</b> is an arrangement of descriptors."</li>
+      <li>"The name <b>feature</b> is used often in the pattern recognition literature to denote a descriptor."</li>
+      <li>"A <b>pattern class</b> is a family of patterns that share some common properties."</li>
+      <li>Fish example: one fish is a pattern, its lightness is a feature, salmon is a pattern class.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. The fish example: task and preprocessing (slides 4–7)</h4>
+    <ul>
+      <li>Task (slide 4): "Sorting incoming Fish on a conveyor according to species using optical sensing". Species: sea bass or salmon.</li>
+      <li>Problem analysis (slide 5): "Set up a camera and take some sample images to extract features": length, lightness, width, number and shape of fins, position of the mouth. "This is the set of all suggested features to explore for use in our classifier!"</li>
+      <li>Preprocessing (slide 6): "Use a segmentation operation to isolate fishes from one another and from the background". Then "information from a single fish is sent to a feature extractor whose purpose is to reduce the data by measuring certain features". Then "the features are passed to a classifier".</li>
+      <li>Slide 7: camera image → preprocessing → feature extraction → classification → "salmon" or "sea bass". A whole image goes in; two or three numbers per fish come out.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. One feature, a threshold, and the cost of mistakes (slides 8–11)</h4>
+    <p>Measure one feature on many fish whose species you know, and draw one histogram per species (slides 8–10). Then pick a threshold and call everything on one side salmon.</p>
+    <p class="formula">length &lt; l* → salmon      lightness &lt; x* → salmon      otherwise → sea bass</p>
+    <ul>
+      <li>Two errors exist: a sea bass labelled salmon, and a salmon labelled sea bass. Where the histograms overlap, some fish are always on the wrong side.</li>
+      <li>Length overlaps heavily (l* ≈ 11 on slide 9): "The length is a poor feature alone! Select the lightness as a possible feature."</li>
+      <li>Lightness overlaps much less (x* ≈ 5.5 on slide 10). Salmon are darker, sea bass lighter.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Try it: pick a feature and slide the threshold</h4></div>
+      <p class="fig-lede">Made-up counts for 20 salmon and 20 sea bass, in the shape of the slide histograms. Solid bars are the misclassified fish. Each feature opens at its best threshold; drag it and watch the two errors trade.</p>
+      <div data-viz="hist-steps"></div>
+      <div data-viz="hist-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Sea bass → salmon</span><span class="v sec" data-role="hist-bs">0</span><span class="sub">sea bass left of the threshold</span></div>
+        <div class="stat"><span class="label">Salmon → sea bass</span><span class="v pri" data-role="hist-sb">0</span><span class="sub">salmon right of the threshold</span></div>
+        <div class="stat"><span class="label">Total wrong</span><span class="v ter" data-role="hist-tot">0</span><span class="sub">out of 40 fish</span></div>
+      </div>
+      <div data-viz="hist"></div>
+      <div class="legend"><span><i class="sw-pri"></i>salmon</span><span><i class="sw-sec"></i>sea bass</span><span><i class="sw-pri-soft"></i>soft = classified correctly</span></div>
+    </figure>
+    <p>Fewest errors is not always the goal. Slide 11: "Move our decision boundary toward smaller values of lightness in order to minimize the cost (reduce the number of sea bass that are classified salmon!)". Choosing the boundary from costs is the "task of decision theory". (textbook context: buyers accept a piece of salmon in a sea bass can but complain about sea bass in a salmon can.)</p>
+    <p class="formula">total cost = c × (sea bass labelled salmon) + 1 × (salmon labelled sea bass)</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Try it: a costlier error pushes the boundary left</h4></div>
+      <p class="fig-lede">Figure 1's lightness data. Each bar is the total cost of one threshold x*. Raise c, the cost of one sea bass sold as salmon, and the cheapest bar moves toward smaller lightness.</p>
+      <div data-viz="cost-slider"></div>
+      <div data-viz="cost"></div>
+      <div class="legend"><span><i class="sw-pri"></i>salmon labelled sea bass, cost 1 each</span><span><i class="sw-sec"></i>sea bass labelled salmon, cost c each</span></div>
+      <p class="step-note" data-role="cost-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. Two features, the best boundary and generalization (slides 12–16)</h4>
+    <ul>
+      <li>Slide 12: "Adopt the lightness and add the width of the fish". Each fish becomes x<sup>T</sup> = [x₁, x₂] = [lightness, width], a point in a 2D feature space, and a straight line separates the clouds better than one threshold (slide 13).</li>
+      <li>Slide 14: "We might add other features that are not correlated with the ones we already have. A precaution should be taken not to reduce the performance by adding such noisy features". It then shows a very wiggly boundary that puts every training fish on its correct side: "the best decision boundary should be the one which provides an optimal performance".</li>
+      <li>Slide 15: "our satisfaction is premature because the central aim of designing a classifier is to correctly classify novel input". This is the <b>issue of generalization</b>.</li>
+      <li>Slide 16 settles on a smooth curve that accepts a few training errors and does better on new fish. (textbook context: a boundary that fits the noise of the training set is overfitted.)</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. The pattern recognition system (slides 17–19)</h4>
+    <p>Slide 18 turns the fish chain into the general system, drawn from the input at the bottom to the decision at the top, with classification highlighted. Every sample exam asks you to draw it.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Stage</th><th class="l">Slide wording</th><th class="l">Fish</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Sensing</td><td class="l">"Use of a transducer (camera or microphone)". "PR system depends of the bandwidth, the resolution sensitivity distortion of the transducer"</td><td class="l">camera over the belt</td></tr>
+          <tr><td class="l">Segmentation and grouping</td><td class="l">"Patterns should be well separated and should not overlap"</td><td class="l">cut each fish out</td></tr>
+          <tr><td class="l">Feature extraction</td><td class="l">"Discriminative features". "Invariant features with respect to translation, rotation and scale."</td><td class="l">lightness, width</td></tr>
+          <tr><td class="l">Classification</td><td class="l">"Use a feature vector provided by a feature extractor to assign the object to a category"</td><td class="l">salmon or sea bass</td></tr>
+          <tr><td class="l">Post-processing</td><td class="l">"Exploit context input dependent information other than from the target pattern itself to improve performance"</td><td class="l">weigh the cost of errors</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Invariant means the number stays the same when the object moves (translation), turns (rotation) or changes size (scale).</li>
+      <li>Side inputs: <b>costs</b> → post-processing; <b>adjustments for context</b> → post-processing and classification; <b>adjustments for missing features</b> → classification.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Try it: draw the flow chart in five strokes</h4></div>
+      <p class="fig-lede">The order to draw it on the exam. Each step adds one stroke; the last one is the finished answer.</p>
+      <div data-viz="flow-steps"></div>
+      <div data-viz="flow"></div>
+      <p class="step-note" data-role="flow-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. The design cycle (slides 20–27)</h4>
+    <p>Section 5 is the finished machine. The design cycle is how you build it (slide 21): collect data → choose features → choose model → train classifier → evaluate classifier. Evaluation feeds back to the earlier boxes, and "prior knowledge (e.g., invariances)" feeds choose features and choose model.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Step</th><th class="l">Slide wording</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Data collection</td><td class="l">"How do we know when we have collected an adequately large and representative set of examples for training and testing the system?"</td></tr>
+          <tr><td class="l">Feature choice</td><td class="l">"Depends on the characteristics of the problem domain. Simple to extract, invariant to irrelevant transformation insensitive to noise."</td></tr>
+          <tr><td class="l">Model choice</td><td class="l">"Unsatisfied with the performance of our fish classifier and want to jump to another class of model"</td></tr>
+          <tr><td class="l">Training</td><td class="l">"Use data to determine the classifier. Many different procedures for training classifiers and choosing models"</td></tr>
+          <tr><td class="l">Evaluation</td><td class="l">"Measure the error rate (or performance and switch from one set of features to another one"</td></tr>
+          <tr><td class="l">Computational complexity</td><td class="l">"What is the trade-off between computational ease and performance?" "How an algorithm scales as a function of the number of features, patterns or categories?"</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Try it: run the fish design through the cycle</h4></div>
+      <p class="fig-lede">Slide 20 lists six topics; computational complexity is the sixth and is not a box. Step through two rounds with Figure 1's data: the first evaluation sends the designer back to choose a better feature.</p>
+      <div data-viz="cycle-steps"></div>
+      <div data-viz="cycle"></div>
+      <pre class="calc" data-role="cycle-log"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Learning, statistical and structural PR (slides 28–31)</h4>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Term</th><th class="l">Slide wording</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Supervised learning</td><td class="l">"A teacher provides a category label or cost for each pattern in the training set"</td></tr>
+          <tr><td class="l">Unsupervised learning</td><td class="l">"The system forms clusters or natural groupings of the input patterns"</td></tr>
+          <tr><td class="l">Statistical PR</td><td class="l">"The data is reduced to vectors of numbers and statistical techniques are used for the tasks to be performed"</td></tr>
+          <tr><td class="l">Structural PR</td><td class="l">"The data is converted to a discrete structure (such as a grammar or a graph) and the techniques are related to computer science subjects (such as parsing and graph matching)"</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Slide 31: "A class is a set of objects having some important properties in common". "A feature extractor is a program that inputs the data (image) and extracts features that can be used in classification." "A classifier is a program that inputs the feature vector and assigns it to one of a set of designated classes or to the reject class."</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. Feature vectors, characters and template matching (slides 32–36, 48)</h4>
+    <ul>
+      <li>Slide 32: X = [x₁, x₂, …, xₙ], "each xⱼ a real number". xⱼ "may be an object measurement" or "may be count of object parts". Example: [#holes, #strokes, moments, …].</li>
+      <li>Slide 33: the E-13B bank font and its waveforms. Slide 34: features per character. A and 0 both have 1 hole, B and 8 both have 2, so one feature cannot separate them; the vector [#holes, #strokes, width, …] can (A has 3 strokes, 0 has none).</li>
+      <li>Slide 36: classes are "m known categories of objects"; reject class "a generic class for objects not in any of the designated known classes"; classifier "assigns object to a class based on features".</li>
+      <li>Template matching (slide 35): a template w of m × n pixels is centred at every location (x, y) of the image f, as a filter mask in Lecture 11. The image is padded with (m − 1)/2 rows and (n − 1)/2 columns; a 5 × 3 template needs 2 rows and 1 column.</li>
+      <li>Slide 48: the template of a hurricane's eye, the correlation coefficient shown as an image, and the best match at its brightest point. (textbook context) γ = Σ(w − w̄)(f − f̄) / √(Σ(w − w̄)² Σ(f − f̄)²), between −1 and 1; the maximum is the best match.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Discriminant functions and the nearest class mean (slides 37–38)</h4>
+    <p>Slide 37: "Functions f(x, K) perform some computation on feature vector x". "Knowledge K from training or programming is used". "Final stage determines class". One function per class; with distances the smallest wins (textbook context).</p>
+    <p>Slide 38: "Compute the Euclidean distance between feature vector X and the mean of each class. Choose closest class, if close enough (reject otherwise)."</p>
+    <p class="formula">x<sub>c</sub> = average of the samples of class c      ‖x − x<sub>c</sub>‖ = √( Σᵢ (x[i] − x<sub>c</sub>[i])² )</p>
+    <pre class="calc">Class A = (1,1) (2,1) (1,2) (4,4)     Class B = (6,6) (8,6) (7,8) (7,4)
+mean A = ((1+2+1+4)/4, (1+1+2+4)/4) = (2, 2)
+mean B = ((6+8+7+7)/4, (6+6+8+4)/4) = (7, 6)
+x = (5, 4):  d_A = √(9 + 4) = 3.606   d_B = √(4 + 4) = 2.828 ← smallest, ≤ 3 → B
+x = (4, 10): d_A = √(4 + 64) = 8.246  d_B = √(9 + 16) = 5.000 ← smallest, &gt; 3 → reject</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>Try it: move x and watch the discriminant functions decide</h4></div>
+      <p class="fig-lede">Dashed circles of radius 3 are "close enough". The dashed line is where both means are equally far (5x₁ + 4x₂ = 38.5). Move x outside both circles to reach the reject class.</p>
+      <div data-viz="ncm-x1"></div>
+      <div data-viz="ncm-x2"></div>
+      <div data-viz="ncm"></div>
+      <pre class="calc" data-role="ncm-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Two modes and scaling by σ (slides 39–40)</h4>
+    <ul>
+      <li>Slide 39: "Nearest mean might yield poor results with complex structure". "Class 2 has two modes; where is its mean." Its modes sit near (0.18, 0.83) and (0.57, 0.31), so one mean lands near (0.38, 0.57), in empty space. "But if modes are detected, two subclass mean vectors can be used."</li>
+      <li>Slide 40: scale each difference "by the spread, or standard deviation, σᵢ of class c along each dimension i".</li>
+    </ul>
+    <p class="formula">‖x − x<sub>c</sub>‖ = √( Σᵢ ((x[i] − x<sub>c</sub>[i]) / σᵢ)² )</p>
+    <pre class="calc">X = (0.2, 0.62)   Class 2: mean (0.2, 0.80), σ = (0.10, 0.10)   Class 3: mean (0.2, 0.35), σ = (0.05, 0.20)
+Euclidean: d₂ = 0.18          d₃ = 0.27          → Class 2
+scaled:    d₂ = 0.18/0.10 = 1.80   d₃ = 0.27/0.20 = 1.35   → Class 3 (the slide's conclusion)</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. Nearest neighbour and k nearest neighbours (slide 41)</h4>
+    <ul>
+      <li>"Keep all the training samples in some efficient look-up structure."</li>
+      <li>"Find the nearest neighbor of the feature vector to be classified and assign the class of the neighbor."</li>
+      <li>"Can be extended to K nearest neighbors." (textbook context) The k closest samples vote; use an odd k with two classes.</li>
+      <li>Nearest mean stores one vector per class. Nearest neighbour stores every sample: more memory, but it follows any class shape.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Try it: each rule carves the plane differently</h4></div>
+      <p class="fig-lede">Section 9's data, query x = (5, 4). The shading is the class every point of the plane would get. 1-NN keeps an island around the lone A sample at (4, 4); larger k and the class mean outvote it.</p>
+      <div data-viz="knn-steps"></div>
+      <div data-viz="knn"></div>
+      <p class="step-note" data-role="knn-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. Bayesian decision making (slide 42)</h4>
+    <p>"Classify into class ωᵢ that is most likely based on observations X". Needed: (1) the class conditional distribution p(x | ωᵢ), (2) the a priori probability P(ωᵢ), (3) the unconditional distribution p(x), (4) "use Bayes rule if all of the classes ωᵢ are disjoint".</p>
+    <p class="formula">P(ωᵢ | x) = p(x | ωᵢ) P(ωᵢ) / p(x)      p(x) = Σⱼ p(x | ωⱼ) P(ωⱼ)</p>
+    <pre class="calc">made-up: P(salmon) = 0.7, P(sea bass) = 0.3; at the measured x: p(x | salmon) = 0.2, p(x | sea bass) = 0.6
+p(x) = 0.2 × 0.7 + 0.6 × 0.3 = 0.14 + 0.18 = 0.32
+P(salmon | x) = 0.14 / 0.32 = 0.4375    P(sea bass | x) = 0.18 / 0.32 = 0.5625 → sea bass
+with P(salmon) = 0.9: p(x) = 0.24, posteriors 0.75 and 0.25 → salmon</pre>
+    <p>(textbook context) Pick the class with the largest posterior. p(x) is the same for every class, so comparing p(x | ωᵢ) P(ωᵢ) is enough.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. The lecture's examples (slides 43–47)</h4>
+    <ul>
+      <li>Iris (slides 43, 47): x₁ = petal length, x₂ = petal width. The minimum distance boundary for versicolor vs setosa is 2.8x₁ + 1.0x₂ − 8.9 = 0, the perpendicular bisector between the two means. x = (3, 1): 8.4 + 1.0 − 8.9 = +0.5 &gt; 0 → versicolor.</li>
+      <li>Slide 44, Table 12.1, Bayes classification of multispectral image data: % correct = diagonal / row total, e.g. 885 / 933 = 94.9 %. Overall: training 1831 / 1900 = 96.4 %, independent 1824 / 1897 = 96.2 %. The independent (unseen) set is the honest measure.</li>
+      <li>Slides 45–46: a noisy object and its signature r(θ); a satellite image of Washington, D.C.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Mistakes that cost marks</h4>
+    <ul>
+      <li>Reordering the stages. Bottom to top: input, sensing, segmentation, feature extraction, classification, post-processing, decision.</li>
+      <li>Sending costs into classification. Costs → post-processing only; context → both; missing features → classification only.</li>
+      <li>Mixing up the system (one input to a decision) with the design cycle (building the classifier, with feedback).</li>
+      <li>Swapping supervised (teacher labels) and unsupervised (system forms clusters).</li>
+      <li>Calling the reject class the largest class or the pixels removed in segmentation.</li>
+      <li>Stopping at "closest" when a reject threshold is given. Check d ≤ T, or d² ≤ T² if you skipped the root.</li>
+      <li>Confusing nearest class mean (one average per class) with nearest neighbour (all samples kept).</li>
+      <li>Moving x* the wrong way: to cut sea bass labelled salmon, move it toward smaller lightness.</li>
+    </ul>
+  </div>
+  <div class="sol-part">
+    <h4>Cheat sheet</h4>
+    <div data-viz="cheat"></div>
+  </div>
+  <div class="sol-part">
+    <h4>How to write it on the exam</h4>
+    <pre class="calc">Draw the PR system + one line per stage
+  boxes bottom to top: sensing, segmentation, feature extraction, classification,
+  post-processing; input below, decision on top; solid arrows up, dotted arrows down
+  costs → post-processing; context → post-processing and classification;
+  missing features → classification; then one slide line per stage
+
+Draw the design cycle
+  start → collect data → choose features → choose model → train → evaluate → end
+  evaluation feeds back; prior knowledge → features and model; + computational complexity
+
+Nearest class mean with reject threshold T
+  rule (slide 38) → means → d = √(Δ₁² + Δ₂²) per class → smallest → d ≤ T ? class : reject
+
+1-NN and k-NN
+  rule (slide 41) → table: sample, class, Δ, d², d → sort → rank 1 → vote of ranks 1..k
+  say whether they agree and why (one close sample vs majority)
+
+Fish reasoning
+  length overlaps → poor alone; lightness better; add width → line in 2D;
+  boundary = border between class regions; cost → move x* toward smaller lightness;
+  generalization = correct on novel input</pre>
+  </div>
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Input → sensing → segmentation → feature extraction → classification → post-processing → decision, with the three side inputs.</li>
+      <li>Feature extraction: discriminative, invariant to translation, rotation and scale. Post-processing: exploit context.</li>
+      <li>Supervised = teacher labels; unsupervised = clusters. Statistical = vectors; structural = grammar or graph.</li>
+      <li>Nearest mean: means (2, 2), (7, 6); x = (5, 4) → 3.606 vs 2.828 → B; x = (4, 10) → 5.0 &gt; 3 → reject.</li>
+      <li>NN: x = (5, 4) → 1-NN A (1.000); 3-NN A, B, B → B.</li>
+      <li>Bayes: 0.14 / 0.32 = 0.4375 vs 0.5625 → sea bass.</li>
+    </ul>
+    <p class="source">Slides: L12 p.2–48 · Notes: 12_Week7_Pattern_Recognition.md</p>
+  </div>
+  <div class="sol-part">
+    <h4>Sample questions on this lecture</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

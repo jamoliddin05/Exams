@@ -1,0 +1,554 @@
+<article class="q" id="topic5" data-part="tp" data-num="5" data-topic="Arithmetic coding and MPEG">
+  <div class="q-head">
+    <p class="eyebrow">Lecture 5 · Week 3 · 8 sample questions</p>
+    <h3 class="q-title">Arithmetic Coding and MPEG Audio from Zero</h3>
+    <p class="fig-lede">Lecture 4 coded symbols one at a time without losing anything. This lecture first finishes lossless coding with arithmetic coding, which turns a whole message into one number. Then it lets data go: lossy compression, how the ear hides quiet sounds behind loud ones (masking), and how MPEG audio (MP2, MP3, AAC) spends bits only where you can hear them.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Words you need</h4>
+    <div class="why-grid">
+      <div class="mini"><h5>Interval [low, high)</h5><p>All numbers x with low ≤ x &lt; high. It contains low but not high. Its width is range = high − low. Arithmetic coding writes a whole message as one such interval inside [0, 1).</p></div>
+      <div class="mini"><h5>Terminator $</h5><p>A special end-of-message symbol. The decoder stops when it reads it. Slide 5 labels it G, and slides 6, 7 and 10 write it as $.</p></div>
+      <div class="mini"><h5>Binary fraction</h5><p>0.b₁b₂b₃… = b₁/2 + b₂/4 + b₃/8 + … So 0.01₂ = 0.25 and 0.101₂ = 0.625. The arithmetic codeword is a binary fraction.</p></div>
+      <div class="mini"><h5>Lossless and lossy</h5><p>Lossless: the decoder gets the original back exactly (Huffman, LZW, arithmetic coding, PNG, FLAC). Lossy: "a close approximation" with a much higher compression ratio (JPEG, MP3, AAC).</p></div>
+      <div class="mini"><h5>Quantization</h5><p>Rounding every value to one of a small set of levels. Many inputs give the same output, so it cannot be undone. It is the "main source of the loss".</p></div>
+      <div class="mini"><h5>Rate R and distortion D</h5><p>Rate: bits per symbol (or kbps for audio). Distortion: how far the decoded data is from the original, for example the fraction of wrong symbols or the mean squared error.</p></div>
+      <div class="mini"><h5>Decibel, dB</h5><p>A log scale for sound level. +20 dB is 10 × the amplitude and +6 dB is about 2 ×. 0 dB is about the quietest tone a person can hear, near 2 kHz.</p></div>
+      <div class="mini"><h5>Masking</h5><p>A loud sound makes a weaker sound near it in frequency or in time inaudible. MPEG audio removes "sounds which are masked anyway".</p></div>
+      <div class="mini"><h5>Sub-band</h5><p>One slice of the frequency range. The MPEG audio filter bank cuts the sound into 32 equal sub-bands, and each one gets its own number of bits.</p></div>
+      <div class="mini"><h5>SNR, SMR, MNR</h5><p>Signal-to-noise, signal-to-mask and mask-to-noise ratio, all in dB. MNR = SNR − SMR. A positive MNR means the coding noise is hidden under the mask.</p></div>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. Arithmetic coding: one interval for the whole message (slides 2–3)</h4>
+    <p>Huffman coding (Lecture 4) "assigns each symbol a codeword which has an integral bit length". A symbol with probability 0.3 carries log₂(1/0.3) = 1.74 bits of information, but its codeword must be 1 bit or 2 bits. The rounding to whole bits happens on every symbol, and the waste adds up.</p>
+    <ul>
+      <li>Arithmetic coding "is a more modern coding method that usually out-performs Huffman coding". It "can treat the whole message as one unit".</li>
+      <li>"A message is represented by a half-open interval [a, b) where a and b are real numbers between 0 and 1. Initially, the interval is [0, 1)."</li>
+      <li>"When the message becomes longer, the length of the interval shortens and the number of bits needed to represent the interval increases."</li>
+      <li>Think of decimals. In 0.37 the digit 3 picks the 4th tenth of [0, 1), and the 7 picks a tenth of that tenth. Arithmetic coding cuts the interval into unequal slices instead, one per symbol, as wide as the symbol's probability. A likely symbol gets a wide slice, and a wide slice costs few bits.</li>
+    </ul>
+    <p class="formula">width of the final interval = p(s₁) × p(s₂) × … × p(sₙ)      bits needed ≈ log₂(1 / width)</p>
+    <pre class="calc">message CAEE$ with the slide-5 table (next section)
+width       = 0.2 × 0.2 × 0.3 × 0.3 × 0.1 = 0.00036
+information = log₂(1 / 0.00036)            = 11.44 bits
+
+Huffman for the same table: average 2.6 bits per symbol (entropy 2.55)
+  E → 2 bits, C and A → 2 and 3 bits, $ → 3 bits:  CAEE$ = 12 bits
+arithmetic codeword for CAEE$ (section 3): 0.01010101₂ = 8 bits</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. The encoder: shrink the interval symbol by symbol (slides 4–7)</h4>
+    <p>Every symbol owns a slice of [0, 1), laid out in table order. The slice's two ends are Range_low and Range_high, and its width is the symbol's probability. This is the table of slide 5 (Fig. 7.8a):</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Symbol</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>$ (slide: G)</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Probability</td><td>0.2</td><td>0.1</td><td>0.2</td><td>0.05</td><td>0.3</td><td>0.05</td><td>0.1</td></tr>
+          <tr><td class="l">Range</td><td>[0, 0.2)</td><td>[0.2, 0.3)</td><td>[0.3, 0.5)</td><td>[0.5, 0.55)</td><td>[0.55, 0.85)</td><td>[0.85, 0.9)</td><td>[0.9, 1.0)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="calc">ALGORITHM 7.5  Arithmetic Coding Encoder
+low = 0.0;  high = 1.0;  range = 1.0;
+while (symbol != terminator) {
+    get(symbol);
+    low  = low + range * Range_low(symbol);
+    high = low + range * Range_high(symbol);
+    range = high - low;
+}
+output a code so that low &lt;= code &lt; high;</pre>
+    <p class="formula">low′ = low + range × Range_low(s)      high′ = low + range × Range_high(s)      range′ = high′ − low′</p>
+    <ul>
+      <li>Both new ends are computed from the old low. The slide's code overwrites low first and then uses it for high. Read literally that gives [0.3, 0.8) after C, which is wrong. The worked table on slide 7 uses the old low, so do that.</li>
+      <li>The new interval is the symbol's slice of the old interval. So each step multiplies the range by the symbol's probability.</li>
+    </ul>
+    <pre class="calc">encode CAEE$ (slide 7, Fig. 7.8c)
+start  low = 0                                   high = 1                                 range = 1
+C      low = 0 + 1 × 0.3          = 0.3          high = 0 + 1 × 0.5          = 0.5        range = 0.2
+A      low = 0.3 + 0.2 × 0        = 0.3          high = 0.3 + 0.2 × 0.2      = 0.34       range = 0.04
+E      low = 0.3 + 0.04 × 0.55    = 0.322        high = 0.3 + 0.04 × 0.85    = 0.334      range = 0.012
+E      low = 0.322 + 0.012 × 0.55 = 0.3286       high = 0.322 + 0.012 × 0.85 = 0.3322     range = 0.0036
+$      low = 0.3286 + 0.0036 × 0.9 = 0.33184     high = 0.3286 + 0.0036 × 1  = 0.3322     range = 0.00036
+
+final interval [0.33184, 0.3322)      check: 0.2 × 0.2 × 0.3 × 0.3 × 0.1 = 0.00036</pre>
+    <ul>
+      <li>Slide 7's narrow cells wrap the last digit onto a new line: "0.3318 / 4" is 0.33184 and "0.0003 / 6" is 0.00036.</li>
+      <li>Slide 6 (Fig. 7.8b) draws the same steps as columns. Each column is the previous symbol's slice, stretched to full height and cut into the seven slices again.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Try it: type a message and watch its interval shrink</h4></div>
+      <p class="fig-lede">Press symbols to build a message (up to 6, ending with $). Each row is the current interval cut into the seven slices of the table. The chosen slice, in blue, is stretched to full width in the next row. The numbers at the ends of each bar are its low and high, computed exactly.</p>
+      <div data-viz="enc-keys"></div>
+      <p class="step-note" data-role="enc-note" aria-live="polite"></p>
+      <div class="stats">
+        <div class="stat"><span class="label">Message</span><span class="v pri" data-role="enc-msg">CAEE$</span><span class="sub">symbols typed so far</span></div>
+        <div class="stat"><span class="label">Interval width</span><span class="v" data-role="enc-w">0.00036</span><span class="sub">the product of the probabilities</span></div>
+        <div class="stat"><span class="label">Information</span><span class="v" data-role="enc-b">11.44</span><span class="sub">bits, log₂(1 / width)</span></div>
+      </div>
+      <div data-viz="enc"></div>
+      <pre class="calc" data-role="enc-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. The codeword: the shortest binary fraction inside (slide 8)</h4>
+    <p>Any number in [0.33184, 0.3322) identifies CAEE$. "The final step in Arithmetic encoding calls for the generation of a number that falls within the range [low, high)." The encoder sends the one with the fewest bits.</p>
+    <pre class="calc">PROCEDURE 7.2  Generating Codeword for Encoder
+code = 0;  k = 1;
+while (value(code) &lt; low) {
+    assign 1 to the kth binary fraction bit
+    if (value(code) &gt; high)  replace the kth bit by 0
+    k = k + 1;
+}</pre>
+    <ul>
+      <li>In words: try a 1 in the next bit. If the value goes above high, put a 0 there instead. Stop as soon as the value reaches low.</li>
+      <li>Bit k is worth 2<sup>−k</sup>: 0.5, 0.25, 0.125, 0.0625, … So each bit halves the window where the code can still land. It is a binary search for the interval.</li>
+      <li>"The above algorithm will ensure that the shortest binary codeword is found."</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Each bit halves the window until the code lands in [low, high)</h4></div>
+      <p class="fig-lede">Each row is the window of codes still possible, split at the value being tried. Green is the target interval, blue is the half that is kept. Choose an example, then step through the bits.</p>
+      <div data-viz="code-ex"></div>
+      <div data-viz="code-steps"></div>
+      <p class="step-note" data-role="code-note" aria-live="polite"></p>
+      <div data-viz="code"></div>
+    </figure>
+    <pre class="calc">k   try          value        vs high 0.3322   bit   code          &lt; low 0.33184?
+1   0.1          0.5          above            0     0.0           yes, go on
+2   0.01         0.25         ok               1     0.01          yes
+3   0.011        0.375        above            0     0.010         yes
+4   0.0101       0.3125       ok               1     0.0101        yes
+5   0.01011      0.34375      above            0     0.01010       yes
+6   0.010101     0.328125     ok               1     0.010101      yes
+7   0.0101011    0.3359375    above            0     0.0101010     yes
+8   0.01010101   0.33203125   ok               1     0.01010101    no, stop
+
+codeword 01010101 (8 bits) = 0.33203125,  and 0.33184 ≤ 0.33203125 &lt; 0.3322</pre>
+    <ul>
+      <li>For EC$ the interval is [0.694, 0.7) and the codeword is 0.1011001₂ = 0.6953125, 7 bits.</li>
+      <li>(textbook context) The codeword never needs more than ⌈log₂(1/range)⌉ bits: 12 for CAEE$, 8 for EC$. Both actual codewords are shorter.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. The decoder, and keeping the numbers small (slides 9–10)</h4>
+    <p>The decoder has the same table. It turns the codeword back into a number and asks: in which symbol's slice does this number lie? Then it zooms into that slice and asks again.</p>
+    <pre class="calc">ALGORITHM 7.6  Arithmetic Coding Decoder
+value = value(code);
+do {
+    find a symbol s so that  Range_low(s) &lt;= value &lt; Range_high(s);
+    output s;
+    value = (value - Range_low(s)) / (Range_high(s) - Range_low(s));
+} until s is the terminator</pre>
+    <p class="formula">value′ = (value − Range_low(s)) / p(s)       stop after the terminator $</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Decoding 0.33203125: find the slice, stretch it, repeat</h4></div>
+      <p class="fig-lede">Every row is the whole table, [0, 1). The plum marker is the current value, and the blue slice is the symbol it falls in. Subtracting the slice's low and dividing by its width stretches that slice back to [0, 1), which gives the next row's value.</p>
+      <div data-viz="dec-steps"></div>
+      <p class="step-note" data-role="dec-note" aria-live="polite"></p>
+      <div data-viz="dec"></div>
+    </figure>
+    <pre class="calc">Table 7.5 (slide 10)
+value        symbol   low    high   range   next value
+0.33203125   C        0.3    0.5    0.2     (0.33203125 − 0.3) / 0.2  = 0.16015625
+0.16015625   A        0      0.2    0.2     (0.16015625 − 0) / 0.2    = 0.80078125
+0.80078125   E        0.55   0.85   0.3     (0.80078125 − 0.55) / 0.3 = 0.8359375
+0.8359375    E        0.55   0.85   0.3     (0.8359375 − 0.55) / 0.3  = 0.953125
+0.953125     $        0.9    1.0    0.1     terminator: stop        output CAEE$</pre>
+    <ul>
+      <li>Why the terminator matters: one more step would give (0.953125 − 0.9) / 0.1 = 0.53125, which lies in D's slice. Without $ the decoder could not know where the message ends.</li>
+      <li>Slide 10's first cell wraps as "0.3320312 / 5". It is 0.33203125, the codeword of section 3.</li>
+      <li>Scaling and incremental coding is listed on slide 2, and no slide explains it (textbook context). The interval keeps shrinking, so the numbers need more and more digits. The fix is to send bits as soon as they are certain and then double the interval.</li>
+      <li>(textbook context) If [low, high) lies in [0, 0.5), send 0 and map x → 2x. If it lies in [0.5, 1), send 1 and map x → 2x − 1. After C, [0.3, 0.5) is in the lower half: send 0, giving [0.6, 1.0). That is in the upper half: send 1, giving [0.2, 1.0). The codeword 01010101 indeed starts with 01.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Lossy compression and the rate–distortion trade-off (slides 11–12)</h4>
+    <ul>
+      <li>Lossy compression: "The compressed data is not the same as the original data but a close approximation of it." It "yields a much higher compression ratio than that of lossless compression."</li>
+      <li>Rate-distortion theory "provides a framework for the study of tradeoffs between Rate and Distortion". The more distortion you accept, the fewer bits you need.</li>
+      <li>Slide 12 (Fig. 8.1) draws the typical curve R(D). At D = 0 (no loss) R(D) = H, the entropy, which is the lossless limit of Lecture 4. R(D) falls as D grows and reaches 0 at D = D<sub>max</sub>.</li>
+      <li>So a lossless coder is stuck at D = 0 and can never go below H bits per symbol. A lossy coder accepts some D &gt; 0 and moves down the curve.</li>
+    </ul>
+    <pre class="calc">(textbook context) a source of 0s and 1s with 20% 1s; D = fraction of symbols decoded wrong
+R(D) = H(0.2) − H(D),  H(p) = −p log₂ p − (1 − p) log₂(1 − p)
+D = 0     R = 0.722 bits per symbol   the entropy, the lossless limit
+D = 0.05  R = 0.436                   5% wrong buys a 2.3 : 1 ratio against 1 bit
+D = 0.2   R = 0                       Dmax: send nothing, always guess 0</pre>
+    <ul>
+      <li>(textbook context) For audio and images the usual distortion is the mean squared error, MSE = (1/N) Σ (xₙ − yₙ)², or PSNR = 10 log₁₀(x<sub>peak</sub>² / MSE) dB.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. Quantization: where the loss happens (slide 13)</h4>
+    <ul>
+      <li>Quantization: "Reduce the number of output values to a much smaller set." It is the "main source of the loss in lossy compression".</li>
+      <li>Why: it is many-to-one. With a step of 10, the inputs 58, 61 and 64 all leave as 60. A decoder that receives 60 cannot know which one it was.</li>
+      <li>The other stages of a compressor (Lecture 4, slide 6: transformation, loss, coding) are one-to-one. A prediction can be undone, and Huffman or arithmetic coding gives back exactly what went in.</li>
+      <li>"Uniform: The type of quantization in which the quantization levels are uniformly spaced."</li>
+      <li>"Nonuniform: in which the quantization levels are unequal and mostly the relation between them is logarithmic." Small values get fine steps and large values coarse steps, like the μ-law compander of Lecture 3.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. How the ear hears: threshold of hearing and frequency masking (slides 14–16)</h4>
+    <p>MPEG audio throws away what the ear cannot hear. Two facts about hearing decide what that is.</p>
+    <ul>
+      <li>Threshold of hearing (slides 15–16, Fig. 14.2): a tone is heard only if its level is above the curve. The curve depends on frequency. Turning a tone up until it reaches the curve makes it just audible.</li>
+    </ul>
+    <p class="formula">Threshold(f) = 3.64 (f/1000)<sup>−0.8</sup> − 6.5 e<sup>−0.6 (f/1000 − 3.3)²</sup> + 10<sup>−3</sup> (f/1000)<sup>4</sup>   dB   (Eq. 14.1, f in Hz)</p>
+    <pre class="calc">f          100 Hz    1 kHz    2 kHz    3.3 kHz   10 kHz
+threshold  22.95     3.37     −0.25    −4.98     10.58    dB
+                              ≈ 0: the curve is pinned to 0 dB at 2 kHz
+                                       lowest point: the ear is most sensitive here</pre>
+    <ul>
+      <li>Frequency masking (slide 14): a loud tone raises the threshold around its own frequency, so weaker tones nearby disappear. Lossy audio methods such as MPEG/Audio "remove some sounds which are masked anyway". The four rules:</li>
+      <li>1. "A lower tone can effectively mask a higher tone."</li>
+      <li>2. "The reverse is not true": a higher tone does not mask a lower tone well.</li>
+      <li>3. "The greater the power of the masking tone, the wider is its influence", a broader range of masked frequencies.</li>
+      <li>4. So "if two tones are widely separated in frequency then little masking occurs".</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Try it: a 1 kHz masker hides more above itself than below</h4></div>
+      <p class="fig-lede">The dashed curve is the threshold in quiet. The 1 kHz masker raises it into the blue curve. A 30 dB test tone (ochre) under the blue curve is masked. Move the test tone below and above 1 kHz, and change the masker's level.</p>
+      <div data-viz="fm-l"></div>
+      <div data-viz="fm-f"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Threshold at the test tone</span><span class="v pri" data-role="fm-t">36.1 dB</span><span class="sub">quiet curve plus masker</span></div>
+        <div class="stat"><span class="label">30 dB test tone</span><span class="v ter" data-role="fm-v">masked</span><span class="sub" data-role="fm-s"></span></div>
+        <div class="stat"><span class="label">Masks 30 dB tones from</span><span class="v" data-role="fm-r">888–1282 Hz</span><span class="sub" data-role="fm-rs"></span></div>
+      </div>
+      <div data-viz="fm"></div>
+      <p class="fig-lede">(textbook context) The masking curve is a simplified spreading model on the ear's critical-band (Bark) scale. It peaks 10 dB under the masker, falls 27 dB per Bark below it, and falls 24 + 230/f − 0.2L dB per Bark above it, which gets shallower as the masker level L grows.</p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. Why compress audio: data rate, formats and codecs (slides 17–20)</h4>
+    <p class="formula">data rate = sampling rate × quantization bits × channels   (+ control information)</p>
+    <pre class="calc">CD audio: 44,100 Hz × 16 bits × 2 channels = 1,411,200 bit/s   ≈ 1.4 Mbit/s
+per minute:  1,411,200 × 60   =    84,672,000 bit   ≈ 84.7 Mbit
+per hour:    1,411,200 × 3600 = 5,080,320,000 bit   ≈ 5.08 Gbit
+in bytes:    1,411,200 / 8    = 176,400 B/s,  about 635 MB per hour
+as MP3 at 128 kbps: 1411.2 / 128 = 11.025, about 11 : 1 compression</pre>
+    <ul>
+      <li>Slide 17's "1.4M per second; 84M per minute; 5G per hour" are bits, not bytes.</li>
+      <li>Slide 17 also says compression is needed "to reduce the span between the softest and loudest parts of an audio signal". That sentence describes dynamic-range compression, which changes loudness. The rest of the lecture is about data compression, which reduces bits (textbook context).</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Term</th><th class="l">Meaning (slide wording)</th><th class="l">Examples</th></tr></thead>
+        <tbody>
+          <tr><td class="l">audio coding format</td><td class="l">"a content representation format for storage or transmission of digital audio"</td><td class="l">MP3, AAC, Vorbis, FLAC, Opus</td></tr>
+          <tr><td class="l">audio codec</td><td class="l">"a specific software or hardware implementation capable of audio compression and decompression to/from a specific audio coding format"</td><td class="l">an MP3 encoder program</td></tr>
+          <tr><td class="l">lossless audio</td><td class="l">exact copy, "at the cost of larger files" (slide 19)</td><td class="l">FLAC, Apple Lossless</td></tr>
+          <tr><td class="l">lossy audio</td><td class="l">"based on modified discrete cosine transform (MDCT) and perceptual coding" (slide 20)</td><td class="l">MP3, AAC</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Disadvantages of lossy audio (slide 20): "Loss of some original audio data, permanently". "Lower audio quality, noticeable in certain scenarios". "Not suitable for high-end audio applications (music production, audiophiles)".</li>
+      <li>(textbook context) MDCT is a transform like the Fourier transform of Lecture 2. It turns a block of samples into frequency coefficients, so the coder can treat each frequency separately.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. MPEG audio: history and the three layers of MPEG-1 (slides 21–28)</h4>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Year</th><th class="l">Event</th></tr></thead>
+        <tbody>
+          <tr><td class="l">1979</td><td class="l">first psychoacoustic masking code, AT&amp;T Bell Labs, Murray Hill</td></tr>
+          <tr><td class="l">late 1980s</td><td class="l">ISO's MPEG group starts standardizing (TV broadcasting, audio on CD-ROM, later DVD)</td></tr>
+          <tr><td class="l">1992</td><td class="l">MPEG-1 (audio and video); MPEG-1 Audio standard</td></tr>
+          <tr><td class="l">1993</td><td class="l">MPEG-1 Audio Layer III public release</td></tr>
+          <tr><td class="l">1994 / 1995</td><td class="l">MPEG-2 Audio standard / MPEG-2 Audio Layer III public release</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>MPEG is the Motion Pictures Experts Group, "a working group that was formed from the existing JPEG (Joint Photographic Experts Group) standard". MP3 is based on OCF (optimum coding in frequency domain) and PXFM (perceptual transform coding).</li>
+      <li>MPEG-1 Audio encoding characteristics (slide 23): precision 16 bits; sampling frequency 32 kHz, 44.1 kHz, 48 kHz; three compression layers.</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Layer</th><th class="l">Bit rate</th><th class="l">Target</th><th class="l">Name and use</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Layer 1</td><td class="l">32–448 kbps</td><td class="l">192 kbps</td><td class="l">lowest complexity</td></tr>
+          <tr><td class="l">Layer 2</td><td class="l">32–384 kbps</td><td class="l">128 kbps</td><td class="l">MP2: broadcasting, DAB radio and DVB television</td></tr>
+          <tr><td class="l">Layer 3</td><td class="l">32–320 kbps</td><td class="l">64 kbps</td><td class="l">MP3: the Internet; most complex</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Each higher layer is more complex and needs fewer bits. Layer 2 is "more able than Layer 1 to remove the redundancy in the signal". Layer 3 "further reduces redundancy and relevance from the data".</li>
+      <li>"The layers are backwards-compatible": a Layer 3 decoder can also decode Layers 1 and 2.</li>
+      <li>MP2 (slide 24) "came out of MUSICAM codecs", the basis of MPEG-1 and MPEG-2 audio. Bit rates 32, 48, 56, 64, 80, 96, … 384 kbps; mono, stereo, dual channel. "MP2: sub-band audio encoder in time domain."</li>
+      <li>MP3 (slide 25) is "popular for Internet applications", uses psychoacoustics ("scientific study of sound perception"), with the "goal to compress to 128 kbps". Slide 23 gives 64 kbps as the target. (textbook context) The targets are per channel, and 128 kbps stereo is 64 kbps per channel.</li>
+      <li>"MPEG-1 Layer 3 is defined as an open standard" (slide 28): the specification is public, no single company owns it, and example source code is available. Fast computers and fast Internet access helped MP3 spread.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. The MPEG audio encoder: four blocks (slides 29–31)</h4>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>The filter bank makes the sub-bands, the psychoacoustic model decides their bits</h4></div>
+      <p class="fig-lede">The encoder of slide 29. Step through the blocks to see what goes in and what comes out of each one.</p>
+      <div data-viz="pipe-steps"></div>
+      <p class="step-note" data-role="pipe-note" aria-live="polite"></p>
+      <div data-viz="pipe"></div>
+    </figure>
+    <ul>
+      <li>Filter bank (slide 31): it "divides input into multiple sub-bands (32 equal frequency sub-bands)". This is the move from the time domain to the frequency domain.</li>
+      <li>(textbook context) The sampled sound reaches up to fs/2, so each sub-band is (fs/2)/32 wide: 500 Hz at 32 kHz, 689 Hz at 44.1 kHz, 750 Hz at 48 kHz.</li>
+      <li>Slide 30's figure is titled "Aliasing: pure sinusoid input can produce nonzero output for two subbands". Neighbouring filters overlap, so a tone near a band edge shows up in both bands.</li>
+      <li>Quantization and bit/noise allocation: "If noise level is high =&gt; rough quantization; if noise level is low =&gt; finer quantization is applied." Section 12 shows how the bits are shared.</li>
+      <li>Multiplexer and entropy coder: Huffman coding (Lecture 4) of the quantized values, packed into the compressed bitstream.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. The psychoacoustic model: what the ear cannot hear (slides 32–36)</h4>
+    <ul>
+      <li>The psychoacoustic model "compresses by removing acoustically irrelevant parts of audio signals". It "takes advantage of human auditory systems inability to hear quantization noise under auditory masking".</li>
+      <li>Auditory masking "occurs whenever the presence of a strong audio signal makes a temporal or spectral neighborhood of weaker audio signals imperceptible". Spectral means near in frequency, temporal means near in time.</li>
+      <li>Loudness and pitch (slide 34): we are "more sensitive to loudness at mid frequencies", [500 Hz, 5000 Hz]. Human hearing covers [20 Hz, 20000 Hz]. The basilar membrane in the inner ear "reacts more to intermediate frequencies".</li>
+      <li>Slide 33's hearing curve (15.6 Hz to 16 kHz) shows the same shape as Eq. 14.1: about 80 dB needed at 15.6 Hz, about 0 dB near 1 kHz, a dip below 0 near 4 kHz, rising again above 8 kHz.</li>
+      <li>Slide 35, frequency masking curves for maskers at 0.25, 1, 4 and 8 kHz (60 dB): the higher the masker, the wider its curve, and every curve reaches further up than down.</li>
+      <li>Slide 35, temporal masking: a loud sound also hides weak sounds just before it starts and for a while after it stops. Pre-masking lasts about 20 ms, simultaneous masking lasts while the masker plays (about 200 ms in the figure), post-masking about 150 ms.</li>
+    </ul>
+    <ul>
+      <li>Slide 36: "MPEG/audio divides audio signal into frequency sub-bands that approximate critical bands. Then we quantize each sub-band according to the audibility of quantization noise within the band."</li>
+      <li>(textbook context) A critical band is the frequency range the ear treats as one channel: about 100 Hz wide below 500 Hz and about 20% of the frequency above that. Noise inside a critical band is masked by a strong tone in the same band.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. Bit allocation: give bits where the noise would be heard (slide 37)</h4>
+    <p>Bit allocation "determines number of code bits allocated to each sub-band based on information from the psycho-acoustic model". The ratios are in dB:</p>
+    <ul>
+      <li>SNR, signal-to-noise: how far the quantization noise is below the signal. It grows with the bits: "for each added bit, we get 6dB better SNR ratio" (slide 41).</li>
+      <li>SMR, signal-to-mask: how far the mask (the masked threshold) is below the signal. It comes from the psychoacoustic model (textbook context).</li>
+      <li>MNR, mask-to-noise: MNR = SNR − SMR. With S, M and N the levels of signal, mask and noise, SNR = S − N and SMR = S − M, so MNR = M − N: how far the noise sits under the mask. MNR &gt; 0 means the noise is inaudible.</li>
+    </ul>
+    <pre class="calc">Algorithm (slide 37)
+1. compute the mask-to-noise ratio MNR = SNR − SMR
+   ("standard provides tables that give estimates for SNR resulting from
+   quantizing to a given number of quantizer levels")
+2. get MNR for each sub-band
+3. search for the sub-band with the lowest MNR
+4. allocate code bits to this sub-band; if it gets more code bits than
+   appropriate, look up a new estimate of SNR and repeat step 1</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Each bit pushes one sub-band's noise 6 dB down, worst band first</h4></div>
+      <p class="fig-lede">Four sub-bands and 8 bits to share. The blue bar is the signal level S, the plum line the mask M, the dashed ochre line the noise N. The vertical stroke is the MNR, green when the noise is under the mask and red when it is above. The outlined band gets the next bit.</p>
+      <div data-viz="alloc-steps"></div>
+      <p class="step-note" data-role="alloc-note" aria-live="polite"></p>
+      <div data-viz="alloc"></div>
+      <div class="legend">
+        <span><i class="sw-pri-soft"></i>S, signal level</span>
+        <span><i class="sw-sec"></i>M, mask</span>
+        <span><i class="sw-ter"></i>N, noise = S − 6 × bits</span>
+        <span><i class="sw-ok"></i>MNR = M − N</span>
+      </div>
+    </figure>
+    <pre class="calc">S (dB)        70    64    52    45        M (dB)  50  51  47  48
+SMR = S − M   20    13     5    −3
+
+round        bits (1, 2, 3, 4)   MNR = 6 × bits − SMR     lowest MNR → bit to
+start        0  0  0  0          −20  −13  −5   3          sub-band 1
+after bit 1  1  0  0  0          −14  −13  −5   3          sub-band 1
+after bit 2  2  0  0  0           −8  −13  −5   3          sub-band 2
+after bit 3  2  1  0  0           −8   −7  −5   3          sub-band 1
+after bit 4  3  1  0  0           −2   −7  −5   3          sub-band 2
+after bit 5  3  2  0  0           −2   −1  −5   3          sub-band 3
+after bit 6  3  2  1  0           −2   −1   1   3          sub-band 1
+after bit 7  4  2  1  0            4   −1   1   3          sub-band 2
+after bit 8  4  3  1  0            4    5   1   3          (all masked)</pre>
+    <ul>
+      <li>Sub-band 4's signal is already under its mask (SMR &lt; 0), so it is inaudible and gets no bits at all.</li>
+      <li>The rule always helps the worst band first. The loudest band does not win because it is loud. It wins because its noise is the furthest above its mask.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. Audio quality, the MP3 file, and why fewer bits is compression (slides 38–41)</h4>
+    <ul>
+      <li>Bitrate (slide 38): "with too low bit rate, we get compression artifacts". Ringing, and pre-echo: "sound is heard before it occurs", "most noticeable in impulsive sounds from percussion instruments such as cymbals". Pre-echo "occurs in transform-based audio compression algorithms".</li>
+      <li>Quality also depends on the encoder and its parameters: constant bit rate (CBR) or variable bit rate (VBR) encoding. (textbook context) CBR spends the same kbps on every frame. VBR spends more on complex passages and less on simple ones.</li>
+      <li>MP3 (slide 39): "A psychoacoustic model refers to an analysis of an audio signal that determines the amount of noise masking available based on frequency and loudness." It eliminates sounds humans cannot hear and focuses the bits on the most important frequencies.</li>
+      <li>MP3 file (slide 40): a sequence of frames, each an MP3 header plus MP3 data, usually after an ID3 tag with metadata. The 32-bit header of the example is FFFBA040:</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Bits</th><th class="l">Field</th><th class="l">FFFBA040</th></tr></thead>
+        <tbody>
+          <tr><td class="l">1–12</td><td class="l">sync word</td><td class="l">1111 1111 1111</td></tr>
+          <tr><td class="l">13</td><td class="l">version</td><td class="l">1 = MPEG-1</td></tr>
+          <tr><td class="l">14–15</td><td class="l">layer</td><td class="l">01 = Layer 3</td></tr>
+          <tr><td class="l">16</td><td class="l">error protection</td><td class="l">1 = no</td></tr>
+          <tr><td class="l">17–20</td><td class="l">bit rate (table index)</td><td class="l">1010 = 160 kbps</td></tr>
+          <tr><td class="l">21–22</td><td class="l">sampling frequency</td><td class="l">00 = 44100 Hz</td></tr>
+          <tr><td class="l">23, 24</td><td class="l">padding, private</td><td class="l">0, 0</td></tr>
+          <tr><td class="l">25–26</td><td class="l">mode</td><td class="l">01 = joint stereo</td></tr>
+          <tr><td class="l">27–28</td><td class="l">mode extension</td><td class="l">00 = intensity stereo off, MS stereo off</td></tr>
+          <tr><td class="l">29, 30</td><td class="l">copyright, original</td><td class="l">0, 0</td></tr>
+          <tr><td class="l">31–32</td><td class="l">emphasis</td><td class="l">00 = none</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>MPEG audio comments (slide 41): "Precision of 16 bits per sample is needed to get good SNR ratio." The noise is "quantization noise from the digitization process".</li>
+      <li>"For each added bit, we get 6dB better SNR ratio", because one more bit halves the step and 20 log₁₀ 2 = 6.02 dB (Lecture 3).</li>
+      <li>"Masking effect means that we can raise the noise floor around a strong sound because the noise will be masked away." "Raising noise floor is the same as using less bits and using less bits is the same as compression."</li>
+    </ul>
+    <pre class="calc">16 bits:  16 × 6.02 = 96.3 dB SNR        8 bits: 8 × 6.02 = 48.2 dB
+masking lets the noise floor rise by 24 dB:  24 / 6.02 ≈ 4 bits fewer per sample
+16 → 12 bits per sample is already 16 / 12 = 1.33 : 1 smaller</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>14. Lossy audio in practice, and what makes a good standard (slides 42–46)</h4>
+    <ul>
+      <li>MP3 history (slide 42): 1997 mp3.com offers thousands of free MP3s by independent artists. 1999 Napster, peer-to-peer MP3 sharing. Problem: copyright infringement. Authorized services: Amazon.com, Rhapsody, Juno Records.</li>
+      <li>How lossy audio works (slide 43): "Perceptual coding: only keep audio data that humans can hear." Algorithms such as MP3 and AAC "remove redundant or less important sounds", for example high-frequency sounds.</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Advantages (slide 44)</th><th class="l">Disadvantages (slide 20)</th><th class="l">Applications (slide 45)</th></tr></thead>
+        <tbody>
+          <tr><td class="l">small files, saving storage space</td><td class="l">original data lost permanently</td><td class="l">music streaming (Spotify, Apple Music)</td></tr>
+          <tr><td class="l">faster transmission (streaming, downloading)</td><td class="l">lower quality, noticeable in certain scenarios</td><td class="l">podcasts, audiobooks</td></tr>
+          <tr><td class="l">fine for consumer audio, where perfect fidelity is not needed</td><td class="l">not for high-end audio (music production, audiophiles)</td><td class="l">online video (YouTube), video calls (Zoom, Skype)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Criteria for a good standard (slide 46): achieve the desired outcome; be comprehensible; allow efficient implementation; support competition; give benchmark tests; be supported by industry; be good for end users.</li>
+      <li>Two models: implement first, then standardize; or standardize first, then implement.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>15. MPEG-4 Audio, AAC and MP4 (slides 47–53)</h4>
+    <ul>
+      <li>AAC, Advanced Audio Coding, is the successor of MP3 and "now part of MPEG-4 Audio". Up to 48 full-bandwidth audio channels. Default audio format for iPhone, iPad, Nintendo, PlayStation, Nokia, Android, BlackBerry.</li>
+      <li>AAC was "introduced 1997 as MPEG-2 Part 7". "In 1999 – updated and included in MPEG-4".</li>
+      <li>AAC's improvements over MP3 (slide 49): more sample frequencies (8–96 kHz); arbitrary bit rates and variable frame length; higher efficiency and a simpler filterbank; it "uses pure MDCT". Also used in Windows Media Audio.</li>
+      <li>MPEG-4 Audio (slide 48): bit rate 2–64 kbps, scalable for variable rates. It defines a set of coders:</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Coder</th><th class="l">Bit rate</th><th class="l">Sampling</th></tr></thead>
+        <tbody>
+          <tr><td class="l">parametric coding</td><td class="l">2–6 kbps, low</td><td class="l">8 kHz</td></tr>
+          <tr><td class="l">CELP, code excited linear prediction</td><td class="l">6–24 kbps, medium</td><td class="l">8 and 16 kHz</td></tr>
+          <tr><td class="l">time-frequency techniques</td><td class="l">16 kbps and higher, high quality</td><td class="l">above 7 kHz</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Applications (slide 50): general audio signals, speech signals, synthetic audio, synthesized speech (structured audio).</li>
+      <li>MPEG-4 Audio Part 3 (slide 51) includes lossy speech coding (CELP), general audio coding (AAC), lossless audio coding, a Text-to-Speech interface and Structured Audio (for example MIDI, Lecture 3).</li>
+      <li>MPEG-4 Part 14 (slide 52) is "called MP4 with extension .mp4". It is a "multimedia container format" that "stores digital video and audio streams and allows streaming over Internet". A "container or wrapper format" is a "meta-file format whose spec describes how different data elements and metadata coexist in computer file".</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Name</th><th class="l">What it is</th><th class="l">Where it comes from</th></tr></thead>
+        <tbody>
+          <tr><td class="l">MP2</td><td class="l">audio coding, sub-band, broadcasting</td><td class="l">MPEG-1 Audio Layer II</td></tr>
+          <tr><td class="l">MP3</td><td class="l">audio coding, psychoacoustic, Internet</td><td class="l">MPEG-1 Audio Layer III (1993)</td></tr>
+          <tr><td class="l">AAC</td><td class="l">audio coding, pure MDCT, successor of MP3</td><td class="l">MPEG-2 Part 7 (1997), then MPEG-4 (1999)</td></tr>
+          <tr><td class="l">MPEG-4 Audio Part 3</td><td class="l">the family of audio coders (CELP, AAC, lossless, TTS, structured audio)</td><td class="l">MPEG-4</td></tr>
+          <tr><td class="l">MP4 (.mp4)</td><td class="l">container: holds video, audio and metadata streams in one file</td><td class="l">MPEG-4 Part 14</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Conclusion (slide 53): "MPEG Audio is an integral part of the MPEG standard to be considered together with video." MPEG-4 Audio is a major extension of what MPEG-1 Audio can do.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Mistakes that cost marks</h4>
+    <ul>
+      <li>Computing high from the new low. After C that gives [0.3, 0.8). Both ends come from the old low: [0.3, 0.5).</li>
+      <li>Forgetting the range check. The final range must equal the product of the probabilities (CAEE$: 0.00036). If it does not, a row is wrong.</li>
+      <li>Codeword: keeping a 1 that pushes the value above high, or stopping before the value reaches low. Stop exactly when low ≤ value. Write the bits and the decimal value, and show low ≤ code &lt; high.</li>
+      <li>Decoder: dividing by the old interval's range. Divide by the found symbol's own width p(s), and stop after the terminator.</li>
+      <li>Calling arithmetic coding lossy. It is lossless. Quantization is the main source of loss, not Huffman, run-length coding or the transform.</li>
+      <li>Masking direction. A lower tone masks a higher tone, not the reverse. A louder masker masks a wider range. Tones far apart barely mask each other.</li>
+      <li>Bit allocation: the next bit goes to the lowest MNR, with MNR = SNR − SMR. Not the highest SMR and not the loudest band.</li>
+      <li>MPEG names. MP3 = MPEG-1 Layer 3, target 64 kbps (32–320 kbps). AAC is the codec (MPEG-2 Part 7). MP4 = MPEG-4 Part 14 is a container, not a codec. 1.4 Mbit/s is bits, 176,400 bytes per second.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Cheat sheet</h4>
+    <div data-viz="cheat"></div>
+  </div>
+
+  <div class="sol-part">
+    <h4>How to write it on the exam</h4>
+    <pre class="calc">ARITHMETIC CODING (encode + codeword, about 7 pts)
+1. table: symbol, p, [Range_low, Range_high)   (running sums of p)
+2. rule:  low' = low + range × Range_low(s),  high' = low + range × Range_high(s),
+          both from the OLD low;  range' = high' − low'
+3. one row per symbol (start 0, 1, 1): low, high, range, with the products written
+4. final interval [low, high);  check range = p₁ × p₂ × … × pₙ
+5. codeword (Procedure 7.2): for k = 1, 2, …  try bit k = 1; if value &gt; high → 0;
+   stop when value ≥ low.  Answer: bits, decimal value, low ≤ code &lt; high
+6. optional check: decode it.  s with Range_low ≤ v &lt; Range_high,  v ← (v − Range_low) / p(s)
+
+LOSSY vs LOSSLESS (about 3 pts)
+definition: lossless = no information loss, exact copy; lossy = close approximation
+lossy gives a much higher compression ratio; quantization is the main source of loss
+examples: lossless PNG, FLAC, Huffman, LZW;  lossy JPEG, MP3, AAC
+why lossy beats the entropy: R(D) = H at D = 0, and R(D) &lt; H once D &gt; 0
+
+MASKING (about 3 pts)
+auditory masking: a strong signal makes weaker signals near it in time or frequency inaudible
+frequency: lower masks higher; not the reverse; louder → wider; far apart → little
+temporal: pre ≈ 20 ms, simultaneous while the masker plays, post ≈ 150 ms
+
+MPEG AUDIO ENCODER (about 3 pts)
+draw: audio → filter bank (32 equal sub-bands, time → frequency)
+           → psychoacoustic model (masking → SMR)      both feed
+      quantization, bit/noise allocation → multiplexer, entropy coder (Huffman) → bitstream
+one line per block
+
+BIT ALLOCATION (about 4 pts)
+MNR = SNR − SMR for every sub-band; a table with one row per round
+lowest MNR gets the bit → its SNR + 6 dB → recompute → repeat
+answer: bits per sub-band and the final MNRs</pre>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Arithmetic beats Huffman because Huffman needs an integral number of bits per symbol, while arithmetic coding codes the whole message as one interval [a, b).</li>
+      <li>Encoding CAEE$: [0.3, 0.5), [0.3, 0.34), [0.322, 0.334), [0.3286, 0.3322), [0.33184, 0.3322); range 0.00036 = 0.2 × 0.2 × 0.3 × 0.3 × 0.1.</li>
+      <li>EC$: [0.55, 0.85) → [0.64, 0.7) → [0.694, 0.7), range 0.006. Codeword 0.1011001₂ = 0.6953125 (7 bits).</li>
+      <li>CAEE$ codeword 0.01010101₂ = 0.33203125 (8 bits). Decoding gives 0.16015625, 0.80078125, 0.8359375, 0.953125 → CAEE$.</li>
+      <li>Lossy = close approximation, much higher ratio; quantization is the main source of loss; uniform vs nonuniform (logarithmic) levels; R(D) = H at D = 0 and 0 at D<sub>max</sub>.</li>
+      <li>Threshold of hearing: about 0 dB at 2 kHz, 3.37 dB at 1 kHz, lowest (−5 dB) near 3.3 kHz; most sensitive 500–5000 Hz; hearing 20–20000 Hz.</li>
+      <li>Masking rules: lower masks higher, not the reverse, louder masks wider, far apart masks little. Temporal: pre ≈ 20 ms, post ≈ 150 ms.</li>
+      <li>CD audio 44100 × 16 × 2 = 1,411,200 bit/s; at 128 kbps that is 11.025 : 1.</li>
+      <li>MPEG-1 Audio: 16 bits; 32, 44.1, 48 kHz; Layer 1 32–448 (192), Layer 2 = MP2 32–384 (128), Layer 3 = MP3 32–320 (64) kbps.</li>
+      <li>Encoder: filter bank (32 equal sub-bands) + psychoacoustic model → quantization and bit allocation → Huffman. MNR = SNR − SMR, next bit to the lowest MNR; 1 bit ≈ 6 dB.</li>
+      <li>AAC: MPEG-2 Part 7 (1997), MPEG-4 (1999), pure MDCT, 8–96 kHz, 48 channels. MP4 = MPEG-4 Part 14, a container format.</li>
+    </ul>
+    <p class="source">Slides: L5 p.2–53 · Notes: 05_Week3_ArithmeticCoding_LossyCompression_MPEG.md</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lecture</h4>
+    <div data-role="related"></div>
+  </div>
+</article>
