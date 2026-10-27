@@ -30,3 +30,6 @@ secrets*
 
 # Claude Code git worktrees
 .claude/worktrees/
+
+# Static exam site (generated locally / on the deployment host)
+/dist-exams/

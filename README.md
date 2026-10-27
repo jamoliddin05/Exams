@@ -11,7 +11,7 @@ Each course lives in `Midterms/<Course>/`.
 |---|---|
 | Artificial Intelligence | slides, notes, notebooks, 5 sample midterms, [visual page](https://claude.ai/artifact/NEzuNxcuxexbHSV5zDe7cn) |
 | Big Data Analytics | slides, notes, HW1 solution |
-| Embedded Software Design | slides, notes |
+| Embedded Software Design | slides, notes, [3 ARM practice midterms and offline trainer](Midterms/EmbeddedSoftwareDesign/MidtermSamples/README.md), [online practice](https://exams.eessketit.uz/) |
 | Multimedia Computing | slides, notes, HW1 solution, 5 sample midterms, [visual page](https://claude.ai/artifact/FFfagp6CpEJvE15eAPJ6Zf) |
 | Software Engineering | notes, sample midterms, revision checklist |
 
