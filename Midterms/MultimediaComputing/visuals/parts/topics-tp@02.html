@@ -1,0 +1,496 @@
+<article class="q" id="topic2" data-part="tp" data-num="2" data-topic="Sound and sampling">
+  <div class="q-head">
+    <p class="eyebrow">Lecture 2 · Week 1 · 8 sample questions</p>
+    <h3 class="q-title">Sound and Sampling from Zero</h3>
+    <p class="fig-lede">Sound is air pressure that changes smoothly over time. A computer can only store a list of numbers, so the pressure is measured at evenly spaced moments (sampling) and each measurement is rounded to one of a fixed set of levels (quantization). This lecture explains both steps, how many bits per second they produce, and the Nyquist rule for how fast to sample before false frequencies (aliasing) appear. You need only sine waves and powers of 2 from school.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Words you need</h4>
+    <div class="why-grid">
+      <div class="mini"><h5>Signal x(t)</h5><p>A quantity that changes over time, such as the voltage from a microphone. x(t) is its value at time t.</p></div>
+      <div class="mini"><h5>Analog signal</h5><p>"Represented by a continuous function": it has a value at every instant, and the value can be anything in its range.</p></div>
+      <div class="mini"><h5>Digital signal</h5><p>A list of numbers, one per evenly spaced instant, each taken from a finite set of values.</p></div>
+      <div class="mini"><h5>Frequency f, period T</h5><p>f is cycles per second, in hertz (Hz); 1 kHz = 1,000 Hz. T is the time of one cycle, T = 1/f, in seconds.</p></div>
+      <div class="mini"><h5>Sampling, f<sub>s</sub></h5><p>Measuring x(t) once every T seconds. The sampling frequency f<sub>s</sub> = 1/T counts samples per second.</p></div>
+      <div class="mini"><h5>Quantization, b bits</h5><p>Rounding each sample to the nearest of 2<sup>b</sup> levels. b is the number of bits per sample.</p></div>
+      <div class="mini"><h5>Bit rate</h5><p>Bits produced per second (bps): f<sub>s</sub> × bits per sample × number of channels.</p></div>
+      <div class="mini"><h5>Spectrum</h5><p>The frequency-domain picture of a signal: one spike per sine wave, placed at its frequency, as tall as its amplitude.</p></div>
+      <div class="mini"><h5>Nyquist sampling frequency</h5><p>2 × f<sub>max</sub>, twice the highest frequency in the signal. The sampling rate must be greater than it.</p></div>
+      <div class="mini"><h5>Aliasing</h5><p>"Loss of information during digitization." A sampler that is too slow records a false, lower frequency.</p></div>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. Sound is a pressure wave (slides 3–4)</h4>
+    <p>Before anything is digital, sound is a physical event in the air.</p>
+    <ul>
+      <li>"Sound is a wave phenomenon like light, but it is macroscopic and involves molecules of air being compressed and expanded under the action of some physical device."</li>
+      <li>A speaker cone moves back and forth. It pushes air molecules together (a compression, high pressure), then pulls them apart (an expansion, low pressure). The pattern travels outward as a <b>longitudinal pressure wave</b>: the molecules move back and forth along the direction the wave travels.</li>
+      <li>"Without air there is no sound." In space there is nothing to compress.</li>
+      <li>Pressure can take any value, so sound "takes on continuous values". It is an analog signal.</li>
+      <li>It still behaves like any wave: <b>reflection</b> (bouncing), <b>refraction</b> (change of angle when entering a medium with a different density) and <b>diffraction</b> (bending around an obstacle). This makes "surround sound" possible.</li>
+      <li>A <b>transducer</b> (a microphone) measures the pressure at one point and converts "pressure to voltage levels". From here on, the signal x(t) is that voltage over time.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. Analog and digital signals (slides 5–11)</h4>
+    <ul>
+      <li>Multimedia systems have "three major components": a) content creation, b) compression and storage, c) delivery or distribution. This lecture is about a): recording each medium in digital form, so different media are easy to combine.</li>
+      <li>Digitizing is one-dimensional for audio, two-dimensional for images and three-dimensional for video.</li>
+      <li><b>Analog</b>: "A signal is analog if it can be represented by a continuous function", for example amplitude against time.</li>
+      <li><b>Digital</b>: "represented by a discrete set of values defined at specific (and most often regular) instances of the input domain, which might be time, space, or both" (Fig. 2-1).</li>
+      <li>Periodic analog signals are <b>simple</b> or <b>composite</b>. "A simple periodic analog signal, a sine wave, cannot be decomposed into simpler signals." A composite one "is composed of multiple sine waves".</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Advantage of digital (slides 9, 11)</th><th class="l">What the slides say</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Reach and edit any part</td><td class="l">one pixel, a region, or a section of a sound track; enhance one region, remove noise from a track</td></tr>
+          <tr><td class="l">No decay</td><td class="l">"Stored digital signals do not degrade over time or distance." Analog VHS tapes lose quality with repeated use (ghosting).</td></tr>
+          <tr><td class="l">Compression and transmission</td><td class="l">digital cable, video on demand, video on a DVD</td></tr>
+          <tr><td class="l">Easy storage</td><td class="l">hard drives, flash drives, memory cards: audio, image and video are all "a set of binary values"</td></tr>
+          <tr><td class="l">Quality</td><td class="l">"better quality and higher fidelity", compressed, distributed, stored and retrieved easily</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. Complex signals and audio sampling rates (slides 12–13)</h4>
+    <p>Real sounds are not single sine waves. Slide 12 builds a complex signal by adding sine waves together (superposition): a fundamental frequency f, plus weaker waves at 2, 3, 4 and 5 times f.</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Try it: add sine waves to build a complex signal</h4></div>
+      <p class="fig-lede">Each button adds the next sine wave of slide 12. The thin ochre curve is the wave just added, the dashed curve is the sum before it, and the blue curve is the new sum. The bars on the right list the same recipe as frequencies and weights, which is the frequency domain of section 6.</p>
+      <div data-viz="cx-steps"></div>
+      <p class="step-note" data-role="cx-note" aria-live="polite"></p>
+      <div data-viz="cx"></div>
+      <div class="legend">
+        <span><i class="sw-ter"></i>wave just added</span>
+        <span><i class="sw-pri"></i>sum so far</span>
+      </div>
+    </figure>
+    <ul>
+      <li>"Using measurements only at evenly spaced time intervals is simply called sampling, and the rate at which it is performed is called the sampling frequency."</li>
+      <li>For audio, "typical sampling rates are from 8 kHz (8,000 samples per second) to 48 kHz".</li>
+      <li>The human ear hears from about 20 Hz ("a very deep rumble") to about 20 kHz. Above that is ultrasound.</li>
+      <li>The human voice reaches about 4 kHz. These two limits set the sampling rates of section 11.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. A/D conversion: sampling and quantization (slides 14–15, 19–20)</h4>
+    <p>Analog-to-digital (A/D) conversion turns x(t) into a list of numbers in two steps. Slide 14 draws them as cuts along the two axes of the plot.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Step</th><th class="l">Axis</th><th class="l">What it does</th><th class="l">Result</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Sampling</td><td class="l">time</td><td class="l">keeps the value only at t = 0, T, 2T, 3T, …</td><td class="l">x<sub>s</sub>(n) = x(nT)</td></tr>
+          <tr><td class="l">Quantization</td><td class="l">amplitude</td><td class="l">rounds each kept value to the nearest of 2<sup>b</sup> levels</td><td class="l">x<sub>q</sub>(n) = Q[x<sub>s</sub>(n)]</td></tr>
+          <tr><td class="l">Interpolation (D/A)</td><td class="l">the way back</td><td class="l">joins the samples into a continuous signal again</td><td class="l">analog output</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>"The conversion of signals from analog to digital occurs via two main processes: sampling and quantization." The reverse, digital to analog, "is known as interpolation".</li>
+      <li>The goal is that "no artifacts are created in the digital data", so the signal converted back "will look the same as the original analog signal".</li>
+      <li>Slide 19 writes sampling as a formula. Start from a one-dimensional analog signal x(t). The sampled signal is x<sub>s</sub>(n) = x(nT), with T the sampling period and f = 1/T the sampling frequency. Sample number n is taken at time t = nT.</li>
+      <li>Sampling runs along one dimension (time, for sound), two (x and y, for images) or three (x, y and time for video, or x, y, z for 3D ranges). "Practical sampling involves averaging, either in time or space" (slide 20).</li>
+    </ul>
+    <p class="formula">x<sub>s</sub>(n) = x(nT)      T = sampling period (s)      f<sub>s</sub> = 1/T = sampling frequency (samples/s)</p>
+    <pre class="calc">x(t) = sin(2π·1000·t)                   a 1 kHz tone
+f<sub>s</sub> = 8 kHz  →  T = 1/8000 s = 125 µs   →  8 samples per cycle
+
+n    t = nT     x<sub>s</sub>(n) = sin(2π·1000·nT)
+0      0 µs      0.0000
+1    125 µs      0.7071
+2    250 µs      1.0000
+3    375 µs      0.7071
+4    500 µs      0.0000
+5    625 µs     −0.7071
+6    750 µs     −1.0000
+7    875 µs     −0.7071      then n = 8 repeats n = 0</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Try it: one signal through A/D and back</h4></div>
+      <p class="fig-lede">The signal stays between 0 and 8 V. It is sampled at 8 kHz (T = 125 µs) and quantized with 3 bits (8 levels, 1 V apart). Step through: the vertical grid is sampling, the horizontal grid is quantization, and every stored sample ends up on a grid crossing.</p>
+      <div data-viz="ad-steps"></div>
+      <p class="step-note" data-role="ad-note" aria-live="polite"></p>
+      <div data-viz="ad"></div>
+      <div class="legend">
+        <span><i class="sw-sec"></i>analog x(t) and exact samples</span>
+        <span><i class="sw-pri"></i>quantized samples and D/A output</span>
+        <span><i class="sw-bad"></i>quantization error</span>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Reading a sine wave: A, f, T, φ and λ (slides 16–18, 21–26)</h4>
+    <p>Every signal in this course is built from sine waves, so you must read one fluently. Four numbers fix a sine wave (slide 16).</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Parameter</th><th class="l">Slide 16 wording</th><th class="l">Unit</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Peak amplitude A</td><td class="l">"maximum strength of signal"</td><td class="l">volts (V)</td></tr>
+          <tr><td class="l">Frequency f</td><td class="l">"rate of change of signal"</td><td class="l">hertz (Hz), cycles per second</td></tr>
+          <tr><td class="l">Period T</td><td class="l">"time for one repetition"</td><td class="l">seconds (s)</td></tr>
+          <tr><td class="l">Phase φ</td><td class="l">"relative position in time"</td><td class="l">degrees (360° per cycle) or radians (2π per cycle)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="formula">x(t) = A sin(2πft + φ)        f = 1/T        T = 1/f</p>
+    <ul>
+      <li>"Frequency and period are the inverse of each other." Slide 18: 12 cycles in 1 s is 12 Hz, so T = 1/12 s = 83.3 ms; 6 cycles in 1 s is 6 Hz, T = 166.7 ms.</li>
+      <li>"Change in a short span of time means high frequency." Change over a long span of time means low frequency.</li>
+      <li>"If a signal does not change at all, its frequency is zero. If a signal changes instantaneously, its frequency is infinite."</li>
+      <li>"Phase describes the position of the waveform relative to time 0." One cycle is 360° = 2π rad. A phase of 90° = π/2 rad moves the wave by a quarter period, T/4. A phase of 180° = π rad moves it by half a period, T/2 (slide 24).</li>
+      <li>Slide 17 shows two waves with the same phase and frequency and different amplitudes. Slide 18 shows the same amplitude and phase with different frequencies.</li>
+    </ul>
+    <p class="formula">time shift  Δt = (φ / 360°) × T = φ / (2πf)   (φ in rad)</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Period unit</th><th class="l">Equals</th><th class="l">Frequency unit</th><th class="l">Equals</th></tr></thead>
+        <tbody>
+          <tr><td class="l">second (s)</td><td class="l">1 s</td><td class="l">hertz (Hz)</td><td class="l">1 Hz</td></tr>
+          <tr><td class="l">millisecond (ms)</td><td class="l">10⁻³ s</td><td class="l">kilohertz (kHz)</td><td class="l">10³ Hz</td></tr>
+          <tr><td class="l">microsecond (µs)</td><td class="l">10⁻⁶ s</td><td class="l">megahertz (MHz)</td><td class="l">10⁶ Hz</td></tr>
+          <tr><td class="l">nanosecond (ns)</td><td class="l">10⁻⁹ s</td><td class="l">gigahertz (GHz)</td><td class="l">10⁹ Hz</td></tr>
+          <tr><td class="l">picosecond (ps)</td><td class="l">10⁻¹² s</td><td class="l">terahertz (THz)</td><td class="l">10¹² Hz</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="calc">x(t) = 3 sin(2π·100·t + π/2)
+A = 3 V          f = 100 Hz          T = 1/100 s = 10 ms
+φ = π/2 rad = 90°   →   Δt = 90/360 × 10 ms = 2.5 ms   (every peak comes 2.5 ms earlier)
+check: x(0) = 3 sin(π/2) = 3 V, so the wave starts at its peak</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Try it: the knobs of a sine wave</h4></div>
+      <p class="fig-lede">The dashed plum wave is the reference with φ = 0. The blue wave is A sin(2πft + φ). Drag A to change the height, f to squeeze the cycles, and φ to slide the wave earlier in time. The arrow is the time shift Δt between matching peaks.</p>
+      <div data-viz="sine-a"></div>
+      <div data-viz="sine-f"></div>
+      <div data-viz="sine-p"></div>
+      <p class="formula" data-role="sine-eq"></p>
+      <div class="stats">
+        <div class="stat"><span class="label">Period</span><span class="v" data-role="sine-T"></span><span class="sub">T = 1 / f</span></div>
+        <div class="stat"><span class="label">Phase in radians</span><span class="v" data-role="sine-rad"></span><span class="sub">φ × π / 180°</span></div>
+        <div class="stat"><span class="label">Time shift</span><span class="v pri" data-role="sine-dt"></span><span class="sub">Δt = (φ / 360°) × T</span></div>
+      </div>
+      <div data-viz="sine"></div>
+      <div class="legend">
+        <span><i class="sw-sec"></i>reference, φ = 0</span>
+        <span><i class="sw-pri"></i>A sin(2πft + φ)</span>
+      </div>
+    </figure>
+    <ul>
+      <li>"Wavelength (λ) is distance occupied by one cycle." In other words, it is the distance a simple signal travels in one period, measured "between two points of corresponding phase in two consecutive cycles" (slides 25–26).</li>
+      <li>With signal velocity v, λ = vT. Because T = 1/f, also λ = v/f. Standard unit: the metre (m).</li>
+      <li>Period is a time and wavelength is a length. A higher frequency makes both shorter.</li>
+    </ul>
+    <p class="formula">λ = v × T = v / f   (metres)</p>
+    <pre class="calc">speed of sound in air  v ≈ 340 m/s   (textbook context; the samples use 340 m/s)
+f = 20 Hz       λ = 340 / 20     = 17 m                deepest sound we hear
+f = 1 kHz       λ = 340 / 1000   = 0.34 m
+f = 20 kHz      λ = 340 / 20000  = 0.017 m = 1.7 cm    highest sound we hear</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. Time domain and frequency domain (slides 27–28)</h4>
+    <ul>
+      <li>A time-domain plot shows amplitude against time. A frequency-domain plot shows amplitude against frequency.</li>
+      <li>"A complete sine wave in the time domain can be represented by one single spike in the frequency domain." Slide 27: a sine wave with peak value 5 V and frequency 6 Hz is one spike of height 5 at 6 Hz.</li>
+      <li>"The frequency domain is more compact and useful when we are dealing with more than one sine wave." Slide 28: three sine waves with frequencies 0, 8 and 16 Hz and amplitudes 15, 10 and 5 are three spikes.</li>
+      <li>A wave of 0 Hz never changes. It is a constant level, here 15 V.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Quantization: levels, step and error (slides 29–33)</h4>
+    <ul>
+      <li>"Quantization deals with encoding the signal value at every sampled location with a predefined precision, defined by a number of levels."</li>
+      <li>"The entire range R of the signal is represented by a finite number of bits b." b bits can write 2<sup>b</sup> different codes (000 to 111 for b = 3), so there are N = 2<sup>b</sup> levels.</li>
+      <li>The levels share the range evenly. The quantization step is δ = R/2<sup>b</sup>. This is the professor's form; do not write R/(2<sup>b</sup> − 1).</li>
+      <li>Q is a rounding function. It maps each sample to the nearest digital value that b bits can write.</li>
+    </ul>
+    <p class="formula">x<sub>q</sub>(n) = Q[x<sub>s</sub>(n)]      N = 2<sup>b</sup> levels      δ = R / 2<sup>b</sup></p>
+    <pre class="calc">R = 0 to 8 V,  b = 3   →   N = 2³ = 8 levels,  δ = 8 / 2³ = 1 V
+
+sample x<sub>s</sub>   x<sub>s</sub> / δ   nearest level x<sub>q</sub>   code   error
+  0.2 V       0.2      0 V                 000    0.2 V
+  2.6 V       2.6      3 V                 011    0.4 V
+  5.3 V       5.3      5 V                 101    0.3 V
+  6.8 V       6.8      7 V                 111    0.2 V
+  3.9 V       3.9      4 V                 100    0.1 V</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Try it: round five samples with b bits</h4></div>
+      <p class="fig-lede">The same five samples in a range R = 0 to 8 V. The thin lines are the levels, δ apart. Each plum ring is the exact sample, each blue dot is the level it rounds to, labelled with its code. Drag b: every extra bit doubles the levels, halves δ and shrinks the red errors.</p>
+      <div data-viz="qz-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Levels</span><span class="v pri" data-role="qz-levels"></span><span class="sub" data-role="qz-levels-sub"></span></div>
+        <div class="stat"><span class="label">Step</span><span class="v pri" data-role="qz-step"></span><span class="sub" data-role="qz-step-sub"></span></div>
+        <div class="stat"><span class="label">Largest error</span><span class="v" data-role="qz-err"></span><span class="sub">δ / 2 (textbook context)</span></div>
+      </div>
+      <div data-viz="qz"></div>
+      <div data-viz="qz-table"></div>
+    </figure>
+    <ul>
+      <li>"Because each sample is represented by a finite number of bits, the quantized value will differ from the actual signal value, thus always introducing an error." Rounding to the nearest level keeps it at most δ/2 (textbook context).</li>
+      <li>How many bits depends "on the type of signal and what its intended use is". "Audio signals, which represent music, must be quantized on 16 bits, whereas speech only requires 8 bits."</li>
+      <li>Slide 30 (Fig. 2-3) shows one signal quantized with 8 bits (256 levels), 4 bits (16 levels) and 3 bits (8 levels). Slide 31's text says "4 or 2"; the figure caption is the consistent one.</li>
+      <li>Slide 32 (Fig. 2-4) re-quantizes an 8-bit image from 6 bits down to 1 bit per pixel. With few bits, smooth shading turns into flat bands, and 1 bit is pure black and white.</li>
+      <li><b>Uniform (linear) quantization</b>: "the output range of the signal is divided into fixed and uniformly separated intervals". It "works well when all the values in the range of the signal are equally likely", so the error is spread evenly.</li>
+      <li><b>Nonlinear quantization</b> (slide 33, Fig. 2-5) uses "a logarithmically quantized interval scale". (textbook context) Its steps are finer for quiet, small values; Lecture 3 continues with it.</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">b (bits)</th><th>1</th><th>2</th><th>3</th><th>4</th><th>8</th><th>16</th></tr></thead>
+        <tbody>
+          <tr><td class="l">levels 2<sup>b</sup></td><td>2</td><td>4</td><td>8</td><td>16</td><td>256</td><td>65,536</td></tr>
+          <tr><td class="l">δ for R = 2 V</td><td>1 V</td><td>0.5 V</td><td>0.25 V</td><td>0.125 V</td><td>0.0078 V</td><td>0.0000305 V</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. Bit rate and file size (slides 34–35)</h4>
+    <ul>
+      <li>Bit rate is "the number of bits being produced per second". It decides whether a signal fits on a disk or through a network "which might have high, low, or even varying bandwidths".</li>
+      <li>Each second the sampler produces f<sub>s</sub> samples, and each sample costs b bits. Stereo records two channels at every instant, so its rate is twice the mono rate (Fig. 2-6).</li>
+      <li>File size: bit rate × duration gives bits. Divide by 8 for bytes. Here k = 1,000 and M = 1,000,000.</li>
+    </ul>
+    <p class="formula">bit rate = (samples / second) × (bits / sample) × channels = f<sub>s</sub> × b × channels   (bps)</p>
+    <p class="formula">file size = bit rate × seconds / 8   (bytes)</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>Try it: bit rate is an area</h4></div>
+      <p class="fig-lede">Width = samples per second. Height = bits stored at each sampling instant, which is bits per sample × channels. The area of the rectangle is the bit rate. The dashed outlines are the other audio rows of slide 35, drawn to the same scale. Pick a row.</p>
+      <div data-viz="br-steps"></div>
+      <div data-viz="br"></div>
+      <pre class="calc" data-role="br-calc"></pre>
+    </figure>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Signal (Fig. 2-6)</th><th class="l">Sampling rate</th><th class="l">Quantization</th><th class="l">Computation</th><th class="l">Bit rate on the slide</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Speech</td><td class="l">8 kHz</td><td class="l">8 bits/sample</td><td class="l">8,000 × 8 = 64,000</td><td class="l">64 Kbps</td></tr>
+          <tr><td class="l">Audio CD</td><td class="l">44.1 kHz</td><td class="l">16 bits/sample</td><td class="l">44,100 × 16 = 705,600; × 2 = 1,411,200</td><td class="l">706 Kbps mono, 1.4 Mbps stereo</td></tr>
+          <tr><td class="l">Teleconferencing</td><td class="l">16 kHz</td><td class="l">16 bits/sample</td><td class="l">16,000 × 16 = 256,000</td><td class="l">256 Kbps</td></tr>
+          <tr><td class="l">AM radio</td><td class="l">11 kHz</td><td class="l">8 bits/sample</td><td class="l">11,000 × 8 = 88,000</td><td class="l">88 Kbps</td></tr>
+          <tr><td class="l">FM radio</td><td class="l">22 kHz</td><td class="l">16 bits/sample</td><td class="l">22,000 × 16 = 352,000; × 2 = 704,000</td><td class="l">352 Kbps mono, 704 Kbps stereo</td></tr>
+          <tr><td class="l">NTSC TV frame</td><td class="l">486 × 720 samples</td><td class="l">16 bits/sample</td><td class="l">486 × 720 × 16 = 5,598,720</td><td class="l">5.6 Mbits per frame</td></tr>
+          <tr><td class="l">HDTV (1080i) frame</td><td class="l">1920 × 1080 pixels</td><td class="l">12 bits/pixel on average</td><td class="l">1920 × 1080 × 12 = 24,883,200</td><td class="l">24.88 Mbits per frame</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>For images the table gives bits per frame: width × height × bits per pixel. (textbook context) NTSC is really 720 wide and 486 high; the slide swaps the labels, and the product is the same.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Signals and systems (slides 36–41)</h4>
+    <ul>
+      <li>Fig. 2-7 shows signals that are continuous and smooth (a sinusoid), continuous but not smooth (a saw tooth), neither smooth nor continuous (a step edge), of <b>finite support</b>, and <b>periodic</b>. Real signals combine several of these properties.</li>
+      <li><b>Symmetric</b> signals are odd, like y = sin(x), or even, like y = cos(x). Any signal is the sum of an odd part and an even part.</li>
+      <li>Finite support: the signal is defined on a finite interval and is zero outside it.</li>
+      <li>Periodic with period T: f(x + T) = f(x). Any f(t) gives a periodic version g(t) = Σ<sub>k</sub> f(t − kT).</li>
+      <li>"Any operation that transforms a signal is called a system." A system turns an input x(t) into an output y(t).</li>
+      <li><b>Linear</b> (slide 38): if x(t) = c₁x₁(t) + c₂x₂(t), then y(t) = c₁y₁(t) + c₂y₂(t), where y<sub>k</sub>(t) is the output for x<sub>k</sub>(t) alone. Scale and add the inputs, and the outputs scale and add the same way.</li>
+      <li><b>Time invariant</b> (textbook context): delay the input by t₀, and the output is the same, delayed by t₀. LTI = linear and time invariant.</li>
+      <li><b>Convolution</b> f*g (slide 39) is "the integral of the first signal multiplied with the other signal reversed and shifted".</li>
+    </ul>
+    <p class="formula">(f*g)(t) = ∫ f(τ) g(t − τ) dτ = ∫ f(t − τ) g(τ) dτ      (both integrals from −∞ to ∞)</p>
+    <pre class="calc">discrete version (textbook context): y[n] = Σ f[k]·g[n − k]
+f = [1, 2, 3],  g = [1, 1]   reverse g, shift by n, multiply, add
+y[0] = 1·1 = 1    y[1] = 1·1 + 2·1 = 3    y[2] = 2·1 + 3·1 = 5    y[3] = 3·1 = 3
+f * g = [1, 3, 5, 3]</pre>
+    <ul>
+      <li>"Any LTI system is fully characterized by a specific function, which is called the impulse response of the system." (textbook context) It is the output when the input is a delta, the single spike of section 10.</li>
+      <li>"The output of the system is the convolution of the input with the system's impulse response": y(t) = h(t) * x(t). This is "the time domain point of view".</li>
+      <li>"The transfer function is the Fourier transform of the system's impulse response." In the frequency domain the convolution becomes a multiplication, Y(s) = H(s) × X(s) (Fig. 2-8, slide 41).</li>
+    </ul>
+    <pre class="calc">time domain        x(t) ──► [ h(t) ] ──► y(t) = h(t) * x(t)      convolution
+                     │ FT        │ FT          ▲ inverse FT
+                     ▼           ▼             │
+frequency domain   X(s) ──► [ H(s) ] ──► Y(s) = H(s) × X(s)      multiplication</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Useful signals and the Fourier transform (slides 42–44, 49)</h4>
+    <ul>
+      <li>The delta, box and step functions "play an important role in many signaling-processing operations, such as sampling, filtering, and convolution".</li>
+      <li>The Dirac delta δ(x), introduced by the physicist Paul Dirac, is "a sharp peak bounding a unit area". It is zero everywhere except at x = 0, where it becomes infinite, and its integral is 1.</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Signal</th><th class="l">Definition (slides 42, 44)</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Delta δ(x)</td><td class="l">0 for x ≠ 0, infinite at x = 0, ∫ δ(x) dx = 1</td></tr>
+          <tr><td class="l">Comb Δ<sub>T</sub>(t)</td><td class="l">Σ<sub>k</sub> δ(t − kT), k from −∞ to ∞</td></tr>
+          <tr><td class="l">Step H(x)</td><td class="l">∫ δ(t) dt from −∞ to x: 0 before x = 0, 1 after</td></tr>
+          <tr><td class="l">Box rect(t) = Π(t)</td><td class="l">0 if |t| &gt; ½, ½ if |t| = ½, 1 if |t| &lt; ½</td></tr>
+          <tr><td class="l">Sinc</td><td class="l">Sa(x) = sinc(x) = sin(πx) / (πx); sinc(0) = 1, sinc(0.5) = 0.6366, 0 at every other integer</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>The Fourier transform "is due to Joseph Fourier (1768–1830), who published his initial results in 1807".</li>
+      <li>"Fourier proposed to represent any periodic, continuous signal as a sum of individual complex sinusoids (a Fourier series expansion)." That is a weighted combination of sine and cosine waves, the recipe built by hand in Figure 1.</li>
+      <li>The weights "are called the Fourier series coefficients, or spectral components". They are the spike heights of the frequency domain (section 6).</li>
+      <li>Fig. 2-11 (slide 49): the Fourier transforms "show the amount of energy at all frequencies". Two signals of one frequency each give one spike each, and the lower-frequency signal's spike sits further left.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. The sampling theorem (slides 45–48)</h4>
+    <ul>
+      <li>Fig. 2-10 (slides 45–46): a signal that never changes (zero frequency) needs "one single sample". A straight ramp needs two. A wiggly signal needs many more. "As we go from left to right, the frequency content in the signals increases", and so does the number of samples needed.</li>
+      <li>The rule "was established during the late 1920s by Henry Nyquist and later formalized by Claude Shannon in 1950".</li>
+      <li>"The signal has to be sampled using a sampling frequency that is greater than twice the maximal frequency occurring in the signal."</li>
+    </ul>
+    <p class="formula">f<sub>s</sub> &gt; 2 f<sub>max</sub>        Nyquist sampling frequency = 2 f<sub>max</sub>        highest frequency kept &lt; f<sub>s</sub>/2</p>
+    <ul>
+      <li>Formal statement (slide 48): a band-limited signal with highest frequency ω<sub>F</sub> is fully determined by its samples f(nT) if 2π/T &gt; 2ω<sub>F</sub>, the angle form of f<sub>s</sub> &gt; 2f<sub>max</sub>. It can be rebuilt from the samples by convolution with a sinc filter.</li>
+      <li>Slide example: "if the signal has a maximal frequency of 10 kHz, it should be sampled at a frequency greater than 20 kHz. Here, 20 kHz is known as the Nyquist sampling frequency for that signal."</li>
+      <li>Voice reaches about 4 kHz, and 2 × 4 = 8 kHz is the speech rate of Fig. 2-6. Hearing reaches 20 kHz, so music needs more than 40 kHz, and the audio CD uses 44.1 kHz.</li>
+      <li>Read the rule the other way round: a recording made at f<sub>s</sub> holds frequencies only below f<sub>s</sub>/2. The CD keeps everything below 22.05 kHz.</li>
+      <li>The professor's "Nyquist frequency" (slides 48, 50, 51) is 2f<sub>max</sub>, the minimum sampling rate. (textbook context) Many books call 2f<sub>max</sub> the Nyquist rate and use "Nyquist frequency" for f<sub>s</sub>/2. On this exam, use the slide's meaning and say which one you mean.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. Oversampling, undersampling and aliasing (slides 50–51)</h4>
+    <ul>
+      <li>Sampling above the Nyquist frequency (oversampling) is "nothing special". The signal "is guaranteed to have all the necessary frequencies", so the same signal is reproduced. The cost: "more digital data than necessary, which increases your storage and transmission overhead".</li>
+      <li>Sampling below it (undersampling): "all the frequency content is not well captured", so the signal heard, viewed or converted back "does not correspond to the initial starting analog signal".</li>
+      <li>"Aliasing is the term used to describe loss of information during digitization."</li>
+      <li>(textbook context) A tone above f<sub>s</sub>/2 does not vanish. It comes back as a false tone, the alias, at its distance from the nearest multiple of f<sub>s</sub>. For f<sub>s</sub>/2 &lt; f &lt; f<sub>s</sub> that is f<sub>s</sub> − f.</li>
+    </ul>
+    <p class="formula">f<sub>alias</sub> = | f − k·f<sub>s</sub> |,   k = the whole number nearest to f / f<sub>s</sub>      (textbook context)</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Try it: a sampler at 8 kHz folds every tone into 0 to 4 kHz</h4></div>
+      <p class="fig-lede">The sampling rate is fixed at f<sub>s</sub> = 8 kHz, the speech rate. Drag the tone. Top: the tone (thin blue), its samples (dots) and the slowest wave through those dots (dashed), which is what playback rebuilds. Bottom: the frequency you hear against the frequency you recorded. Below f<sub>s</sub>/2 the line climbs, and above it the line folds back down.</p>
+      <div data-viz="al-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Samples per cycle</span><span class="v" data-role="al-spc"></span><span class="sub">f<sub>s</sub> / f, must be more than 2</span></div>
+        <div class="stat"><span class="label">Heard after sampling</span><span class="v" data-role="al-out"></span><span class="sub">| f − k·f<sub>s</sub> |</span></div>
+      </div>
+      <p class="step-note" data-role="al-note" aria-live="polite"></p>
+      <div data-viz="al-time"></div>
+      <div data-viz="al-fold"></div>
+      <div class="legend">
+        <span><i class="sw-pri"></i>tone, or rebuilt correctly</span>
+        <span><i class="sw-bad"></i>alias, a false tone</span>
+        <span><i class="sw-pri-soft"></i>band kept, below f<sub>s</sub>/2</span>
+      </div>
+    </figure>
+    <pre class="calc">tone      f<sub>s</sub>          limit f<sub>s</sub>/2     heard as
+6 kHz     8 kHz       4 kHz         8 − 6 = 2 kHz        aliased
+15 kHz    22.05 kHz   11.025 kHz    22.05 − 15 = 7.05 kHz aliased
+1 kHz     1.5 kHz     0.75 kHz      1.5 − 1 = 0.5 kHz    aliased
+5 kHz     22.05 kHz   11.025 kHz    5 kHz                kept</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. Aliasing in space and in time (slides 52–55)</h4>
+    <ul>
+      <li>"Aliasing effects in the spatial domain are seen in all dimensions." The 1D example of Fig. 2-12 shows the original signal, the sampled points and the reconstructed signal, which comes out at a much lower frequency.</li>
+      <li>The 2D example starts from an image of "750 samples in the x and 620 samples in the y direction" and rebuilds it from fewer samples in both directions. "As the number of spatial samples decreases, not all of the original frequencies are properly captured": fine detail turns into blocks and false patterns.</li>
+      <li>Halving the resolution in both directions keeps 375 × 310 = 116,250 of the 750 × 620 = 465,000 samples, one quarter. Image resampling returns in Lecture 6.</li>
+      <li>Temporal aliasing (slide 55): in western movies the stagecoach wheels first turn forward, then, as the coach speeds up, "appear to rotate in the opposite direction". "This occurs because the movie camera has under sampled the wheels' motion."</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>14. Halving the sample rate (slides 19, 34, 47–51 applied)</h4>
+    <p>A common task: keep every second sample, x′(n) = x<sub>s</sub>(2n). The period T doubles and f<sub>s</sub> halves. Every other quantity follows from a formula above. Example: a 10 s stereo recording at 44.1 kHz with 16 bits per sample.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Quantity</th><th class="l">Original</th><th class="l">After halving</th><th class="l">Rule</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Sampling frequency f<sub>s</sub></td><td class="l">44,100 Hz</td><td class="l">22,050 Hz</td><td class="l">halved</td></tr>
+          <tr><td class="l">Sampling period T = 1/f<sub>s</sub></td><td class="l">22.68 µs</td><td class="l">45.35 µs</td><td class="l">doubled</td></tr>
+          <tr><td class="l">Highest frequency kept</td><td class="l">below 22.05 kHz</td><td class="l">below 11.025 kHz</td><td class="l">f<sub>s</sub>/2, from f<sub>s</sub> &gt; 2f<sub>max</sub></td></tr>
+          <tr><td class="l">Bit rate f<sub>s</sub> × b × channels</td><td class="l">1,411,200 bps</td><td class="l">705,600 bps</td><td class="l">halved</td></tr>
+          <tr><td class="l">Size of 10 s (bit rate × 10 / 8)</td><td class="l">1,764,000 bytes</td><td class="l">882,000 bytes</td><td class="l">halved</td></tr>
+          <tr><td class="l">Bits per sample</td><td class="l">16</td><td class="l">16</td><td class="l">unchanged</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Content between the new limit, 11.025 kHz, and the old one, 22.05 kHz, is now undersampled and aliases. A 15 kHz tone comes back at 22.05 − 15 = 7.05 kHz. A 5 kHz tone stays at 5 kHz.</li>
+      <li>(textbook context) To avoid this, low-pass filter the signal below the new f<sub>s</sub>/2 before dropping samples, and write the new rate into the file header. The duration stays the same and the file is half the size.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Mistakes that cost marks</h4>
+    <ul>
+      <li>Nyquist sampling frequency = 2 × f<sub>max</sub>. f<sub>max</sub> itself and f<sub>max</sub>/2 are wrong, and sampling at exactly 2f<sub>max</sub> is not enough: the rule says greater than.</li>
+      <li>b bits give 2<sup>b</sup> levels. b levels and 2b levels are wrong. The step is δ = R/2<sup>b</sup> in this course.</li>
+      <li>Bit rate needs every factor: f<sub>s</sub> × bits × channels. Stereo doubles it. File size in bytes divides the bits by 8, and 1 MB = 10<sup>6</sup> bytes unless the question says otherwise.</li>
+      <li>Phase to time: Δt = (φ/360°) × T. 90° is T/4 and 180° is T/2. Find T = 1/f first.</li>
+      <li>Wavelength λ = v/f = vT, in metres. f/v and v × f are wrong, and T (in seconds) is a time, not a wavelength.</li>
+      <li>An undersampled tone does not disappear. It comes back at a lower, false frequency, f<sub>s</sub> − f for f<sub>s</sub>/2 &lt; f &lt; f<sub>s</sub>.</li>
+      <li>Halving f<sub>s</sub> halves the bit rate, the file size and the highest frequency kept. The bits per sample stay the same.</li>
+      <li>Oversampling does not improve the signal. It reproduces the same signal with more data, so storage and transmission cost more.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Cheat sheet</h4>
+    <div data-viz="cheat"></div>
+  </div>
+
+  <div class="sol-part">
+    <h4>How to write it on the exam</h4>
+    <pre class="calc">A. "Explain sampling and quantization. What is the difference?"
+   Sampling: measurements "at evenly spaced time intervals"; f<sub>s</sub> = 1/T; x<sub>s</sub>(n) = x(nT).   time axis
+   Quantization: each sample rounded to the nearest of 2<sup>b</sup> levels; δ = R/2<sup>b</sup>;
+                 always introduces an error (at most δ/2).                        amplitude axis
+   A/D = sampling + quantization.  D/A = interpolation.
+
+B. "Highest frequency the recording can hold? Enough for hearing?"
+   f<sub>s</sub> &gt; 2f<sub>max</sub>  →  f<sub>max</sub> &lt; f<sub>s</sub>/2 = ...
+   compare: hearing 20 kHz needs f<sub>s</sub> &gt; 40 kHz; voice 4 kHz needs f<sub>s</sub> &gt; 8 kHz
+   if too low: content above f<sub>s</sub>/2 aliases
+
+C. "Nyquist sampling frequency" = 2 × f<sub>max</sub>   (f<sub>s</sub> must be greater than it)
+
+D. "At what frequency does each tone appear?"
+   f &lt; f<sub>s</sub>/2  →  unchanged
+   f &gt; f<sub>s</sub>/2  →  | f − k·f<sub>s</sub> |, nearest multiple; f<sub>s</sub> − f when f<sub>s</sub>/2 &lt; f &lt; f<sub>s</sub>
+
+E. "Bit rate and file size"
+   bit rate = f<sub>s</sub> × bits × channels = ... bps
+   size     = bit rate × seconds / 8 = ... bytes   (/ 10<sup>6</sup> for MB)
+
+F. "Give A, f, T, φ and λ of A sin(2πft + φ)"
+   A in V;  f in Hz;  T = 1/f;  φ in rad and in degrees;  Δt = (φ/360°) × T;  λ = v/f = vT
+
+G. "The sample rate is halved"
+   new f<sub>s</sub>, new limit f<sub>s</sub>/2, bit rate / 2, size / 2, bits per sample unchanged;
+   content between the new and the old limit aliases unless low-pass filtered first</pre>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Definitions: sampling = time, quantization = amplitude, A/D = both, D/A = interpolation, aliasing = "loss of information during digitization".</li>
+      <li>T = 1/f: 12 Hz → 83.3 ms. Phase 90° = π/2 rad = T/4; at 100 Hz that is 2.5 ms.</li>
+      <li>λ = v/f: 1 kHz in air (340 m/s) → 0.34 m.</li>
+      <li>f<sub>s</sub> &gt; 2f<sub>max</sub>: 10 kHz → more than 20 kHz (the Nyquist sampling frequency); voice 4 kHz → 8 kHz; hearing 20 kHz → more than 40 kHz (CD 44.1 kHz).</li>
+      <li>Alias (textbook context): 6 kHz sampled at 8 kHz is heard at 2 kHz.</li>
+      <li>Levels 2<sup>b</sup>, step R/2<sup>b</sup>: R = 8 V, b = 3 → 8 levels, δ = 1 V. Music 16 bits, speech 8 bits.</li>
+      <li>Bit rate: CD 44,100 × 16 × 2 = 1,411,200 bps; one minute = 10,584,000 bytes. HDTV frame 1920 × 1080 × 12 = 24.88 Mbit.</li>
+      <li>Frequency domain: a 5 V, 6 Hz sine is one spike of height 5 at 6 Hz; slide 28 is three spikes, 15, 10 and 5 at 0, 8 and 16 Hz.</li>
+      <li>LTI: y = h * x, Y = H × X, the transfer function is the Fourier transform of the impulse response.</li>
+    </ul>
+    <p class="source">Slides: L2 p.3–55 · Notes: 02_Week1_Sound_Sampling_Quantization_Fourier.md</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lecture</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

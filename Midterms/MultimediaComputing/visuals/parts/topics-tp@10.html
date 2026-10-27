@@ -1,0 +1,421 @@
+<article class="q" id="topic10" data-part="tp" data-num="10" data-topic="Morphology">
+  <div class="q-head">
+    <p class="eyebrow">Lecture 10 · Week 5 · 10 sample questions</p>
+    <h3 class="q-title">Morphology from Zero</h3>
+    <p class="fig-lede">Morphology cleans up binary images by shape. A small pattern of pixels, the structuring element, slides over the image, and each output pixel comes from one yes/no test. Does the pattern touch the object, or does it fit inside it? Those two tests give dilation and erosion, and every other operation in the lecture is built from them. It uses the neighbours of lecture 7 and the binary images and logic operations of lecture 9.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Words you need</h4>
+    <div class="why-grid">
+      <div class="mini"><h5>Binary image</h5><p>Every pixel is 0 or 1. 1 = foreground (the object), 0 = background. In this course pixels outside the image count as 0.</p></div>
+      <div class="mini"><h5>The image as a set A</h5><p>A is the set of positions (row, col) of the 1-pixels, points in Z². That is why the formulas use set symbols.</p></div>
+      <div class="mini"><h5>Structuring element B</h5><p>A small binary matrix (slide 4), also called the kernel. Its matrix size is its size, its pattern of 1s is its shape.</p></div>
+      <div class="mini"><h5>Origin (anchor point)</h5><p>The pixel of B that is placed on the pixel being computed. Usually the centre.</p></div>
+      <div class="mini"><h5>Translation (B)<sub>z</sub></h5><p>B moved so that its origin sits on pixel z.</p></div>
+      <div class="mini"><h5>Reflection B̂</h5><p>B turned 180° about its origin: offset (r, c) becomes (−r, −c). For a symmetric B, B̂ = B.</p></div>
+      <div class="mini"><h5>Complement Aᶜ</h5><p>Every pixel that is not in A, the background.</p></div>
+      <div class="mini"><h5>Fit and hit</h5><p>B fits at z if every 1 of B lands on a 1 of A. It hits if at least one does.</p></div>
+      <div class="mini"><h5>Dilation ⊕, erosion ⊖</h5><p>Dilation = local maximum, the foreground grows. Erosion = local minimum, the foreground shrinks.</p></div>
+      <div class="mini"><h5>Opening ∘, closing •</h5><p>Opening = erosion, then dilation. Closing = dilation, then erosion. Same B both times.</p></div>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. What morphology is, and the structuring element (slides 2–5)</h4>
+    <p>After thresholding, a binary image is rarely clean. It has noise pixels, broken lines, small holes and ragged edges. Morphology repairs them by looking at the shape of the foreground. The lecture follows chapter 9 of Gonzalez and Woods (slide 2).</p>
+    <ul>
+      <li>Slide 3: "Morphological image processing is a collection of <b>non-linear</b> operations related to the shape or morphology of features in an image." The output is a maximum, a minimum or a pattern test, never a weighted sum.</li>
+      <li>Slide 4: the structuring element "is a small binary image, i.e. a small matrix of pixels, each with a value of zero or one". Its dimensions give the <b>size</b>, the pattern of ones and zeros the <b>shape</b>.</li>
+      <li>The <b>origin</b> "is usually one of its pixels, although generally the origin can be outside the structuring element".</li>
+      <li>Slide 5: the common practice is "odd dimensions" with "the origin defined as the centre". Structuring elements "play in morphological image processing the same role as convolution kernels in linear image filtering".</li>
+    </ul>
+    <pre class="calc">slide 4 examples (origin in brackets)
+square 5×5     diamond 5×5    cross 5×5      square 3×3
+1 1 1 1 1      0 0 1 0 0      0 0 1 0 0      1 1 1
+1 1 1 1 1      0 1 1 1 0      0 0 1 0 0      1 1 1
+1 1[1]1 1      1 1[1]1 1      1 1[1]1 1      1 1[1]   origin in the bottom-right corner
+1 1 1 1 1      0 1 1 1 0      0 0 1 0 0
+1 1 1 1 1      0 0 1 0 0      0 0 1 0 0</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. Fit and hit (slides 3 and 6)</h4>
+    <p>Place B on the image. Each pixel of B now sits over one image pixel. Two tests decide everything that follows.</p>
+    <ul>
+      <li><b>Fit</b> (slide 6): "for each of its pixels set to 1, the corresponding image pixel is also 1".</li>
+      <li><b>Hit</b>, or intersect: "at least for one of its pixels set to 1 the corresponding image pixel is also 1".</li>
+      <li>"Zero-valued pixels of the structuring element are ignored." Only the 1s of B are checked.</li>
+      <li>Slide 3 does it with a 2 × 2 element of ones: at A it fits, at B it only hits, at C it does neither.</li>
+      <li>(textbook context) For a symmetric B, erosion writes 1 where B fits and dilation writes 1 where B hits.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Try it: does the element fit, hit, or neither?</h4></div>
+      <p class="fig-lede">The 10 × 12 image of slide 6 with its three 3 × 3 windows. s₁ is the 3 × 3 square of ones, s₂ the cross 010 / 111 / 010. The zoom shows the window. Cells where the element has a 0 are faded, because they are ignored.</p>
+      <div data-viz="fit-steps"></div>
+      <p class="step-note" data-role="fit-note" aria-live="polite"></p>
+      <div data-viz="fit"></div>
+    </figure>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Test</th><th>Window A</th><th>Window B</th><th>Window C</th><th class="l">Why</th></tr></thead>
+        <tbody>
+          <tr><td class="l">s₁ fits</td><td>yes</td><td>no</td><td>no</td><td class="l">B has a 0 in its top-left corner</td></tr>
+          <tr><td class="l">s₂ fits</td><td>yes</td><td>yes</td><td>no</td><td class="l">the cross ignores the corners</td></tr>
+          <tr><td class="l">s₁ hits</td><td>yes</td><td>yes</td><td>yes</td><td class="l">C has one 1, in its bottom-left corner</td></tr>
+          <tr><td class="l">s₂ hits</td><td>yes</td><td>yes</td><td>no</td><td class="l">the cross positions of C are all 0</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. The image as a set, and the set operations (slides 7–11)</h4>
+    <p>The formulas treat A and B as sets of pixel positions. Fig 9.1 and 9.2 (slides 7–8) and Table 9.2 (slide 48) define the tools.</p>
+    <pre class="calc">union          A ∪ B                            logic: A OR B
+intersection   A ∩ B                            A AND B
+complement     Aᶜ = { w | w ∉ A }               NOT A
+difference     A − B = { w | w ∈ A, w ∉ B } = A ∩ Bᶜ
+translation    (A)z = { w | w = a + z, a ∈ A }  "translates the origin of A to point z"
+reflection     B̂ = { w | w = −b, b ∈ B }        "reflects all elements of B about the origin"</pre>
+    <ul>
+      <li>Slide 9 shows the logic operations on binary images: (A) OR (B), (A) XOR (B), and [NOT(A)] AND (B), which keeps the part of B outside A.</li>
+      <li>Slide 10: morphological operations "rely only on the relative ordering of pixel values, not on their numerical values, and therefore are especially suited to the processing of binary images". They also suit gray images whose light transfer function is unknown.</li>
+      <li>Slide 11: "The most basic morphological operations are two: Erosion and Dilation." Uses: removing noise, isolating individual elements and joining disparate elements, finding intensity bumps or holes.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. Dilation: the local maximum (slides 12–14)</h4>
+    <p>Slide B over the image like a convolution kernel. At every position, the pixel under the anchor point gets the largest value that B covers.</p>
+    <ul>
+      <li>Slide 12: "we compute the maximal pixel value overlapped by B and replace the image pixel in the anchor point position with that maximal value". This makes bright regions "grow".</li>
+      <li>Slide 13: dilation "sets a pixel at (i, j) to the maximum over all pixels in the neighborhood centered at (i, j)". It "enlarges bright regions and shrinks dark regions".</li>
+      <li>On a binary image the maximum is 1 as soon as one covered pixel is 1. So the output is 1 where B hits A.</li>
+      <li>The slide says "convoluting", but nothing is multiplied or added. Only the maximum is taken.</li>
+    </ul>
+    <pre class="calc">one row, B = 1 × 3 with the origin in the middle, outside = 0
+position   0 1 2 3 4 5 6 7 8 9 10 11
+row        0 1 1 1 1 0 0 0 1 0 0  0     5 ones
+dilated    1 1 1 1 1 1 0 1 1 1 0  0     9 ones: each run grows by 1 at both ends
+position 5: max(1, 0, 0) = 1      position 6: max(0, 0, 0) = 0</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Erosion: the local minimum (slides 15–19)</h4>
+    <p>Erosion is "the sister of dilation" (slide 18). The same window takes the smallest value instead of the largest.</p>
+    <ul>
+      <li>Slide 15: it erodes "away the boundaries of regions of foreground pixels". "Areas of foreground pixels shrink in size, and holes within those areas become larger." Names: erode, shrink, reduce.</li>
+      <li>Slide 16: its inputs are the image and the structuring element, and the structuring element "determines the precise effect".</li>
+      <li>Slide 18: "compute a local minimum over the area of the kernel". Bright areas get thinner, dark zones get bigger.</li>
+      <li>On a binary image the minimum is 1 only if every covered pixel is 1. So the output is 1 where B fits in A.</li>
+    </ul>
+    <pre class="calc">same row, same B
+row        0 1 1 1 1 0 0 0 1 0 0  0     5 ones
+eroded     0 0 1 1 0 0 0 0 0 0 0  0     2 ones: each run loses 1 at both ends
+position 1: min(0, 1, 1) = 0      position 8: min(0, 1, 0) = 0, the lone pixel vanishes</pre>
+    <ul>
+      <li>Each output pixel reads only the original image. Write the result into a new grid, so a new value never changes a later check.</li>
+      <li>Outside = 0, so with a 3 × 3 element no pixel on the image border survives erosion.</li>
+      <li>When B contains its origin, A ⊖ B ⊆ A ⊆ A ⊕ B: dilation only adds pixels and erosion only removes them.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Try it: slide B over A and compute both outputs</h4></div>
+      <p class="fig-lede">Pick a structuring element and move z over the image. The outline is B placed at z. A ⊕ B gets a 1 at z if B hits A there, and A ⊖ B gets a 1 if B fits. Both outputs are shown complete, with pixel z outlined.</p>
+      <div data-viz="slide-steps"></div>
+      <div data-viz="slide-z"></div>
+      <p class="step-note" data-role="slide-note" aria-live="polite"></p>
+      <div data-viz="slide"></div>
+      <div class="legend">
+        <span><i class="sw-pri"></i>1, also 1 in A</span>
+        <span><i class="sw-ok"></i>added by dilation</span>
+        <span><i class="sw-bad"></i>removed by erosion</span>
+        <span><i class="sw-seg"></i>0</span>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. Dilation in set notation (slides 20–22)</h4>
+    <p class="formula">A ⊕ B = { z | (B̂)<sub>z</sub> ∩ A ≠ ∅ }</p>
+    <ul>
+      <li>Read it in order. Reflect B (B̂), shift the reflection so its origin sits on z, and keep z if it shares at least one pixel with A.</li>
+      <li>Slide 20: "the set of all displacements, z, such that B̂ and A overlap by at least one element". "Set B is referred to as the structuring element in dilation." Table 9.2: dilation "expands" the boundary of A.</li>
+      <li>(textbook context) The flip makes the definition equal to stamping an unflipped copy of B on every pixel of A. For a symmetric B the flip changes nothing.</li>
+      <li>Fig 9.5 (slide 22): broken low-resolution text dilated by the cross 010 / 111 / 010. "Broken segments were joined."</li>
+    </ul>
+    <pre class="calc">Fig 9.4 (slide 21), A = square of side d
+B = square of side d/4     A ⊕ B = square of side d + d/8 + d/8 = 5d/4
+B = d/4 wide, d tall       A ⊕ B = 5d/4 wide and d + d/2 + d/2 = 2d tall</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Erosion in set notation, and duality (slides 23–25)</h4>
+    <p class="formula">A ⊖ B = { z | (B)<sub>z</sub> ⊆ A }          (A ⊖ B)ᶜ = Aᶜ ⊕ B̂</p>
+    <ul>
+      <li>Slide 23: "the set of all points z, such that B, translated by z, is contained in A". Table 9.2: erosion "contracts" the boundary.</li>
+      <li>Slide 23 prints (B̂)<sub>z</sub> in the formula, but its derivation and Table 9.2 use (B)<sub>z</sub>. They agree for a symmetric B. Write (B)<sub>z</sub>.</li>
+      <li>Duality: eroding the object is the same as dilating the background with B̂ and taking the complement.</li>
+    </ul>
+    <pre class="calc">(A ⊖ B)ᶜ = { z | (B)z ⊆ A }ᶜ
+         = { z | (B)z ∩ Aᶜ = ∅ }ᶜ      B inside A means B misses the background
+         = { z | (B)z ∩ Aᶜ ≠ ∅ }       the complement turns = into ≠
+         = Aᶜ ⊕ B̂                       the dilation definition applied to Aᶜ
+(the slide writes the middle step with ⊆; the operator there should be ∩)
+
+Fig 9.6 (slide 24): side d eroded by the d/4 square → side d − d/8 − d/8 = 3d/4
+                    eroded by the d/4 × d element → a horizontal line of length 3d/4</pre>
+    <ul>
+      <li>Fig 9.7 (slide 25): squares of side 1, 3, 5, 7, 9 and 15 eroded by a 13 × 13 square. Only the 15-pixel squares survive, shrunk to 15 − 13 + 1 = 3 pixels. Dilating with the same element restores them to 15 × 15.</li>
+      <li>So erosion followed by dilation removes everything smaller than B and keeps the rest. That is the opening of section 8.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Try it: which squares survive a k × k erosion?</h4></div>
+      <p class="fig-lede">The squares of Fig 9.7, drawn to scale. Grow the square element k. A square of side s survives erosion only if s ≥ k, as a core of side s − k + 1. Dilation by the same element brings every survivor back to its full size.</p>
+      <div data-viz="sq-slider"></div>
+      <div data-viz="sq"></div>
+      <p class="step-note" data-role="sq-note" aria-live="polite"></p>
+      <div class="legend">
+        <span><i class="sw-ter"></i>core left by erosion</span>
+        <span><i class="sw-pri"></i>restored by dilation</span>
+        <span><i class="sw-seg"></i>removed</span>
+        <span><i class="sw-sec"></i>outline: the k × k element</span>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. Opening and closing (slides 26–29)</h4>
+    <p>Erosion removes small things but shrinks everything else. Dilation fills small gaps but fattens everything else. Applying one after the other with the same B undoes the size change and keeps the clean-up.</p>
+    <p class="formula">A ∘ B = (A ⊖ B) ⊕ B          A • B = (A ⊕ B) ⊖ B</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l"></th><th class="l">Opening A ∘ B</th><th class="l">Closing A • B</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Order</td><td class="l">erosion, then dilation (slide 26)</td><td class="l">dilation, then erosion (slide 28)</td></tr>
+          <tr><td class="l">Slide wording</td><td class="l">"can remove small bright spots and connect small dark cracks"</td><td class="l">"can remove small dark spots and connect small bright cracks"</td></tr>
+          <tr><td class="l">Slide 29</td><td class="l">smooths the contour, "break[s] narrow isthmuses", "eliminate[s] thin protrusions"</td><td class="l">"fuses narrow breaks and long thin gulfs, eliminates small holes, and fills gaps in the contour"</td></tr>
+          <tr><td class="l">Against A</td><td class="l">A ∘ B ⊆ A</td><td class="l">A ⊆ A • B</td></tr>
+          <tr><td class="l">Picture</td><td class="l">the union of every copy of B that fits inside A</td><td class="l">everything a copy of B in the background cannot reach</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="calc">worked example, B = 3 × 3 square, outside = 0
+E          E ⊖ B      E ∘ B
+0000000    0000000    0000000
+0111100    0000000    0111100
+0111100    0011000    0111100
+0111110    0011000    0111100     (3,5) sticks out by one pixel: no 3 × 3 copy of B covers it
+0111100    0000000    0111100
+0000000    0000000    0000000
+17 ones    4 ones     16 ones     the opening removed only the protrusion</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Try it: opening and closing with a growing disk</h4></div>
+      <p class="fig-lede">A has two blobs joined by a 2-pixel isthmus, a 1-pixel protrusion, a 3-pixel stub, two noise specks, two holes and a 2-pixel gulf. B is a digital disk of radius r. Switch between opening and closing, then grow r and watch which defects go.</p>
+      <div data-viz="disk-steps"></div>
+      <div data-viz="disk-slider"></div>
+      <p class="step-note" data-role="disk-note" aria-live="polite"></p>
+      <div data-viz="disk"></div>
+      <div class="legend">
+        <span><i class="sw-pri"></i>in A and in the result</span>
+        <span><i class="sw-bad"></i>removed by the opening</span>
+        <span><i class="sw-ok"></i>added by the closing</span>
+        <span><i class="sw-seg"></i>background</span>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. The rolling ball, properties, and a noise filter (slides 30–35)</h4>
+    <ul>
+      <li>Fig 9.8 (slide 30): roll B along the inner boundary of A. The opening is everything B covers, so B cannot enter thin parts and sharp corners get rounded.</li>
+      <li>Fig 9.9 (slide 31): roll B along the outer boundary. The closing fills every place B cannot get into, such as narrow gulfs.</li>
+      <li>Fig 9.10 (slides 32–33), disk element. A ⊖ B breaks the narrow bridge into two pieces and ⊕ B restores their size with rounded corners. A ⊕ B fuses the gaps and ⊖ B restores the size while the narrow gulf stays filled.</li>
+      <li>Fig 9.11 (slide 35) cleans a noisy fingerprint with B = 3 × 3 of 1s. A ⊖ B removes the background noise, ⊕ B restores the ridges, then ⊕ B and ⊖ B close the breaks in the ridges. The filter is an opening followed by a closing, (A ∘ B) • B.</li>
+      <li>Slides 27–28 show a phantom: the opening removes the thin bright ring except its thick top part, and the closing fills the small dark gap in the ring.</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Property (slide 34)</th><th class="l">Opening</th><th class="l">Closing</th></tr></thead>
+        <tbody>
+          <tr><td class="l">result against A</td><td class="l">A ∘ B ⊆ A</td><td class="l">A ⊆ A • B</td></tr>
+          <tr><td class="l">keeps order</td><td class="l">C ⊆ D ⇒ C ∘ B ⊆ D ∘ B</td><td class="l">C ⊆ D ⇒ C • B ⊆ D • B</td></tr>
+          <tr><td class="l">idempotent: twice = once</td><td class="l">(A ∘ B) ∘ B = A ∘ B</td><td class="l">(A • B) • B = A • B</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. The hit-or-miss transform (slides 36–37)</h4>
+    <p>Erosion finds every place where a shape fits, including inside bigger objects. To find the shape itself, also demand that the background around it is empty.</p>
+    <p class="formula">A ⊛ B = (A ⊖ X) ∩ [Aᶜ ⊖ (W − X)],   B = (X, W − X)</p>
+    <ul>
+      <li>X is the shape to find. W is a small window around X. W − X is the local background of X, the ring around it.</li>
+      <li>A ⊖ X marks where X fits in the foreground. Aᶜ ⊖ (W − X) marks where the ring fits in the background. A point in both is an exact copy of X.</li>
+      <li>Table 9.2 (slide 49): A ⊛ B = (A ⊖ B₁) ∩ (Aᶜ ⊖ B₂) = (A ⊖ B₁) − (A ⊕ B̂₂), the points where "B₁ found a match ('hit') in A and B₂ found a match in Aᶜ".</li>
+      <li>Fig 9.12: A = X ∪ Y ∪ Z, and the result is the single point at the origin of X.</li>
+      <li>As a template: 1 = must be foreground, 0 = must be background, x = don't care. 000 / 010 / 000 finds isolated pixels.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>Finding exact 1 × 3 bars with hit-or-miss</h4></div>
+      <p class="fig-lede">X is a 1 × 3 bar and W a 3 × 5 window, so W − X is a ring of 12 background pixels. Pixels outside the image count as background. Step through the two erosions and their intersection. The faded blue cells are A, for reference.</p>
+      <div data-viz="hmt-steps"></div>
+      <p class="step-note" data-role="hmt-note" aria-live="polite"></p>
+      <div data-viz="hmt"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. Boundary extraction (slides 38–39)</h4>
+    <p class="formula">β(A) = A − (A ⊖ B),   B = 3 × 3 square of 1s</p>
+    <ul>
+      <li>Erosion removes exactly the outer layer of A. Subtracting the eroded set leaves that layer, the boundary, 1 pixel thick.</li>
+      <li>A pixel of A stays in A ⊖ B only if its whole 3 × 3 neighbourhood is 1. Every other pixel of A is boundary.</li>
+      <li>Outside = 0, so every pixel of A on the image border is boundary. Fig 9.14 (slide 39) applies it to a silhouette.</li>
+    </ul>
+    <pre class="calc">Fig 9.13 (slide 38)
+A                       A ⊖ B                   β(A) = A − (A ⊖ B)
+1 1 1 0 1 1 1 1 1 0     0 0 0 0 0 0 0 0 0 0     1 1 1 0 1 1 1 1 1 0
+1 1 1 0 1 1 1 1 1 0     0 1 0 0 0 1 1 1 0 0     1 0 1 0 1 0 0 0 1 0
+1 1 1 1 1 1 1 1 1 1     0 1 0 0 0 1 1 1 0 0     1 0 1 1 1 0 0 0 1 1
+1 1 1 1 1 1 1 1 1 1     0 1 1 1 1 1 1 1 1 0     1 0 0 0 0 0 0 0 0 1
+1 1 1 1 1 1 1 1 1 1     0 0 0 0 0 0 0 0 0 0     1 1 1 1 1 1 1 1 1 1
+46 ones                 16 ones                 30 ones
+(2,2) is not in A ⊖ B: its window contains (1,3) = 0</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. Region filling and connected components (slides 40–44)</h4>
+    <p>Both algorithms grow a set from one seed pixel p by repeated dilation and cut the growth with a mask after every step. They stop when a step changes nothing.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l"></th><th class="l">Region filling (slides 40–42)</th><th class="l">Connected components (slides 43–44)</th></tr></thead>
+        <tbody>
+          <tr><td class="l">step</td><td class="l">X<sub>k</sub> = (X<sub>k−1</sub> ⊕ B) ∩ Aᶜ</td><td class="l">X<sub>k</sub> = (X<sub>k−1</sub> ⊕ B) ∩ A</td></tr>
+          <tr><td class="l">A is</td><td class="l">the boundary of the region</td><td class="l">the image</td></tr>
+          <tr><td class="l">X₀ = p</td><td class="l">"the initial point", inside the boundary</td><td class="l">a pixel of the object</td></tr>
+          <tr><td class="l">B</td><td class="l">the symmetric 3 × 3 cross</td><td class="l">the 3 × 3 square (8-connectivity)</td></tr>
+          <tr><td class="l">the mask keeps</td><td class="l">background, so growth stops at the boundary</td><td class="l">object, so growth follows the object</td></tr>
+          <tr><td class="l">answer</td><td class="l">X<sub>k</sub> ∪ A, the filled region</td><td class="l">X<sub>k</sub>, the component that contains p</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>(textbook context) The cross grows only up, down, left and right, so the fill cannot slip through a diagonal step of the boundary. With the 3 × 3 square, the Fig 9.15 fill leaks out and floods all 52 background pixels, inside and outside the region.</li>
+      <li>Fig 9.16 (slide 42) fills the holes inside white rings, first from one seed, then from a seed in every hole.</li>
+      <li>Fig 9.17 (slide 43), seed (6,3): the component grows 1, 6, 11, 15, 18, 24 pixels, and X₆ = X₅ stops it at 24.</li>
+      <li>Fig 9.18 (slide 44): an X-ray of a chicken fillet, thresholded, eroded with a 5 × 5 square, then its components counted. 15 components; the largest, 743 and 674 pixels, are bone fragments.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. Thinning, thickening, skeletons and pruning (slides 45–51, 57–58)</h4>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Operation</th><th class="l">Formula</th><th class="l">What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Thinning (slide 45)</td><td class="l">A ⊗ B = A − (A ⊛ B) = A ∩ (A ⊛ B)ᶜ</td><td class="l">deletes the pixels where a hit-or-miss template matches</td></tr>
+          <tr><td class="l">Thinning, symmetric</td><td class="l">A ⊗ {B} = ((…((A ⊗ B¹) ⊗ B²)…) ⊗ Bⁿ)</td><td class="l">B¹ to B⁸ = one template in 45° turns; repeat until nothing changes</td></tr>
+          <tr><td class="l">Thickening (slide 50)</td><td class="l">A ⊙ B = A ∪ (A ⊛ B)</td><td class="l">adds the matched pixels; thinning with 0s and 1s reversed</td></tr>
+          <tr><td class="l">Skeleton (slides 47, 51)</td><td class="l">S(A) = ∪ S<sub>k</sub>(A), S<sub>k</sub>(A) = (A ⊖ kB) − (A ⊖ kB) ∘ B</td><td class="l">centres of the maximum disks that fit in A; A = ∪ (S<sub>k</sub>(A) ⊕ kB)</td></tr>
+          <tr><td class="l">Pruning (slides 51, 58)</td><td class="l">X₁ = A ⊗ {B}, X₂ = ∪ (X₁ ⊛ Bᵏ), X₃ = (X₂ ⊕ H) ∩ A, X₄ = X₁ ∪ X₃</td><td class="l">"removes small spurs or extraneous branches from the skeleton"</td></tr>
+          <tr><td class="l">Convex hull (slide 49)</td><td class="l">X<sup>i</sup><sub>k</sub> = (X<sup>i</sup><sub>k−1</sub> ⊛ Bⁱ) ∪ A, i = 1..4</td><td class="l">iterate to D<sup>i</sup>; (textbook context) C(A) = ∪ D<sup>i</sup></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>B¹ = 000 / x1x / 111 (Fig 9.21, slide 46). It matches a pixel with background above and foreground below, so B¹ peels the top layer, B² the top-right one, and so on round the object.</li>
+      <li>(A ⊖ kB) means k erosions in a row. K is the last step before A erodes to the empty set.</li>
+      <li>Slide 57: skeletonization "iteratively erodes the image until the objects are reduced to a minimal, skeletal form", "while preserving their connectivity".</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>14. Gray-scale morphology, gradient and top hat (slides 52–56)</h4>
+    <p>On a gray image the same window takes the real maximum or minimum of the gray levels under B.</p>
+    <ul>
+      <li>Dilation (local max) makes the image brighter and shrinks dark details. Erosion (local min) makes it darker and shrinks bright details (Figs 9.29, 9.31, slides 52–53).</li>
+      <li>(textbook context) With a flat element b: [f ⊕ b](x, y) = max f(x − s, y − t) and [f ⊖ b](x, y) = min f(x + s, y + t), over (s, t) in b.</li>
+      <li>Morphological gradient (slide 55): "the difference between the dilation and erosion", g = (f ⊕ b) − (f ⊖ b). It is large where the gray level changes, so it highlights edges.</li>
+      <li>Top hat (slide 56) extracts "small elements and details". White top hat = f − (f ∘ b) keeps bright details narrower than b. Black top hat = (f • b) − f keeps dark ones.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>One gray row: max, min, gradient and top hats</h4></div>
+      <p class="fig-lede">f = 10 50 20 80 30 30 90 40, window of 3, border pixels replicated. The pale bars are f. Step through the operations; the green band is the difference for the gradient and the top hats.</p>
+      <div data-viz="gray-steps"></div>
+      <p class="step-note" data-role="gray-note" aria-live="polite"></p>
+      <div data-viz="gray"></div>
+      <pre class="calc" data-role="gray-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>Mistakes that cost marks</h4>
+    <ul>
+      <li>Swapping the order. Opening = erosion first, (A ⊖ B) ⊕ B. Closing = dilation first, (A ⊕ B) ⊖ B. "Difference between dilation and erosion" is the gradient, not either of them.</li>
+      <li>Swapping the effects. Opening removes small bright spots and thin protrusions and breaks isthmuses. Closing removes small dark spots, fills small holes and fuses narrow breaks.</li>
+      <li>Writing { z | (B̂)<sub>z</sub> ∩ A = ∅ } for dilation. That is everything dilation does not reach. Dilation needs ≠ ∅, erosion needs (B)<sub>z</sub> ⊆ A.</li>
+      <li>Forgetting that outside = 0. Border pixels then never survive a 3 × 3 erosion, and a closing can lose pixels at the image border.</li>
+      <li>Updating the image in place while sliding B. Every output pixel must read the original A.</li>
+      <li>Region filling with ∩ A or connected components with ∩ Aᶜ. Filling keeps the background and ends with X<sub>k</sub> ∪ A.</li>
+      <li>Gradient as erosion − dilation (it would be negative), or the white top hat as opening − f. Correct: g = (f ⊕ b) − (f ⊖ b), white = f − (f ∘ b), black = (f • b) − f.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Cheat sheet</h4>
+    <div data-viz="cheat"></div>
+  </div>
+
+  <div class="sol-part">
+    <h4>How to write it on the exam</h4>
+    <pre class="calc">"What is X? Define it."  (dilation, erosion, opening, closing)
+  1. Morphology = "a collection of non-linear operations related to the shape or
+     morphology of features in an image"; B = small binary matrix with an origin.
+  2. Formula: A ⊕ B = { z | (B̂)z ∩ A ≠ ∅ }    A ⊖ B = { z | (B)z ⊆ A }
+              A ∘ B = (A ⊖ B) ⊕ B          A • B = (A ⊕ B) ⊖ B
+  3. In words: local max / local min; hit / fit.
+  4. Effect in slide words (bright regions grow; foreground shrinks, holes grow;
+     opening removes small bright spots; closing removes small dark spots).
+  5. If asked: duality (A ⊖ B)ᶜ = Aᶜ ⊕ B̂, with the one-line proof.
+
+"Apply dilation / erosion to this image."
+  1. Rule: B symmetric, so B̂ = B; output 1 where B hits (dilation) / fits (erosion).
+  2. Convention: outside = 0, rows and columns from 0, origin = centre.
+  3. Working: name the pixels that change and the pixel that decides it,
+     e.g. "(2,1) → 0 because (3,0) = 0".
+  4. Result grid, with the count of 1s.
+  5. Check: A ⊖ B ⊆ A ⊆ A ⊕ B.
+
+"Apply opening / closing."
+  1. Step 1 grid (A ⊖ B for opening, A ⊕ B for closing).
+  2. Step 2 grid, the result.
+  3. What changed and why: protrusion, noise pixel, isthmus removed / hole, gap filled.
+  4. Check: A ∘ B ⊆ A, or A ⊆ A • B.
+
+"Extract the boundary."
+  β(A) = A − (A ⊖ B) with B = 3 × 3: A ⊖ B grid, then the pixels of A not in it.</pre>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Dilation A ⊕ B = { z | (B̂)<sub>z</sub> ∩ A ≠ ∅ }, local max, bright regions grow. Erosion A ⊖ B = { z | (B)<sub>z</sub> ⊆ A }, local min, foreground shrinks and holes grow (erode, shrink, reduce).</li>
+      <li>Opening = erosion then dilation, removes small bright spots, thin protrusions, isthmuses. Closing = dilation then erosion, removes small dark spots, fills holes and narrow breaks.</li>
+      <li>Duality (A ⊖ B)ᶜ = Aᶜ ⊕ B̂. Properties: A ∘ B ⊆ A ⊆ A • B, both idempotent.</li>
+      <li>Fit / hit, slide 6 window 011 / 111 / 111: 3 × 3 square fits no, hits yes; the cross fits yes.</li>
+      <li>3 × 3 hand rules: dilation = some pixel of the 3 × 3 window is 1; erosion = all 9 are 1; outside = 0.</li>
+      <li>Sizes: side d with a d/4 square → 5d/4 after dilation, 3d/4 after erosion. 13 × 13 erosion of Fig 9.7: only the 15-pixel squares survive, as 3 × 3.</li>
+      <li>Hit-or-miss A ⊛ B = (A ⊖ X) ∩ [Aᶜ ⊖ (W − X)] finds X where X fits in A and its ring fits in Aᶜ. Boundary β(A) = A − (A ⊖ B).</li>
+      <li>Region filling X<sub>k</sub> = (X<sub>k−1</sub> ⊕ B) ∩ Aᶜ, answer X<sub>k</sub> ∪ A; components use ∩ A.</li>
+      <li>Gray 1D, window 3: f = 10 50 20 80 30 30 90 40 → dilation 50 50 80 80 80 90 90 90, erosion 10 10 20 20 30 30 30 40, gradient 40 40 60 60 50 60 60 50, white top hat 0 30 0 50 0 0 50 0.</li>
+    </ul>
+    <p class="source">Slides: L10 p.2–58 · Notes: 10_Week5_Morphology.md</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lecture</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

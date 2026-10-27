@@ -1,0 +1,452 @@
+<article class="q" id="topic7" data-part="tp" data-num="7" data-topic="Pixels and color">
+  <div class="q-head">
+    <p class="eyebrow">Lecture 7 · Week 4 · 8 sample questions</p>
+    <h3 class="q-title">Pixel Relationships and Color from Zero</h3>
+    <p class="fig-lede">An image is a grid of numbers. The first half of this lecture asks how pixels relate to each other: who is a neighbor, when two pixels are connected, and how far apart they are. The second half asks what color is: how light becomes three numbers X, Y, Z, and how two ratios x and y place a color on the CIE chromaticity diagram. It builds on Lecture 6's pixel grid and the eye.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Words you need</h4>
+    <div class="why-grid">
+      <div class="mini"><h5>Pixel f(x, y)</h5><p>One picture element, the value at row x and column y. The origin (0, 0) is the top-left; x runs down, y runs right.</p></div>
+      <div class="mini"><h5>V</h5><p>The set of gray values allowed to connect pixels. In a binary image V = {1}.</p></div>
+      <div class="mini"><h5>N<sub>4</sub>, N<sub>D</sub>, N<sub>8</sub></h5><p>The 4 pixels sharing an edge with p, the 4 sharing only a corner, and all 8 together.</p></div>
+      <div class="mini"><h5>Adjacent (4, 8, m)</h5><p>Two pixels with values in V that are neighbors under the chosen rule. m (mixed) drops a diagonal link when a shared 4-neighbor already joins them.</p></div>
+      <div class="mini"><h5>Path, length n</h5><p>A chain of distinct pixels, each adjacent to the one before. n is the number of steps.</p></div>
+      <div class="mini"><h5>D<sub>4</sub>, D<sub>8</sub>, D<sub>e</sub></h5><p>City-block |Δx| + |Δy|, chessboard max(|Δx|, |Δy|), Euclidean √(Δx² + Δy²). Unit: pixels.</p></div>
+      <div class="mini"><h5>Wavelength λ</h5><p>Which pure spectral color a light is, in nanometres (nm). The CIE experiments used 400 to 700 nm.</p></div>
+      <div class="mini"><h5>Tristimulus X, Y, Z</h5><p>Three non-negative numbers that describe any visible color. Y is the luminance (brightness).</p></div>
+      <div class="mini"><h5>Chromaticity x, y</h5><p>x = X/(X+Y+Z), y = Y/(X+Y+Z). The color's quality with the brightness divided out.</p></div>
+      <div class="mini"><h5>Reference white, purity</h5><p>A chosen white point (C, D65, E). Dominant wavelength names the hue; purity, 0 to 1, says how far the color is from white.</p></div>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. Where a pixel lives: coordinates and storage (slides 3–4)</h4>
+    <ul>
+      <li>Origin (0, 0) at the top-left. <b>x is the row</b> (0 … M−1, going down) and <b>y is the column</b> (0 … N−1, going right). School graphs do it the other way round.</li>
+      <li>"An image's element-wise representation treats each pixel independently as an individual data point, whereas its matrix representation structures the entire grid of pixels as a unified mathematical object."</li>
+      <li>Memory is one long line, so the grid is flattened: "for performance reasons we usually do not store image in the matrix fashion ... in Embedded Systems." Matlab is column-major (Lecture 8).</li>
+    </ul>
+    <pre class="calc">M = 3 rows, N = 4 columns, where is f[1][2]?   (index formulas: textbook context)
+
+row-major     f[0][0] f[0][1] f[0][2] f[0][3] f[1][0] f[1][1] f[1][2]
+position         0       1       2       3       4       5       6     index = i·N + j = 1·4 + 2 = 6
+
+column-major  f[0][0] f[1][0] f[2][0] f[0][1] f[1][1] f[2][1] f[0][2] f[1][2]
+position         0       1       2       3       4       5       6       7     index = j·M + i = 2·3 + 1 = 7</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. Light as energy, light as seen (slides 5–9)</h4>
+    <ul>
+      <li><b>Radiometry</b>: light is "a traveling form of energy", unit joule (J). It measures radiation of all optical wavelengths; power is in watts (W). A source has a position, a direction and a wavelength λ. The smallest unit of light is a photon.</li>
+      <li>Frequency does not change when light enters another medium (its speed cₙ and λ do). A photon carries a fixed energy q.</li>
+      <li><b>Photometry</b> is "measurement of light in terms of visual response it produces": the visible spectrum weighted by the eye. It is a branch of radiometry.</li>
+      <li>Photopic (day) vision peaks at <b>555 nm</b> (yellow-green) and drops to half at 510 and 610 nm. Scotopic (night) vision peaks at <b>507 nm</b> (blue-green) and works at lower intensities.</li>
+    </ul>
+    <p class="formula">f = cₙ / λ        q = h·c / λ        (h = 6.626 × 10⁻³⁴ J·s, c = 3 × 10⁸ m/s)</p>
+    <pre class="calc">λ = 555 nm = 555 × 10⁻⁹ m
+f = 3 × 10⁸ / 555 × 10⁻⁹ = 5.41 × 10¹⁴ Hz
+q = 6.626 × 10⁻³⁴ × 3 × 10⁸ / 555 × 10⁻⁹ = 3.58 × 10⁻¹⁹ J</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. Color, gray, and three words for amount of light (slides 10–17)</h4>
+    <ul>
+      <li>Color is a photometric quantity and a signal (a ripe banana, a red dawn sky). An object's color is the light it reflects. Balanced reflection at all visible wavelengths looks white; reflection favoring a limited range gives chromatic light.</li>
+      <li><b>Achromatic</b> light is "void of color". Its only attribute is intensity, and achromatic images are gray scale images. Slide 12 calls it "monochromatic (achromatic)", but on slide 67 monochromatic means a single wavelength.</li>
+      <li>The principal energy source for images is the electromagnetic (EM) spectrum; synthetic images are made by computer. The two tasks are better pictures for human interpretation, and image data for storage, transmission and autonomous machine perception.</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Term</th><th class="l">Slide definition</th><th class="l">Unit</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Radiance</td><td class="l">total amount of energy that flows from the light source</td><td class="l">watts (W)</td></tr>
+          <tr><td class="l">Luminance</td><td class="l">amount of energy an observer perceives from a light source</td><td class="l">lumens (lm)</td></tr>
+          <tr><td class="l">Brightness</td><td class="l">subjective descriptor of light perception, practically impossible to measure</td><td class="l">none</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. The image as a light function, and its size (slides 18–20)</h4>
+    <ul>
+      <li>An image is a 2D light-intensity function f(x, y). Light is energy, so 0 &lt; f(x, y) &lt; ∞.</li>
+      <li>f has two parts: illumination i(x, y), the source light falling on the scene, and reflectance r(x, y), the light the objects reflect. f = i · r with 0 &lt; r &lt; 1 (textbook context, Lecture 6).</li>
+      <li>Resolution depends on the sampling M × N and the gray levels. Storage is B = M × N × k bits with L = 2<sup>k</sup> levels. The slide writes K "gray scale level"; in this formula it must be the bits per pixel k (textbook context).</li>
+    </ul>
+    <pre class="calc">1024 × 1024, k = 8:  B = 8,388,608 bits = 1,048,576 bytes,  L = 2⁸ = 256
+ 512 ×  512, k = 8:  B = 2,097,152 bits =   262,144 bytes</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Neighbors of a pixel (slide 21)</h4>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Set</th><th class="l">Pixels for p = (x, y)</th><th class="l">Count</th></tr></thead>
+        <tbody>
+          <tr><td class="l">N<sub>4</sub>(p), four neighbors</td><td class="l">(x+1, y), (x−1, y), (x, y+1), (x, y−1)</td><td class="l">4</td></tr>
+          <tr><td class="l">N<sub>D</sub>(p), diagonal neighbors</td><td class="l">(x+1, y+1), (x+1, y−1), (x−1, y+1), (x−1, y−1)</td><td class="l">4</td></tr>
+          <tr><td class="l">N<sub>8</sub>(p), eight neighbors</td><td class="l">N<sub>4</sub>(p) ∪ N<sub>D</sub>(p)</td><td class="l">8</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Neighbors depend only on coordinates, never on pixel values. For p = (4, 7): N<sub>4</sub> = (5, 7), (3, 7), (4, 8), (4, 6).</li>
+      <li>A pixel on the image border has some neighbor positions outside the image (textbook context).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Try it: N<sub>4</sub> is the cross, N<sub>D</sub> the corners</h4></div>
+      <p class="fig-lede">Each cell shows its (row, column). Lit cells also show their offset from p = (x, y). The last button moves p into the corner.</p>
+      <div data-viz="nb-steps"></div>
+      <p class="step-note" data-role="nb-note" aria-live="polite"></p>
+      <div data-viz="nb"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. Connectivity: 4, 8 and m (slides 22–24, 26)</h4>
+    <ul>
+      <li>V is "the set of gray-level values used to define connectivity". Both pixels must have values in V, whatever the rule.</li>
+      <li><b>4-connectivity</b>: q is in N<sub>4</sub>(p). <b>8-connectivity</b>: q is in N<sub>8</sub>(p) (slide 22 prints N<sub>4</sub>(p) here, a copy-paste typo).</li>
+      <li>"A pixel p is adjacent to a pixel q if they are connected" (slide 26).</li>
+      <li>8-connectivity can join the same two pixels in two ways, directly and around a corner. "m-connectivity eliminates the multiple path connections that arises in 8-connectivity" (slide 24).</li>
+    </ul>
+    <p class="formula">p, q (values in V) are m-connected if  (1) q ∈ N₄(p),  or  (2) q ∈ N_D(p) and N₄(p) ∩ N₄(q) has no pixel whose value is in V</p>
+    <pre class="calc">diagonal pair p = (0,2), q = (1,1), V = {1}:
+N₄(p) ∩ N₄(q) = {(0,1), (1,2)}  = the other two corners of their 2 × 2 square
+values 1 and 0  →  (0,1) is in V  →  NOT m-adjacent (p already reaches q through (0,1))
+
+diagonal pair p = (1,4), q = (2,3):
+N₄(p) ∩ N₄(q) = {(1,3), (2,4)},  values 0 and 0  →  none in V  →  m-adjacent</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Try it: the same image under 4-, 8- and m-adjacency</h4></div>
+      <p class="fig-lede">V = {1}. Dots are the pixels in V, lines join adjacent pairs. Switch rules and watch the pieces and the routes from (0,2) to (1,1). A red dashed line is a diagonal that m-adjacency drops.</p>
+      <div data-viz="adj-steps"></div>
+      <p class="step-note" data-role="adj-note" aria-live="polite"></p>
+      <div data-viz="adj"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Links</span><span class="v pri" data-role="adj-links"></span><span class="sub">adjacent pairs</span></div>
+        <div class="stat"><span class="label">Pieces</span><span class="v ter" data-role="adj-pieces"></span><span class="sub">connected sets of 1s</span></div>
+        <div class="stat"><span class="label">Routes</span><span class="v sec" data-role="adj-routes"></span><span class="sub">paths from (0,2) to (1,1)</span></div>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Paths, adjacent regions and boundaries (slides 25, 27–29)</h4>
+    <ul>
+      <li>A digital path from p = (x, y) to q = (s, t) is "a sequence of distinct pixels" (x₀, y₀), …, (xₙ, yₙ), each adjacent to the one before. "n is the length of the path", the number of steps: a path through 5 pixels has n = 4. It is a 4-, 8- or m-path by the adjacency used (textbook context).</li>
+      <li>"Two image area subsets R1 and R2 are adjacent if some pixels in R1 is adjacent to some pixels R2." In the slide 27 figure the only link is one diagonal pair, so the regions are adjacent under 8-adjacency and not under 4-adjacency.</li>
+      <li>A region pixel is a boundary pixel if it is adjacent to the background (textbook context). Slide 28: the circled pixel has four 4-neighbors equal to 1 and one diagonal 0, so "the circle point is part of the boundary ... only if 8-adjacency ... is used".</li>
+      <li>Slide 29, a one-pixel-wide line: "The inner boundary of the 1-valued region does not form a closed path, but its outer boundary does." The line's own pixels run down and stop; the ring of background around it comes back to its start.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. Distance measures (slides 30–33)</h4>
+    <p>D is a distance function, or metric, if (a) D(p, q) ≥ 0 and is 0 only when p = q, (b) D(p, q) = D(q, p), and (c) D(p, z) ≤ D(p, q) + D(q, z): a detour is never shorter.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Metric</th><th class="l">Formula, p = (x, y), q = (s, t)</th><th class="l">D ≤ r forms</th><th class="l">D = 1 is</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Euclidean D<sub>e</sub> (p.31)</td><td class="l">√((x − s)² + (y − t)²)</td><td class="l">a disk (textbook context)</td><td class="l">N<sub>4</sub></td></tr>
+          <tr><td class="l">City-block D<sub>4</sub> (p.32)</td><td class="l">|x − s| + |y − t|</td><td class="l">a diamond</td><td class="l">N<sub>4</sub></td></tr>
+          <tr><td class="l">Chessboard D<sub>8</sub> (p.33)</td><td class="l">max(|x − s|, |y − t|)</td><td class="l">a square</td><td class="l">N<sub>8</sub></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="calc">p = (3, 1), q = (7, 4):   |x − s| = 4,  |y − t| = 3
+D₄ = 4 + 3 = 7        D₈ = max(4, 3) = 4        Dₑ = √(16 + 9) = 5.00
+check  D₈ ≤ Dₑ ≤ D₄   →   4 ≤ 5 ≤ 7</pre>
+    <ul>
+      <li>D<sub>4</sub> moves like a taxi on a street grid, one row or one column per step. D<sub>8</sub> moves like a chess king, so a diagonal step fixes a row and a column at once and the larger difference is the whole cost.</li>
+      <li>All three use only coordinates and ignore V (textbook context).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Try it: move q and count the steps</h4></div>
+      <p class="fig-lede">p = (1, 1) is fixed. Each number is the step at which the walk reaches that pixel; the number in q is the distance. The Euclidean panel draws the straight line and its two legs.</p>
+      <div data-viz="dist-s"></div>
+      <div data-viz="dist-t"></div>
+      <div data-viz="dist"></div>
+      <p class="step-note" data-role="dist-note" aria-live="polite"></p>
+    </figure>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Try it: grow r to see the disk, the diamond and the square</h4></div>
+      <p class="fig-lede">Shaded pixels have D ≤ r from the center; dark ones sit exactly on D = r and show their distance. r = 2 is the slide's contour figure.</p>
+      <div data-viz="ring-slider"></div>
+      <div data-viz="ring"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. m-distance: when pixel values decide the length (slide 34)</h4>
+    <p>D<sub>4</sub> and D<sub>8</sub> ignore values. The m-distance is the length of the shortest m-path, so it "depends on values of the pixels along the path". Slide 34: only value 1 connects; find the m-distance from p to p4.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Case</th><th class="l">p1, p3</th><th class="l">Shortest m-path</th><th class="l">D<sub>m</sub></th><th class="l">8-distance</th></tr></thead>
+        <tbody>
+          <tr><td class="l">A</td><td class="l">0, 0</td><td class="l">p, p2, p4</td><td class="l">2</td><td class="l">2</td></tr>
+          <tr><td class="l">B</td><td class="l">0, 1</td><td class="l">p, p2, p3, p4</td><td class="l">3</td><td class="l">2</td></tr>
+          <tr><td class="l">C</td><td class="l">1, 1</td><td class="l">p, p1, p2, p3, p4</td><td class="l">4</td><td class="l">2</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Arithmetic and logic on whole images (slides 35–36)</h4>
+    <ul>
+      <li>"Image arithmetic involves images are same size", and works pixel by pixel: s = f + g, d = f − g, p = f × g, v = f ÷ g, each at (x, y).</li>
+      <li>8-bit results leave 0 … 255 and are clipped (textbook context, more in Lecture 9).</li>
+      <li>Logic (slide 36): "Black represent binary 0 and white represent binary 1", foreground is white. NOT(A), A AND B, A OR B, A AND [NOT B], A XOR B. AND keeps the overlap, OR the union, XOR the union without the overlap, A AND NOT B removes B from A.</li>
+    </ul>
+    <pre class="calc">f = |100 200|   g = |60 100|   f + g = |160 300|   clipped |160 255|   (uint8 wrap would give 44 and 4)
+    | 50 250|       |50  10|           |100 260|           |100 255|</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. Color: hue, value, saturation and Munsell (slides 37–41, 66)</h4>
+    <ul>
+      <li>A color image has a separate channel per color (RGB). Some models, such as HSI, separate the color information from the brightness.</li>
+      <li><b>Munsell (1915)</b>: "equal perceptual steps in Hue Saturation Value". 10 principal hues R, YR, Y, GY, G, BG, B, PB, P, RP, each split into 10. <b>Value 0 … 10</b> (dark to pure white), <b>Chroma 0 … 20</b> (neutral to saturated). 5YR 8/4 reads hue 5YR, value 8, chroma 4 (textbook context).</li>
+      <li>Three qualities of color (slide 39): <b>hue</b> (what color?), <b>value</b> (lightness or darkness), <b>intensity/saturation</b> (its level). A 2D color wheel shows hue and brightness; a 3D color solid adds saturation (slide 40).</li>
+      <li>Slide 66 as a double cone: white at the top, black at the bottom, brightness up the axis, hue is the angle, saturation the distance from the axis (pink to bright red).</li>
+      <li>Representations (slide 41): CIE XYZ, CIE chromaticity space, HSL, HSV, LUV, CIE Lab (L* lightness; a*, b* for red, green, blue, yellow).</li>
+      <li>"Chromaticity is an objective specification of the quality of a color regardless of its luminance": two parameters, hue and colorfulness (saturation, chroma, intensity or excitation purity).</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. CIE XYZ: three positive numbers for any color (slides 42–47, 50–53)</h4>
+    <ul>
+      <li>Trichromatic theory: "every color can be represented by 3 values", so visible colors form a 3D space. In 1931 the CIE defined XYZ tristimulus values that "can describe any visible color", based on color matching experiments.</li>
+      <li>Matching (textbook context): an observer sees a test light of one wavelength next to a mix of three fixed primaries and turns the three amounts until both look the same. The amounts against λ are the color matching functions (CMFs).</li>
+      <li><b>CIE-RGB</b>: Wright (1928–30) and Guild (1931), 17 observers, a 2° field, test lights 400–700 nm, primaries <b>700 nm (R), 546.1 nm (G), 435.8 nm (B)</b>.</li>
+      <li>Between about 440 and 540 nm no positive mix matches; red has to be added to the test side, which counts as negative. So <b>r̄(λ) goes negative</b>. XYZ is "a linear transformation away from the observed data" that removes this.</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">CIE criterion (slide 45)</th><th class="l">What it buys</th></tr></thead>
+        <tbody>
+          <tr><td class="l">1. x̄, ȳ, z̄ non-negative over the visible range</td><td class="l">any color = 3 positive values</td></tr>
+          <tr><td class="l">2. equal amounts of the primaries give white</td><td class="l">X = Y = Z for equal-energy light</td></tr>
+          <tr><td class="l">3. ȳ matches the eye's luminous-efficiency function</td><td class="l">Y alone is the brightness</td></tr>
+          <tr><td class="l">4. primaries as tight as possible around the visible colors</td><td class="l">little wasted space</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Value (slide 47)</th><th class="l">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Y, luminance</td><td class="l">perceived brightness; follows the eye's sensitivity to green and yellow</td></tr>
+          <tr><td class="l">X, red mix</td><td class="l">a mix of response curves chosen mathematically to keep values positive</td></tr>
+          <tr><td class="l">Z, blue response</td><td class="l">roughly the short-wavelength (blue) stimulation</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Slide 46: the luminous efficiency peaks near 555 nm. Protanopia shifts the peak to about 540 nm with almost no sensitivity above 670 nm; deuteranopia shifts it slightly, to about 560 nm.</li>
+      <li>Slide 53: z̄ peaks about 1.78 near 445 nm, ȳ is 1.0 at 555 nm, x̄ peaks about 1.06 near 600 nm with a small lobe near 445 nm. None goes below 0.</li>
+      <li>Slide 51: cones (L, M, S) also give three numbers, equal for metamers (lights that look the same), so XYZ and LMS are one 3 × 3 matrix apart. Slide 50: a colorimeter measures absorbance and transmittance through a liquid sample under a fixed illuminant.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. From CIE-RGB to XYZ: the matrix (slides 48–49, 52)</h4>
+    <ul>
+      <li>Slide 48: three new primaries C<sub>r</sub>, C<sub>g</sub>, C<sub>b</sub> are placed outside every real color so that all amounts come out positive. The line C<sub>b</sub>C<sub>r</sub> is the alychne, the line of zero luminance, so only Y carries brightness. Equal energy x = y = z = 1/3 fixes the last side.</li>
+      <li>Every row of the matrix sums to 1, which is criterion 2. Dividing by b₂₁ = 0.17697 makes the red primary give Y = 1. Slide 52 shows the same matrix rounded and without the 1/0.17697.</li>
+    </ul>
+    <pre class="calc">|X|             | 0.49     0.31     0.20    | |R|
+|Y| = 1/0.17697 | 0.17697  0.81240  0.01063 | |G|      each row sums to 1.00000
+|Z|             | 0.00     0.01     0.99    | |B|
+
+R = G = B = 1:  X = Y = Z = 1 / 0.17697 = 5.6507           →  x = y = 1/3  (white E)
+R = 1 only:     X = 0.49 / 0.17697 = 2.7688,  Y = 1,  Z = 0
+                x = 2.7688 / 3.7688 = 0.7347,  y = 1 / 3.7688 = 0.2653   (the 700 nm primary)</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>14. The chromaticity diagram: color without brightness (slides 54–60)</h4>
+    <p>Dividing each tristimulus value by the total keeps the proportions and throws away the overall amount, so a dim and a bright version of one color land on the same point.</p>
+    <p class="formula">x = X / (X+Y+Z)      y = Y / (X+Y+Z)      z = Z / (X+Y+Z)      x + y + z = 1</p>
+    <pre class="calc">X = 25, Y = 50, Z = 25:   X + Y + Z = 100
+x = 25/100 = 0.25,  y = 50/100 = 0.50,  z = 25/100 = 0.25     check 0.25 + 0.50 + 0.25 = 1
+doubled (50, 100, 50): sum 200, same x, y, z; only Y = brightness doubled
+back from (x, y, Y) (textbook context):  X = (x / y)·Y,  Z = ((1 − x − y) / y)·Y</pre>
+    <ul>
+      <li>Only (x, y) is plotted; z = 1 − x − y. The horseshoe edge is the spectral locus, labeled in nm; the straight bottom edge is the line of purples (textbook context). White is in the middle (slide 56).</li>
+      <li>Around the locus the hue changes; towards white the saturation drops (slide 60).</li>
+      <li><b>Gamut</b> (slide 59) is "a certain complete subset of colors", usually what a color space or device can show: the triangle of its primaries. A positive mix of three primaries always lands inside their triangle.</li>
+      <li>Two exam comparisons: closer to white = smaller √((x − x<sub>w</sub>)² + (y − y<sub>w</sub>)²); brighter = larger Y.</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">CIE standard illuminant (slide 58)</th><th class="l">Represents</th><th class="l">(x, y), textbook context</th></tr></thead>
+        <tbody>
+          <tr><td class="l">A</td><td class="l">tungsten light</td><td class="l">(0.4476, 0.4074)</td></tr>
+          <tr><td class="l">B</td><td class="l">sunset</td><td class="l">(0.3484, 0.3516)</td></tr>
+          <tr><td class="l">C</td><td class="l">blue sky</td><td class="l">(0.3101, 0.3162)</td></tr>
+          <tr><td class="l">D65</td><td class="l">average daylight</td><td class="l">(0.3127, 0.3290), from the notebook</td></tr>
+          <tr><td class="l">E</td><td class="l">equal-energy white</td><td class="l">(1/3, 1/3)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>They lie on or near the blackbody locus (2000 K to 20000 K). TV primaries (slide 59): PAL (Phase Alternating Line) uses white D65 and 625 lines; NTSC (National Television System Committee) uses white C and 525 lines.</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>Try it: X, Y, Z become one point (x, y), inside or outside a gamut</h4></div>
+      <p class="fig-lede">Drag X, Y, Z. The black dot is (x, y); the dashed line goes to the system's white. Every point lies under the line x + y = 1. Pick a set of primaries to draw its gamut triangle (PAL and NTSC coordinates are textbook context).</p>
+      <div data-viz="xyz-steps"></div>
+      <div data-viz="xyz-sliders"></div>
+      <div data-viz="xyz"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Chromaticity (x, y)</span><span class="v pri" data-role="xyz-xy"></span><span class="sub">ignores brightness</span></div>
+        <div class="stat"><span class="label">Brightness Y</span><span class="v ter" data-role="xyz-Y"></span><span class="sub">luminance</span></div>
+        <div class="stat"><span class="label">Inside the gamut?</span><span class="v" data-role="xyz-in"></span><span class="sub" data-role="xyz-insub"></span></div>
+      </div>
+      <pre class="calc" data-role="xyz-calc"></pre>
+      <p class="step-note" data-role="xyz-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>15. Dominant wavelength and purity: chromaticity in polar coordinates (slides 61–65)</h4>
+    <p>Stand at the reference white W and look at the color S. The direction you look in names the hue; how far S is, compared with the edge of the horseshoe, names the saturation. All three quantities are defined "given a reference white".</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Quantity</th><th class="l">Slide definition</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Dominant wavelength (p.61)</td><td class="l">wavelength of the spectral color which, added to the reference white, produces the given color</td></tr>
+          <tr><td class="l">Complementary wavelength (p.62)</td><td class="l">wavelength of the spectral color which, added to the given color, produces the reference white</td></tr>
+          <tr><td class="l">Purity (p.63)</td><td class="l">(length from white to the color) / (length from white to the dominant-wavelength point), 0 … 1</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="formula">purity = |WS| / |WD|        D = where the ray from W through S meets the edge</p>
+    <pre class="calc">W = (0.31, 0.32), S = (0.45, 0.32): the ray goes straight right
+it meets the spectral locus at D ≈ (0.68, 0.32), about 615 nm  → dominant wavelength ≈ 615 nm
+|WS| = 0.45 − 0.31 = 0.14      |WD| = 0.68 − 0.31 = 0.37
+purity = 0.14 / 0.37 = 0.38    (0 = white, 1 = pure spectral color)</pre>
+    <ul>
+      <li>Slide 64 (white = illuminant C): the complementary wavelength of S₁ lies on the opposite side of C. S₂ has no complementary wavelength, because its backward ray hits the line of purples. D₃ lies on the line of purples, and purity is still CS₃ / CD₃.</li>
+      <li>Slide 65: dominant (or complementary) wavelength ≈ hue, the angle around white; purity ≈ saturation, the distance from white.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Try it: turn the direction, slide the purity</h4></div>
+      <p class="fig-lede">θ is the direction from W = (0.31, 0.32), counterclockwise from the right. The solid ray reaches D (the dominant wavelength), the dashed ray D′ (the complementary one). The default is the worked example above.</p>
+      <div data-viz="pur-sliders"></div>
+      <div data-viz="pur"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Dominant wavelength</span><span class="v pri" data-role="pur-dom"></span><span class="sub">ray W → S</span></div>
+        <div class="stat"><span class="label">Complementary</span><span class="v sec" data-role="pur-comp"></span><span class="sub">ray S → W, onwards</span></div>
+        <div class="stat"><span class="label">Purity</span><span class="v ok" data-role="pur-p"></span><span class="sub">|WS| / |WD|</span></div>
+      </div>
+      <pre class="calc" data-role="pur-calc"></pre>
+      <p class="step-note" data-role="pur-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>16. Color stimuli (slides 67–68)</h4>
+    <p>A color stimulus is the illumination spectrum times the reflectance spectrum.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Stimulus</th><th class="l">Spectrum</th><th class="l">Example</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Monochromatic</td><td class="l">light of only one wavelength</td><td class="l">a laser beam</td></tr>
+          <tr><td class="l">Achromatic</td><td class="l">equal relative amount at all wavelengths</td><td class="l">daytime sunlight, close to it</td></tr>
+          <tr><td class="l">Polychromatic</td><td class="l">different amounts at different wavelengths</td><td class="l">most real stimuli</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>17. In code: sRGB to XYZ (Lecture7.ipynb)</h4>
+    <ul>
+      <li>Normalize c′ = c / 255, undo the gamma (c′ / 12.92 if c′ ≤ 0.04045, else ((c′ + 0.055) / 1.055)<sup>2.4</sup>), multiply by the D65 sRGB matrix, then x = X/(X+Y+Z), y = Y/(X+Y+Z). Black returns the D65 white point.</li>
+      <li>The sRGB primaries sit at R (0.64, 0.33), G (0.30, 0.60), B (0.15, 0.06). Mid gray (128, 128, 128) has the same (x, y) as white, (0.3127, 0.3290), and only a smaller Y.</li>
+    </ul>
+    <pre class="calc">(200, 100, 50):  c′ = 0.78431, 0.39216, 0.19608   (all &gt; 0.04045, power branch)
+linear          = 0.57758, 0.12744, 0.03190
+X = 0.4124564·R + 0.3575761·G + 0.1804375·B = 0.2896
+Y = 0.2126729·R + 0.7151522·G + 0.0721750·B = 0.2163      (the Y row: green dominates brightness)
+Z = 0.0193339·R + 0.1191920·G + 0.9503041·B = 0.0567
+x = 0.5148, y = 0.3845   (orange)</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>Mistakes that cost marks</h4>
+    <ul>
+      <li>Swapping x and y. In this lecture x is the row (down) and y the column (right): (3, 5) is row 3, column 5.</li>
+      <li>Mixing up N<sub>4</sub> and N<sub>D</sub>. N<sub>4</sub> changes one coordinate by 1 (edge); N<sub>D</sub> changes both (corner). N<sub>8</sub> is both, 8 pixels.</li>
+      <li>Treating m-adjacency as "8 without diagonals". It keeps a diagonal when N<sub>4</sub>(p) ∩ N<sub>4</sub>(q) has no pixel in V. And every kind of adjacency needs both values in V.</li>
+      <li>Counting pixels for the path length. n counts steps: 5 pixels, n = 4.</li>
+      <li>Summing for D<sub>8</sub> or taking the max for D<sub>4</sub>. D<sub>4</sub> adds, D<sub>8</sub> takes the larger difference. Check D<sub>8</sub> ≤ D<sub>e</sub> ≤ D<sub>4</sub>.</li>
+      <li>Dividing by X + Y or by 100 for chromaticity. Divide by X + Y + Z; the three shares add to exactly 1.</li>
+      <li>Reading brightness from (x, y). Chromaticity ignores luminance; brightness is Y. A dim color can sit right on white.</li>
+      <li>Purity upside down. Purity = |WS| / |WD|, from white towards the locus: 0 at white, 1 on the locus.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Cheat sheet</h4>
+    <div data-viz="cheat"></div>
+  </div>
+
+  <div class="sol-part">
+    <h4>How to write it on the exam</h4>
+    <pre class="calc">PIXEL RELATIONSHIPS                 coordinates (row, column), origin top-left
+(a) neighbors of p = (x, y)
+    N4(p) = {(x+1,y), (x−1,y), (x,y+1), (x,y−1)}            → write the 4 pixels
+    ND(p) = {(x+1,y+1), (x+1,y−1), (x−1,y+1), (x−1,y−1)}    → write the 4 pixels
+    N8(p) = N4(p) ∪ ND(p)                                  values do not matter
+(b) distances, p = (x, y), q = (s, t):   |x − s| = ...,  |y − t| = ...
+    D4 = |x − s| + |y − t| = ...     D8 = max(...) = ...     De = √(... + ...) = ...
+    check D8 ≤ De ≤ D4
+(c) adjacency of a pair, V = {...}
+    1. both values in V?   no → not adjacent at all
+    2. q ∈ N4(p)?          yes → 4-, 8- and m-adjacent
+    3. q ∈ ND(p)?          yes → 8-adjacent; for m: N4(p) ∩ N4(q) = {a, b}, values ..., ...
+                           none in V → m-adjacent;  one in V → not m-adjacent
+    why m: it eliminates the multiple path connections of 8-adjacency
+(d) shortest path: list the pixels in order, n = number of steps
+
+COLOR
+(a) why XYZ: CIE-RGB r̄(λ) is negative → 1931 XYZ, a linear transform; criteria: CMFs ≥ 0,
+    equal amounts → white, ȳ = luminous efficiency (Y = luminance), tight primaries
+(b) S = X + Y + Z = ...;  x = X/S, y = Y/S, z = Z/S;  check x + y + z = 1
+(c) closer to white: d = √((x − xw)² + (y − yw)²) for each, smaller wins;  brighter: larger Y
+(d) dominant wavelength: ray W → S meets the locus at D → λ ≈ ... nm
+    purity = |WS| / |WD| = ... / ... = ...      (0 white, 1 spectral)
+(e) definitions: hue = what color (angle), saturation/chroma = strength (distance from gray),
+    value = light or dark (height); Munsell value 0–10, chroma 0–20; illuminants A B C D65 E</pre>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>N<sub>4</sub>(p) = (x±1, y), (x, y±1); N<sub>D</sub>(p) = (x±1, y±1); N<sub>8</sub> = both. p = (4, 7): N<sub>4</sub> = (5,7), (3,7), (4,8), (4,6).</li>
+      <li>m-adjacent: q ∈ N<sub>4</sub>(p), or q ∈ N<sub>D</sub>(p) and N<sub>4</sub>(p) ∩ N<sub>4</sub>(q) has no value in V. Purpose: "eliminates the multiple path connections" of 8-connectivity.</li>
+      <li>p = (3, 1), q = (7, 4): D<sub>4</sub> = 7, D<sub>8</sub> = 4, D<sub>e</sub> = 5. D<sub>4</sub> ≤ 2 is a 13-pixel diamond, D<sub>8</sub> ≤ 2 a 25-pixel square.</li>
+      <li>Path length n = number of steps. Slide 34 m-distance: 2, 3, 4 as p3 and then p1 become 1; the 8-distance stays 2.</li>
+      <li>Photopic peak 555 nm (half at 510, 610), scotopic 507 nm. Radiance W, luminance lm, brightness subjective. 555 nm: f = 5.41 × 10¹⁴ Hz, q = 3.58 × 10⁻¹⁹ J.</li>
+      <li>B = M × N × k: 512 × 512 × 8 = 2,097,152 bits = 262,144 bytes, L = 256.</li>
+      <li>CIE-RGB primaries 700, 546.1, 435.8 nm; 17 observers; 2°; r̄ negative → XYZ (1931). Y = luminance, X = red mix, Z = blue response.</li>
+      <li>x = X/(X+Y+Z), y = Y/(X+Y+Z), z = 1 − x − y. (25, 50, 25) → (0.25, 0.50, 0.25). CIE-RGB R = G = B → E (1/3, 1/3).</li>
+      <li>Illuminants A tungsten, B sunset, C blue sky, D65 daylight (0.3127, 0.3290), E equal energy. PAL: D65, 625 lines; NTSC: C, 525 lines.</li>
+      <li>Purity = |WS| / |WD|: W (0.31, 0.32), S (0.45, 0.32), D (0.68, 0.32) → 0.14 / 0.37 = 0.38, about 615 nm.</li>
+      <li>Munsell value 0–10, chroma 0–20, 10 hues. Monochromatic = one wavelength; achromatic = equal at all wavelengths.</li>
+    </ul>
+    <p class="source">Slides: L7 p.3–68 · Notes: 07_Week4_Pixel_Relationships_Color_XYZ.md (sections 1–14, Lecture7.ipynb)</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lecture</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

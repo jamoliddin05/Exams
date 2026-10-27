@@ -1,0 +1,350 @@
+<article class="q" id="topic11" data-part="tp" data-num="11" data-topic="Filtering and edges">
+  <div class="q-head">
+    <p class="eyebrow">Lecture 11 · Week 6 · 11 sample questions</p>
+    <h3 class="q-title">Filtering and Edges from Zero</h3>
+    <p class="fig-lede">Lecture 11 slides a small grid of weights, a mask, over an image. One recipe (multiply and add) blurs, sharpens and finds points, lines and edges. Sorting the window instead gives the median, min and max filters that clean impulse noise. It builds on pixel neighbours (Lecture 7) and histograms (Lecture 9).</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Words you need</h4>
+    <div class="why-grid">
+      <div class="mini"><h5>Mask (kernel)</h5><p>A small matrix of weights, usually 3 × 3. "A mask is a filter." Also called a convolution mask or convolution kernel.</p></div>
+      <div class="mini"><h5>Window</h5><p>The pixels under the mask when its centre sits on one pixel: the pixel and its 8 neighbours, Z₁ … Z₉ row by row.</p></div>
+      <div class="mini"><h5>Spatial filtering</h5><p>Slide the mask over the image. At each pixel multiply each window pixel by the weight on top of it, add, and write the sum at the centre.</p></div>
+      <div class="mini"><h5>Low pass, high pass</h5><p>Low frequency = slow change (flat areas). High frequency = fast change (edges, detail, noise). Low pass blurs; high pass keeps only detail.</p></div>
+      <div class="mini"><h5>Edge</h5><p>"Significant local changes of intensity", a boundary between two regions. Horizontal, vertical or diagonal.</p></div>
+      <div class="mini"><h5>Gradient (1st derivative)</h5><p>How fast intensity changes. Two masks give H<sub>r</sub> and H<sub>c</sub>; together they give a magnitude and a direction θ.</p></div>
+      <div class="mini"><h5>Laplacian (2nd derivative)</h5><p>How fast the slope changes. At an edge it goes + then −; the sign change is the zero crossing.</p></div>
+      <div class="mini"><h5>Impulse vs Gaussian noise</h5><p>Impulse (salt and pepper): a few pixels jump to 255 or 0. Gaussian: every pixel moves a little.</p></div>
+      <div class="mini"><h5>Threshold T</h5><p>A cut-off you choose. A response counts as a point or an edge only if |R| &gt; T.</p></div>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. Masks, filters and edges (slides 2–8)</h4>
+    <ul>
+      <li>"A mask is a filter." Masking "is also known as spatial filtering", performed "directly on the image" (slide 3).</li>
+      <li>Filtering is "convolving a mask with an image", so masks are "convolution masks" (slide 4). Filters are used for blurring and noise reduction, and for edge detection and sharpness (slide 5).</li>
+      <li>An edge is "a set of connected pixels that forms a boundary between two disjoint regions" (slide 6). Edge detection "reduces the amount of data in an image and preserves the structural properties" (slide 8).</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Job</th><th class="l">Filters in this lecture</th><th class="l">Section</th></tr></thead>
+        <tbody>
+          <tr><td class="l">smooth (low pass)</td><td class="l">average, Gaussian</td><td class="l">4</td></tr>
+          <tr><td class="l">sharpen (high pass)</td><td class="l">sharpening, high pass, unsharp masking, high boost</td><td class="l">5</td></tr>
+          <tr><td class="l">detect, 1st derivative ("gradient based")</td><td class="l">Roberts, Prewitt, Sobel, Frei-Chen, compass</td><td class="l">8–9</td></tr>
+          <tr><td class="l">detect, 2nd derivative ("Gaussian based")</td><td class="l">Laplacian, LoG, DoG (the slide also lists Canny)</td><td class="l">10–11</td></tr>
+          <tr><td class="l">sort the window (nonlinear)</td><td class="l">median, min, max</td><td class="l">12–13</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. Mean and variance of a neighbourhood (slides 9–10)</h4>
+    <p>r is the intensity, p(rᵢ) the normalized histogram (Lecture 9). "Global" statistics are "measured over an entire image"; "local" ones, over a window, "are used as the basis for making changes".</p>
+    <p class="formula">m = Σ rᵢ p(rᵢ)     μₙ(r) = Σ (rᵢ − m)ⁿ p(rᵢ)     μ₂ = variance</p>
+    <pre class="calc">window 13 4 8 / 2 9 6 / 7 25 16, each p = 1/9
+m  = 90 / 9 = 10
+μ₂ = (9 + 36 + 4 + 64 + 1 + 16 + 9 + 225 + 36) / 9 = 400 / 9 = 44.44</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. Convolution: multiply and add at every pixel (slides 11–14)</h4>
+    <ul>
+      <li>"A convolution is merely a weighted sum of pixels in the neighborhood of the source pixel." The weights are the mask. "The location of the center corresponds to the location of the output pixel."</li>
+      <li>1-D: f * g(x) = ∫ f(α) g(x − α) dα. "One function is swept past (1D) or rubbed over (2D) the other." Slide 13: a box of height 1 on [0, 1] swept past a box of height ½ gives a triangle, x/2 up to x = 1 (peak 0.5), then 1 − x/2.</li>
+      <li>Slide 14 recipe: new pixel = I₀M₀ + I₁M₁ + … + I₈M₈, written at the centre. Every output goes into a new image; the window always reads the original pixels.</li>
+      <li>(textbook context) The formula flips the mask, the recipe does not, so the recipe is really correlation. For symmetric masks it makes no difference; for Sobel and Prewitt only the sign flips. Use the slide-14 rule.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Try it: one window, every mask of the lecture</h4></div>
+      <p class="fig-lede">The window is slide 34's. Pick a mask. Each window value is multiplied by the weight in the same position, the nine products are added, and fractional masks divide at the end.</p>
+      <div data-viz="mask-steps"></div>
+      <p class="step-note" data-role="mask-note" aria-live="polite"></p>
+      <div data-viz="mask"></div>
+      <div class="legend">
+        <span><i class="sw-pri-soft"></i>positive weight</span>
+        <span><i class="sw-sec-soft"></i>negative weight</span>
+        <span><i class="sw-seg"></i>zero</span>
+      </div>
+    </figure>
+    <p>Check a mask by its sum: 1 keeps a flat area's value (blur, sharpen), 0 sends it to 0 (high pass, Laplacian, edge masks).</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. The image border, then blurring (slides 15–19)</h4>
+    <p>At a frame pixel part of the 3 × 3 window hangs outside the image. Slide 15 gives four rules. Example: image 10 20 30 40 / 20 30 40 50 / 30 40 50 60 / 40 50 60 70, 3 × 3 average at (0, 0):</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Rule (slide wording)</th><th class="l">Window at (0, 0)</th><th>Output</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Zero-padding: "treat the empty cells … as zeros"</td><td class="l">0 0 0 / 0 10 20 / 0 20 30</td><td>80/9 = 8.89</td></tr>
+          <tr><td class="l">Start at (1,1) "instead of (0,0)"</td><td class="l">none</td><td>no output; 2 × 2 result</td></tr>
+          <tr><td class="l">Duplication of the edges</td><td class="l">10 10 20 / 10 10 20 / 20 20 30</td><td>150/9 = 16.67</td></tr>
+          <tr><td class="l">Wrap-around</td><td class="l">70 40 50 / 40 10 20 / 50 20 30</td><td>330/9 = 36.67</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Blurring = "low-pass spatial filtering". It "removes the finer details of an image". In the common mask "all convolution coefficients are equal": 1/9 for 3 × 3, 1/25 for 5 × 5. "The bigger the mask, the greater the blurring effect."</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Try it: a bigger average mask blurs more</h4></div>
+      <p class="fig-lede">One image row with a thin bright line and a step, filtered by an n-point average (an n × n mask on an image whose columns are constant). Drag n and watch the line's peak and the width of the step's ramp.</p>
+      <div data-viz="size-slider"></div>
+      <div data-viz="size"></div>
+      <p class="step-note" data-role="size-note" aria-live="polite"></p>
+    </figure>
+    <p>Gaussian smoothing (slide 19). "σ controls the effective spread &amp; size of the mask."</p>
+    <p class="formula">G[x, y] = e^(−(x² + y²) / 2σ²) / √(2πσ²)      3 × 3: (1/16) [1 2 1; 2 4 2; 1 2 1]</p>
+    <ul>
+      <li>16 = 1 + 2 + 1 + 2 + 4 + 2 + 1 + 2 + 1, so the mask sums to 1. The window has 9 pixels; 16 is the weight sum.</li>
+      <li>Corners sit at distance² 2, edges at 1, the centre at 0. When e^(−1/2σ²) = ½ the weights are ¼ : ½ : 1 = 1 : 2 : 4. That is σ = 1/√(2 ln 2) = 0.849, the slide's σ ≈ 0.85 curve.</li>
+      <li>(textbook context) The 2-D constant is 1/(2πσ²); the sampled kernel is divided by its sum anyway, so the constant drops out.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Try it: σ sets how much weight leaves the centre</h4></div>
+      <p class="fig-lede">Left: the Gaussian curve and its samples at −1, 0 and 1. Right: the 3 × 3 mask, normalized to sum 1, and its weights × 16. Small σ keeps almost everything on the centre (no blur); large σ approaches the 1/9 average.</p>
+      <div data-viz="gauss-slider"></div>
+      <div data-viz="gauss"></div>
+      <p class="step-note" data-role="gauss-note" aria-live="polite"></p>
+    </figure>
+    <pre class="calc">slide-34 window, Gaussian: (1·(11+15+16+11) + 2·(13+16+11+12) + 4·11) / 16 = 201/16 = 12.5625
+                  average : 116 / 9 = 12.89      (the centre counts 4/16 = 0.25 against 1/9)</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Sharpening, high pass and high boost (slides 20–26)</h4>
+    <ul>
+      <li>"Sharpening has the opposite affect of blurring", "also referred to as crispening", and "will increase its contrast".</li>
+      <li>Sharpening masks [0 −1 0; −1 5 −1; 0 −1 0] and [−1 −1 −1; −1 9 −1; −1 −1 −1] sum to 1. (textbook context) Each is identity + a Laplacian mask of section 10. The third slide mask, [1 −2 1; −1 5 −2; 1 −2 1], sums to 2 as printed.</li>
+      <li>High pass "will remove the low frequency components and show only high detail": (1/9) [−1 −1 −1; −1 8 −1; −1 −1 −1], sum 0, so flat areas go to 0.</li>
+      <li>Unsharp masking: "Subtract a lowpass filtered image from its original."</li>
+    </ul>
+    <p class="formula">High boost = α · Original − Lowpass     mask: centre ω/9, neighbours −1/9, ω = 9α − 1</p>
+    <ul>
+      <li>"When α = 1, the result is high pass filter." "When α &gt; 1, the effect is to restore low frequency component."</li>
+      <li>Why: α·O − LP = (α − 1)·O + (O − LP). The mask sums to α − 1, so a flat area v becomes (α − 1)·v. It "retains more of original image's background", "as α increases, the overall image gets lighter".</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Try it: α brings the background back</h4></div>
+      <p class="fig-lede">A row with a step from 60 to 160. The lowpass is the 3 × 3 average. Drag α from 1 (high pass) upward and compare the flat levels with the original.</p>
+      <div data-viz="boost-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">ω = 9α − 1</span><span class="v pri" data-role="boost-w">9.8</span><span class="sub">mask centre ω/9</span></div>
+        <div class="stat"><span class="label">Mask sum</span><span class="v sec" data-role="boost-sum">0.2</span><span class="sub">α − 1</span></div>
+        <div class="stat"><span class="label">Flat 60 / 160 become</span><span class="v ter" data-role="boost-flat">12 / 32</span><span class="sub">(α − 1) × level</span></div>
+      </div>
+      <div data-viz="boost"></div>
+      <div class="legend">
+        <span>dashed: original</span>
+        <span><i class="sw-ter"></i>lowpass (3 × 3 average)</span>
+        <span><i class="sw-pri"></i>high boost</span>
+      </div>
+    </figure>
+    <pre class="calc">slide-34 window: sharpen (5)  5·11 − (13+16+11+12) = 55 − 52 = 3
+                 sharpen (9)  9·11 − 105 = −6  → clip to 0 for display
+                 high boost α = 1.2: ω = 9.8, centre 1.089, sum 0.2; 1.2·11 − 116/9 = 0.31</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. Points and lines (slides 27–28)</h4>
+    <ul>
+      <li>"Three types of discontinuities: points, lines, edges." The response is R = Σ Zᵢ Mᵢ.</li>
+      <li>Point: "detected at the location at which the mask is centered if |R| &gt; T", T "a nonnegative threshold". Mask [−1 −1 −1; −1 8 −1; −1 −1 −1].</li>
+      <li>Line masks put 2s along the line and −1 elsewhere: horizontal, +45°, vertical, −45°. All sum to 0, so a flat background gives R = 0. (textbook context) The line direction is the mask with the largest response.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>Try it: which mask answers which pattern</h4></div>
+      <p class="fig-lede">Pick a window (bright 80 on a background of 20). Each mask gives one R. The point decision uses T = 400; the line direction is the largest line response, outlined.</p>
+      <div data-viz="line-steps"></div>
+      <p class="step-note" data-role="line-note" aria-live="polite"></p>
+      <div data-viz="line"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Edges and derivatives (slides 29–36)</h4>
+    <ul>
+      <li>An edge is "the boundary between two regions with relatively distinct gray-level properties"; detecting it is "the computation of a local derivative". Shapes: roof, line, step, ramp (slide 31). Uses: image segmentation and image registration.</li>
+      <li>Slide 30: the first derivative is one spike per edge (+ for dark to light, − for light to dark). The second derivative is a +/− pair; its sign change, the zero crossing, marks the edge centre.</li>
+    </ul>
+    <pre class="calc">row          20  20  80  80
+1st diff       0  60   0          one spike at the edge
+2nd diff         60 −60           + then −, zero crossing between them</pre>
+    <ul>
+      <li>Homogeneity operator: "Subtracts each 8 surrounding pixels from the center pixel"; output = the largest |difference|. Difference operator: the 4 pairs of opposite pixels through the centre, "four subtractions per pixel as opposed to the eight".</li>
+    </ul>
+    <pre class="calc">slide 34 window  11 13 15 / 16 11 11 / 16 12 11
+homogeneity  max{0, 2, 4, 5, 0, 5, 1, 0} = 5
+difference   max{|11−11|, |13−12|, |15−16|, |11−16|} = max{0, 1, 1, 5} = 5</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. Gradient operators: Roberts, Prewitt, Sobel, Frei-Chen (slides 37–40, 43–44)</h4>
+    <p class="formula">H = √(H<sub>r</sub>² + H<sub>c</sub>²)  or  |H<sub>r</sub>| + |H<sub>c</sub>|      θ = tan⁻¹(H<sub>c</sub> / H<sub>r</sub>)</p>
+    <pre class="calc">            H_r (slide 37)        H_c
+Roberts     0 0 −1 / 0 1 0 / 0 0 0    −1 0 0 / 0 1 0 / 0 0 0
+Prewitt     1 0 −1 / 1 0 −1 / 1 0 −1  −1 −1 −1 / 0 0 0 / 1 1 1
+Sobel       1 0 −1 / 2 0 −2 / 1 0 −1  −1 −2 −1 / 0 0 0 / 1 2 1
+Frei-Chen   Sobel with √2 in place of 2
+Sobel, slide 43:  M_x = −1 0 1 / −2 0 2 / −1 0 1 = −H_r     M_y = H_c</pre>
+    <ul>
+      <li>Sobel is "a discrete differentiation operator" that "computes the gradient approximation of image intensity function". Flipping a mask only flips the sign, so |G| is the same with H<sub>r</sub> or M<sub>x</sub>.</li>
+      <li>(textbook context) H<sub>r</sub> and M<sub>x</sub> compare left with right, so they find vertical edges. Each Sobel mask is a [1 2 1] average along the edge times a difference across it, which smooths a little.</li>
+      <li>Slide 38: Roberts has a "smaller effective area" and is "more susceptible to noise". Sobel is "more sensitive to diagonal edges than vertical and horizontal edges". Prewitt is "more sensitive to vertical and horizontal edges than diagonal edges".</li>
+      <li>Slide 44, Sobel: "simple and time efficient", "very easy at searching for smooth edges"; but "highly sensitive to noise", "not very accurate", diagonal points "not preserved always".</li>
+    </ul>
+    <pre class="calc">slide-34 window: Sobel   H_r = (11 + 32 + 16) − (15 + 22 + 11) = 11    H_c = 51 − 52 = −1
+                 √(121 + 1) = 11.05     |11| + |−1| = 12     θ = tan⁻¹(−1/11) = −5.19°
+                 Prewitt H_r = 43 − 37 = 6, H_c = 0      Roberts H_r = −4, H_c = 0</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Try it: turn the edge, compare Sobel and Prewitt</h4></div>
+      <p class="fig-lede">A step from 50 to 150 through the window centre, each pixel shaded by the share of it on the bright side. Drag the gradient angle φ (0° = bright on the right, a vertical edge; 45° = diagonal). The curves show |G| divided by its value for a vertical edge.</p>
+      <div data-viz="angle-slider"></div>
+      <div data-viz="angle"></div>
+      <pre class="calc" data-role="angle-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Compass operators (slides 41–42)</h4>
+    <ul>
+      <li>"Find edges in eight different orientations. Convolve an image with eight different masks." Families: Prewitt, Kirsch, Robinson 3-level, Robinson 5-level. Each next mask rotates the outer ring by 45°.</li>
+      <li>"Smaller masks are sensitive to noise"; "larger masks cannot resolve fine detail, and also requires more computations".</li>
+      <li>Kirsch's first mask is [5 −3 −3; 5 0 −3; 5 −3 −3]. Robinson 3-level = the Prewitt row mask, 5-level = the Sobel row mask. (textbook context) Magnitude = the largest of the 8 responses; direction = that mask's orientation.</li>
+    </ul>
+    <pre class="calc">window 50 50 100 / 50 50 100 / 50 50 100   (bright on the right)
+5s on the left : 5·150 − 3·400 = −450
+5s on the right: 5·300 − 3·250 = 750   ← the largest of the 8: a vertical edge</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Laplacian and zero crossing (slides 45–47)</h4>
+    <ul>
+      <li>Masks [0 −1 0; −1 4 −1; 0 −1 0] and [−1 −1 −1; −1 8 −1; −1 −1 −1], sum 0. "Better edge localization"; the result "exhibits a sign change at image edges ⇒ Zero crossing".</li>
+      <li>Disadvantages: "unacceptably sensitive to noise", "produce double edges", "unable to detect edge direction". (textbook context) One mask gives one number, so there is no H<sub>r</sub>/H<sub>c</sub> pair for a direction.</li>
+      <li>Slide 46 code: write 255 where the Laplacian's sign differs from its right or lower neighbour. "Simple zero-crossing may indicate more edges than desired." Fix (slide 47): "determine the difference between the maximum and minimum" in a 3 × 3 window; "an edge is present if the difference exceeds the threshold".</li>
+    </ul>
+    <pre class="calc">rows 10 10 10 50 50 50 → Laplacian (4) 0 0 −40 40 0 0 → zero crossing marks columns 2 and 3
+max − min in the window: 0 40 80 80 40 0 → T = 50 keeps columns 2–3</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>Try it: the threshold removes the noise crossings</h4></div>
+      <p class="fig-lede">A noisy row with a strong step (40 → 120) and a weak one (120 → 100), its Laplacian, and the marks. Drag T: a higher threshold keeps fewer edges, as in Fig. 3.20 (T = 20, 48, 72).</p>
+      <div data-viz="zc-slider"></div>
+      <div data-viz="zc"></div>
+      <p class="step-note" data-role="zc-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. LoG, DoG and color edges (slides 48–52)</h4>
+    <ul>
+      <li>LoG: "a second order derivative edge detector less susceptible to noise": "Gaussian smoothing before applying Laplacian" (demo 7 × 7, σ = 1.0). LoG(x, y) = −(1/πσ⁴)[1 − (x² + y²)/2σ²] e^(−(x²+y²)/2σ²), zero where x² + y² = 2σ².</li>
+      <li>DoG = difference of two Gaussians, an "approximation of LoG" because the LoG is heavy to compute. A sigma ratio of 1.6 "results in a good approximation" (σ₁ = 10, σ₂ = 16). "The 9x9 mask will detect wider edges than 7x7 mask."</li>
+      <li>Color edges "depend on your definition of an edge": Def. 1 luminance (the intensity channel); Def. 2 each RGB channel; Def. 3 each channel, combined as G = √(G<sub>red</sub>² + G<sub>green</sub>² + G<sub>blue</sub>²). "The best … depends on the application."</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. Median filtering, gray and color (slides 53–59)</h4>
+    <ul>
+      <li>Median: "an effective method for removing impulse noise" that preserves "sharp edges … and detail". A lowpass filter is "suited for removing Gaussian noise, but not impulse noise". "Median filter is superior to lowpass filter when dealing with edges."</li>
+      <li>Method: sort the window, replace the centre with the middle value (5th of 9). Windows: 1 × 5, 5 × 1, cross, 5 × 5 block, X, diamond. Bigger windows remove more noise and flatten more detail.</li>
+      <li>(textbook context) The median is nonlinear: no mask of weights can compute it.</li>
+    </ul>
+    <pre class="calc">slide 55: 13 4 8 / 2 9 6 / 7 25 16 → sorted 2 4 6 7 [8] 9 13 16 25 → median 8 (mean 10)</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 8</span><h4>Try it: drag one pixel and see who follows it</h4></div>
+      <p class="fig-lede">The pixel that holds 25 in slide 55's window is now v. Drag it from 0 (pepper) to 255 (salt). The median never leaves 7–8; the mean drifts; min and max follow v whenever it is the extreme.</p>
+      <div data-viz="drag-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Median</span><span class="v pri" data-role="drag-med">8</span><span class="sub">5th of 9</span></div>
+        <div class="stat"><span class="label">Mean</span><span class="v sec" data-role="drag-mean">10</span><span class="sub">the 1/9 average</span></div>
+        <div class="stat"><span class="label">Min / max</span><span class="v ter" data-role="drag-mm">2 / 25</span><span class="sub">1st and 9th of 9</span></div>
+      </div>
+      <div data-viz="drag"></div>
+    </figure>
+    <ul>
+      <li>Color median with separate R, G, B (slide 58) loses "any correlation between color components". A width-5 filter on green, green, yellow, green, green, red, red, red removes the yellow at p2 but makes a new yellow at p4 (R from the red side, G from the green side).</li>
+      <li>Unique property (slide 59): Σ|x<sub>med</sub> − xᵢ| ≤ Σ|y − xᵢ|. For slide 55's window Σ|8 − xᵢ| = 44, the smallest. In color, Distᵢ = Σⱼ (|redᵢ − redⱼ| + |greenᵢ − greenⱼ| + |blueᵢ − blueⱼ|), and the pixel with the smallest Distᵢ is the output, so the output is always a color from the window.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. Min and max filters (slide 60)</h4>
+    <ul>
+      <li>"Very similar to median filtering. Max/min window value is used." "Effective at removing extreme impulse noise."</li>
+      <li>"Min filter: removes white spikes; overall intensity will be reduced." "Max: removes dark spikes; overall intensity is increased." "Both the min and max filters fail in removing mixed impulse noises."</li>
+      <li>"Cascade of max min filters: can remove salt and pepper noise." The slide calls min → max "closing" and max → min "opening"; Lecture 10 names them the other way round (opening = erosion then dilation = min then max).</li>
+    </ul>
+    <pre class="calc">window 12 255 14 / 13 15 0 / 16 14 13 → sorted 0 12 13 13 14 14 15 16 255
+median 14 (clean)   min 0 (pepper survives)   max 255 (salt survives)   mean 39.11</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>Mistakes that cost marks</h4>
+    <ul>
+      <li>Forgetting the divisor. Average ÷ 9, Gaussian ÷ 16 (the weight sum, not the window size). Masks that sum to 0 are not divided.</li>
+      <li>Writing results back into the image while sliding. Every output uses the original pixels.</li>
+      <li>Not clipping. Sharpening and Laplacian outputs above 255 or below 0 are clipped when pixel values are asked for.</li>
+      <li>Median = the 5th sorted value, not the centre pixel and not the mean.</li>
+      <li>Swapping min and max. Min removes white (salt) spikes, max removes dark (pepper) spikes; neither removes both.</li>
+      <li>Swapping the slide-38 properties. Sobel → diagonal, Prewitt → vertical and horizontal, Roberts → smallest area, most noise.</li>
+      <li>Giving the Laplacian a direction. It has better localization, but noise sensitivity, double edges and no direction.</li>
+      <li>Mixing magnitude forms. Give √(H<sub>r</sub>² + H<sub>c</sub>²) and |H<sub>r</sub>| + |H<sub>c</sub>| when both are asked; θ = tan⁻¹(H<sub>c</sub> / H<sub>r</sub>), with the sign set by the mask version.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Cheat sheet</h4>
+    <div data-viz="cheat"></div>
+  </div>
+
+  <div class="sol-part">
+    <h4>How to write it on the exam</h4>
+    <pre class="calc">A. Filter one pixel (average, Gaussian, median, min, max)
+   1. write the 3 × 3 window of (r, c); say whether a border rule is needed and which
+   2. average: sum / 9      Gaussian: (corners + 2·edges + 4·centre) / 16
+   3. median: sort the 9 values, take the 5th; min = 1st, max = 9th
+   4. round as asked; compare with the clean neighbours; name the better filter and why
+
+B. Sharpen, Laplacian or high boost at a pixel
+   1. the mask and its sum (1 keeps flat areas, 0 removes them, α − 1 for high boost)
+   2. products and sum      3. clip to 0..255 and say so
+   4. check: sharpen = original + Laplacian
+
+C. Gradient (Sobel or Prewitt)
+   1. the masks as given, no flip      2. both responses with the working
+   3. √(Gx² + Gy²) and |Gx| + |Gy|;  θ = tan⁻¹(Gy / Gx) in degrees
+   4. one line: which side is bright; the edge runs across θ
+
+D. Point / line: R = Σ Zᵢ Mᵢ;  |R| &gt; T → point;  largest line response → direction
+
+E. Comparisons: slide definition + one property each + when to use
+   average vs median · first vs second order · Roberts / Prewitt / Sobel · min vs max · 4 border rules</pre>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Slide 14: multiply, add, write at the centre. Window 11 13 15 / 16 11 11 / 16 12 11: average 12.89, Gaussian 12.5625, Laplacian (4) −8, sharpen (5) 3.</li>
+      <li>Average sums to 1; Gaussian 1/16 because the weights add to 16; the bigger the mask, the more blur.</li>
+      <li>Borders: zero padding 8.89, start at (1,1) none, duplication 16.67, wrap-around 36.67 (image 10 20 30 40 / …, pixel (0,0)).</li>
+      <li>High boost = α·Original − Lowpass; centre (9α − 1)/9, sum α − 1; α = 1 gives the high pass.</li>
+      <li>Point: 10 10 10 / 10 100 10 / 10 10 10 gives R = 800 − 80 = 720 &gt; T.</li>
+      <li>Sobel on slide 34's window: 11 and −1, |G| = 11.05 (or 12), θ = −5.19°. Sobel diagonal, Prewitt vertical and horizontal, Roberts noisy.</li>
+      <li>Kirsch on a vertical step: max 750 from the mask with 5s on the bright side.</li>
+      <li>Laplacian: zero crossing, better localization; noise, double edges, no direction. DoG ≈ LoG with ratio 1.6.</li>
+      <li>Median 2 4 6 7 [8] 9 13 16 25 → 8. Median for impulse noise and edges, lowpass for Gaussian noise; min and max fail on mixed noise.</li>
+    </ul>
+    <p class="source">Slides: L11 p.2–60 · Notes: 11_Week6_Spatial_Filtering_Edges.md</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lecture</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

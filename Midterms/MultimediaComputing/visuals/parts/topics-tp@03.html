@@ -1,0 +1,508 @@
+<article class="q" id="topic3" data-part="tp" data-num="3" data-topic="SNR, MIDI and PCM">
+  <div class="q-head">
+    <p class="eyebrow">Lecture 3 · Week 2 · 7 sample questions</p>
+    <h3 class="q-title">SNR, MIDI and PCM from Zero</h3>
+    <p class="fig-lede">Lecture 2 turned sound into numbers by sampling and quantization. This lecture measures how good those numbers are (the signal-to-noise ratio in decibels, and the quantization noise that each extra bit halves) and what they cost in bits per second. It then shows how MIDI sends music as tiny event messages instead of samples, and how PCM codes speech for transmission.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Words you need</h4>
+    <div class="why-grid">
+      <div class="mini"><h5>Decibel (dB)</h5><p>A tenth of a bel. It turns a ratio into a small number: a power ratio R is 10 log₁₀ R dB. Ten times the power is +10 dB.</p></div>
+      <div class="mini"><h5>Signal-to-noise ratio (SNR)</h5><p>"The ratio of the power of the correct signal to the noise", in dB. Larger means a cleaner signal.</p></div>
+      <div class="mini"><h5>Quantization noise</h5><p>The roundoff error from storing only a fixed set of levels. At most half of one interval.</p></div>
+      <div class="mini"><h5>SQNR</h5><p>Signal-to-quantization-noise ratio: the largest signal against the largest quantization error, in dB. About 6.02 dB per bit.</p></div>
+      <div class="mini"><h5>Bits per sample N</h5><p>How many bits store each sample, "typically 8 or 16". N bits give 2<sup>N</sup> levels.</p></div>
+      <div class="mini"><h5>Bitrate</h5><p>Bits sent per second: sampling rate × bits per sample × channels. kbps is kilobits per second, kB/s is kilobytes per second.</p></div>
+      <div class="mini"><h5>MIDI</h5><p>Musical Instrument Digital Interface, a protocol from the early 1980s. It sends music as events (which note, how loud, which instrument) instead of sound samples.</p></div>
+      <div class="mini"><h5>Status byte, data byte</h5><p>A MIDI message starts with a status byte (128 to 255, top bit 1) that says what to do. Data bytes (0 to 127, top bit 0) carry the values.</p></div>
+      <div class="mini"><h5>MIDI channel</h5><p>One of 16 lanes, numbered 0 to 15, usually one instrument each. Its number sits in the low four bits of the status byte.</p></div>
+      <div class="mini"><h5>PCM</h5><p>Pulse Code Modulation. Filter the signal, quantize its samples, and send each sample as a binary codeword.</p></div>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. Aliasing: a camera that samples too slowly (slide 3)</h4>
+    <p>Sampling means measuring a signal at regular instants and keeping only those numbers (Lecture 2). Slide 3 opens this lecture with what goes wrong when the instants are too far apart.</p>
+    <ul>
+      <li>"Examples of temporal aliasing can be seen in western movies, by observing the motion of stagecoach wheels." As the coach starts, the wheels turn forward. As it speeds up, "the wheels appear to rotate in the opposite direction".</li>
+      <li>The slide's reason: "the movie camera has under sampled the wheels' motion". Each film frame is one sample of where the spokes are (a film camera takes 24 frames per second, textbook context).</li>
+      <li>All spokes look alike, so the eye matches each spoke to the nearest spoke position in the next frame. If the wheel turns more than half the gap between two spokes per frame, the nearest match lies behind it, and the wheel seems to turn backwards.</li>
+      <li>The same rule for sound is the Nyquist rule of Lecture 2 (textbook context here). Take at least two samples per cycle of the fastest component. A tone above half the sampling rate is heard at a false, alias frequency.</li>
+    </ul>
+    <p class="formula">fₛ ≥ 2 f_max · (sampling rate at least twice the highest frequency)</p>
+    <pre class="calc">wheel with 4 spokes: the picture repeats every 360° / 4 = 90°
+turn per frame 30°  → nearest match +30°            → seen turning forward
+turn per frame 80°  → nearest match 80° − 90° = −10° → seen turning backwards
+turn per frame 90°  → nearest match 0°              → seen standing still
+sound: fₛ = 8 kHz, tone 5 kHz &gt; 8 / 2 = 4 kHz       → heard at 8 − 5 = 3 kHz</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. Signal-to-noise ratio and decibels (slides 4–6)</h4>
+    <p>Every analog signal carries some noise. The SNR says how much stronger the signal is than that noise.</p>
+    <ul>
+      <li>Slide 4: "In any analog system, random fluctuations produce noise added to the signal, and the measured voltage is thus incorrect. The ratio of the power of the correct signal to the noise is called the signal-to-noise ratio (SNR)." It is a measure of the quality of the signal.</li>
+      <li>Power ratios in sound span huge ranges (Table 1 below covers a factor of 10¹⁶). A logarithm turns them into small numbers. The SNR "is usually measured in decibels (dB), where 1 dB is a tenth of a bel".</li>
+      <li>A power ratio R is 10 log₁₀ R dB. Slide 6 adds the key fact: "The power in a signal is proportional to the square of the voltage."</li>
+      <li>So a voltage ratio is squared first, and a square inside a logarithm is a factor 2 outside it. That is where the 20 comes from.</li>
+    </ul>
+    <p class="formula">SNR = 10 log₁₀ (V²<sub>signal</sub> / V²<sub>noise</sub>) = 20 log₁₀ (V<sub>signal</sub> / V<sub>noise</sub>) dB</p>
+    <pre class="calc">slide 6: Vsignal = 10 × Vnoise  → 20 log₁₀ 10   = 20 × 1 = 20 dB
+voltage ratio 100             → 20 log₁₀ 100  = 20 × 2 = 40 dB   (= 10 log₁₀ 10,000)
+5 V signal, 0.25 V noise      → 20 log₁₀ 20   = 26.02 dB
+2 W signal, 0.5 mW noise      → 10 log₁₀ 4000 = 36.02 dB         (powers: factor 10)
+×2 in voltage = +6.02 dB         ×2 in power = +3.01 dB</pre>
+    <p>The rule: 10 log for power ratios, 20 log for voltage (amplitude) ratios. A voltage ratio of 10 and a power ratio of 100 describe the same signal, and both give 20 dB.</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Try it: add noise to a signal</h4></div>
+      <p class="fig-lede">The gray curve is the correct signal, with voltage 1. The blue curve is what is measured: the signal plus random fluctuations of size V<sub>noise</sub> = 1 / ratio. Drag the ratio. At ratio 1 the noise is as strong as the signal, 0 dB. At ratio 100 it is hard to see, 40 dB.</p>
+      <div data-viz="snr-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Voltage ratio</span><span class="v pri" data-role="snr-v">10</span><span class="sub">V<sub>signal</sub> / V<sub>noise</sub></span></div>
+        <div class="stat"><span class="label">Power ratio</span><span class="v" data-role="snr-p">100</span><span class="sub">(voltage ratio)²</span></div>
+        <div class="stat"><span class="label">SNR</span><span class="v ok" data-role="snr-db">20 dB</span><span class="sub">20 log₁₀(voltage ratio)</span></div>
+      </div>
+      <div data-viz="snr"></div>
+      <p class="step-note" data-role="snr-note" aria-live="polite"></p>
+    </figure>
+    <ul>
+      <li>Slide 5, Table 1, lists the "magnitudes of common sounds, in decibels". Here the decibel compares a sound with a fixed reference: "a just-audible sound with frequency 1 kHz", the quietest sound we can hear, which is 0 dB (slide 6).</li>
+      <li>Reading it: +10 dB is 10 times the intensity (power). +20 dB is 10 times the amplitude (voltage, pressure).</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Table 1 sound</th><th>dB</th><th class="l">Sound</th><th>dB</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Threshold of hearing</td><td>0</td><td class="l">Loud radio</td><td>80</td></tr>
+          <tr><td class="l">Rustle of leaves</td><td>10</td><td class="l">Train through station</td><td>90</td></tr>
+          <tr><td class="l">Very quiet room</td><td>20</td><td class="l">Riveter</td><td>100</td></tr>
+          <tr><td class="l">Average room</td><td>40</td><td class="l">Threshold of discomfort</td><td>120</td></tr>
+          <tr><td class="l">Conversation</td><td>60</td><td class="l">Threshold of pain</td><td>140</td></tr>
+          <tr><td class="l">Busy street</td><td>70</td><td class="l">Damage to eardrum</td><td>160</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="calc">busy street − average room = 70 − 40 = 30 dB → intensity 10^(30/10) = 1,000 ×, amplitude 10^(30/20) ≈ 31.6 ×
+conversation − threshold   = 60 − 0  = 60 dB → intensity 10⁶ ×, amplitude 1,000 ×
+loud radio − conversation  = 80 − 60 = 20 dB → intensity 100 ×, amplitude 10 ×</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. Quantization noise and SQNR (slides 7–9)</h4>
+    <p>A digital signal stores only quantized values. So even a perfectly clean input picks up an error when it is digitized.</p>
+    <ul>
+      <li>"The precision of each sample is determined by the number of bits per sample, typically 8 or 16." N bits give 2<sup>N</sup> different values.</li>
+      <li>Slide 7: with voltages from 0 to 1 and only 8 bits, "we effectively force all continuous values of voltage into only 256 different values". This roundoff error "is not really noise", but it is called quantization noise (or quantization error), because it occurs essentially randomly from sample to sample.</li>
+      <li>Slide 8: "Quantization noise is defined as the difference between the value of the analog signal, for the particular sampling time, and the nearest quantization interval value. At most, this error can be as much as half of the interval."</li>
+      <li>The interval (step) is the range divided by the number of levels (textbook context): 1 V / 256 = 0.0039 V, so the error is at most 0.00195 V.</li>
+    </ul>
+    <p class="formula">step δ = range / 2<sup>N</sup> · largest error = δ / 2</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Try it: fewer bits, bigger error</h4></div>
+      <p class="fig-lede">One cycle of a signal between 0 and 1 V, rounded to the middle of the interval it falls in. Drag N. Each extra bit doubles the levels, halves the step and halves the largest error. The error panel keeps one scale for every N, so watch the plum trace shrink.</p>
+      <div data-viz="quant-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Levels</span><span class="v pri" data-role="q-levels">8</span><span class="sub">2<sup>N</sup></span></div>
+        <div class="stat"><span class="label">Step δ</span><span class="v" data-role="q-step">125</span><span class="sub">mV, 1 V / 2<sup>N</sup></span></div>
+        <div class="stat"><span class="label">Largest error</span><span class="v sec" data-role="q-err">62.5</span><span class="sub">mV, δ / 2</span></div>
+        <div class="stat"><span class="label">SQNR</span><span class="v ok" data-role="q-sqnr">18.06</span><span class="sub">dB, 6.02 × N</span></div>
+      </div>
+      <div data-viz="quant"></div>
+      <div class="legend">
+        <span><i class="sw-seg"></i>analog input</span>
+        <span><i class="sw-pri"></i>quantized value</span>
+        <span><i class="sw-sec"></i>quantization error, input − quantized</span>
+      </div>
+    </figure>
+    <ul>
+      <li>Slide 8: "The SQNR reflects the relationship between the maximum nominal signal strength and the quantization error (also known as quantization noise) introduced in the analog-to-digital conversion."</li>
+      <li>Slide 9 measures both in steps. The peak signal is 2<sup>N−1</sup> steps, because signed N-bit samples run from −2<sup>N−1</sup> to 2<sup>N−1</sup> − 1 (textbook context). The worst error is half a step, so the ratio is 2<sup>N−1</sup> / ½ = 2<sup>N</sup>.</li>
+      <li>Both are voltages, so the factor is 20. "log 2" on the slide is log₁₀ 2 = 0.30103, and 20 × 0.30103 = 6.02.</li>
+    </ul>
+    <p class="formula">SQNR = 20 log₁₀ (V<sub>signal</sub> / V<sub>quan noise</sub>) = 20 log₁₀ (2<sup>N−1</sup> / ½) = 20 × N × log 2 = 6.02N dB</p>
+    <ul>
+      <li>Slide 9: "each bit adds about 6 dB of resolution, so 16 bits provide a maximum SQNR of 96 dB."</li>
+      <li>A more realistic version is SQNR = 6.02N + 1.76 dB. It assumes "that the input signal is sinusoidal, that quantization error is statistically independent, and that its magnitude is uniformly distributed between 0 and half the interval". "Since larger is better, this shows that a more realistic approximation gives a better characterization number for the quality of a system."</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">N (bits)</th><th>Levels 2<sup>N</sup></th><th>6.02N (dB)</th><th>6.02N + 1.76 (dB)</th></tr></thead>
+        <tbody>
+          <tr><td class="l">8</td><td>256</td><td>48.16</td><td>49.92</td></tr>
+          <tr><td class="l">12</td><td>4,096</td><td>72.24</td><td>74.00</td></tr>
+          <tr class="on"><td class="l">16</td><td>65,536</td><td>96.32 ("96 dB")</td><td>98.08</td></tr>
+          <tr><td class="l">24</td><td>16,777,216</td><td>144.48</td><td>146.24</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="calc">8 → 12 bits:  6.02 × 12 − 6.02 × 8 = 72.24 − 48.16 = 24.08 dB   (4 added bits × 6.02)
+need ≥ 50 dB: N ≥ 50 / 6.02 = 8.31 → round UP → N = 9
+              check: 8 bits give 48.16 dB (too low), 9 bits give 54.18 dB
+              levels 2⁹ = 512; on 0 to 2 V: step = 2 / 512 = 3.91 mV, largest error 1.95 mV</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Try it: how many bits for a target SQNR?</h4></div>
+      <p class="fig-lede">Each bar is 6.02N dB for N bits, and the ochre dot on it is the realistic 6.02N + 1.76. Drag the target. The green bar is the smallest N whose 6.02N reaches it. Always round up: the bar just left of it falls short.</p>
+      <div data-viz="bits-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">N with 6.02N</span><span class="v ok" data-role="b-n">9</span><span class="sub">⌈target / 6.02⌉</span></div>
+        <div class="stat"><span class="label">N with 6.02N + 1.76</span><span class="v ter" data-role="b-n2">9</span><span class="sub">⌈(target − 1.76) / 6.02⌉</span></div>
+        <div class="stat"><span class="label">Levels</span><span class="v" data-role="b-lv">512</span><span class="sub">2<sup>N</sup></span></div>
+      </div>
+      <div data-viz="bits"></div>
+      <p class="step-note" data-role="bits-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. Audio filtering (slide 10)</h4>
+    <ul>
+      <li>"The audio signal is filtered to remove unwanted frequencies. The frequencies kept depend on the application."</li>
+      <li>Speech: "typically from 50 Hz to 10 kHz is retained". Music: "from about 20 Hz up to 20 kHz".</li>
+      <li>The filter is "a bandpass filter, also called a band-limiting filter, which screens out lower and higher frequencies". It keeps one band between a low and a high cutoff.</li>
+      <li>"At the DA converter end, even though we have removed high frequencies that are likely just noise in any event, they reappear in the output." The reason is sampling and then quantization.</li>
+      <li>"Therefore, at the decoder side, a low-pass filter is used after the DA circuit, making use of the same cutoff as at the high-frequency end of the coder's bandpass filter." A low-pass filter keeps everything below one cutoff.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Audio quality versus data rate (slides 11–12)</h4>
+    <ul>
+      <li>Slide 11: "The uncompressed data rate increases as more bits are used for quantization. Stereo information, as opposed to mono, doubles the bitrate needed to transmit a digital audio signal."</li>
+      <li>Every second the coder stores fₛ samples per channel, each with N bits. That product reproduces Table 6.2 (textbook context).</li>
+    </ul>
+    <p class="formula">bitrate = fₛ × bits per sample × channels (bit/s) · bytes per second = bitrate / 8</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Quality</th><th>fₛ (kHz)</th><th>Bits</th><th class="l">Channels</th><th>fₛ·bits·ch (kbps)</th><th>÷ 8 (kB/s)</th><th>Slide (kB/s)</th><th>Bandwidth (Hz)</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Telephone</td><td>8</td><td>8</td><td class="l">Mono</td><td>64</td><td>8</td><td>8</td><td>200–3,400</td></tr>
+          <tr><td class="l">AM radio</td><td>11.025</td><td>8</td><td class="l">Mono</td><td>88.2</td><td>11.025</td><td>11.0</td><td>100–5,500</td></tr>
+          <tr><td class="l">FM radio</td><td>22.05</td><td>16</td><td class="l">Stereo</td><td>705.6</td><td>88.2</td><td>88.2</td><td>20–11,000</td></tr>
+          <tr class="on"><td class="l">CD</td><td>44.1</td><td>16</td><td class="l">Stereo</td><td>1,411.2</td><td>176.4</td><td>176.4</td><td>5–20,000</td></tr>
+          <tr><td class="l">DVD audio</td><td>192 (max)</td><td>24 (max)</td><td class="l">up to 6</td><td>27,648</td><td>3,456</td><td>1,200.0 (max)</td><td>0–96,000 (max)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>The slide's bitrate column is in kB/s, kiloBYTES per second. Divide the bits by 8.</li>
+      <li>The DVD row lists maxima that cannot all be used at once. 1,200 kB/s is the DVD-Audio cap, and 192 kHz, 24-bit stereo is 1,152 kB/s, which fits under it (textbook context).</li>
+      <li>Slide 12 uses "bandwidth" in two senses. For analog devices it is in Hertz (Hz), cycles per second, as in the table's last column. "In Computer Networking, the term bandwidth refers to the data rate (bps) that the network or transmission link can deliver."</li>
+      <li>"The standard sampling frequencies used in audio are 5.0125 kHz, 11.025 kHz, 22.05 kHz, and 44.1 kHz", supported by most sound cards. Each is half the next, so the first should read 44.1 / 8 = 5.5125 kHz; 5.0125 is a typo.</li>
+      <li>Every row samples at least twice the top of its bandwidth (Nyquist, textbook context). Telephone: 2 × 3.4 = 6.8 ≤ 8 kHz. CD: 2 × 20 = 40 ≤ 44.1 kHz.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Try it: build a bitrate from its three factors</h4></div>
+      <p class="fig-lede">Pick a row of Table 6.2. The bars are kbps, all to one scale. The calculation multiplies the three factors, divides by 8 for the slide's kB/s, gives one minute of audio, and checks the sampling rate against the bandwidth. The last button plays the CD in mono.</p>
+      <div data-viz="rate-steps"></div>
+      <div data-viz="rate"></div>
+      <pre class="calc" data-role="rate-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. Synthetic sounds: FM and wave table (slides 13–14)</h4>
+    <ul>
+      <li>"Digitized sound must still be converted to analog, for us to hear it." There are "two fundamentally different approaches": FM, for frequency modulation, and Wave Table, or just Wave, sound.</li>
+      <li>FM "refers to the means of encoding the audio signal on the carrier frequency". The carrier is a fast cosine. The modulating signal goes inside its argument and pushes its phase back and forth. FM radio stations "operate in the 88 – 108 MHz band".</li>
+      <li>Wave table stores digital samples of real instruments. Its advantage is that it "much more precisely stores the exact sound of an instrument" (slide 27).</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Fig. 6.8</th><th class="l">Signal</th><th class="l">Caption</th></tr></thead>
+        <tbody>
+          <tr><td class="l">(a)</td><td class="l">cos(2πt)</td><td class="l">a single frequency</td></tr>
+          <tr><td class="l">(b)</td><td class="l">cos(4πt)</td><td class="l">twice the frequency</td></tr>
+          <tr><td class="l">(c)</td><td class="l">cos(cos(4πt))</td><td class="l">usually FM uses a sinusoid argument to a sinusoid</td></tr>
+          <tr><td class="l">(d)</td><td class="l">cos(2πt + cos(4πt))</td><td class="l">carrier 2πt with the modulating cosine cos(4πt) inside: a more complex form</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. MIDI: music as events (slides 15–19)</h4>
+    <ul>
+      <li>Slide 15: "MIDI, which dates from the early 1980s, is an acronym that stands for Musical Instrument Digital Interface. It forms a protocol adopted by the electronic music industry that enables computers, synthesizers, keyboards, and other musical devices to communicate with each other."</li>
+      <li>Most synthesizers support it, so a sound made on one can be played on another. A computer needs a MIDI interface, built into most sound cards, and "the sound card must also have both DA and AD converters".</li>
+      <li>Slide 16: "MIDI is a scripting language". It codes "events" that stand for the production of certain sounds, for example the pitch of a single note, its volume and what instrument sound to play. "Therefore, MIDI files are generally very small."</li>
+      <li>Role: "MIDI makes music notes", so it is useful for "inventing, editing, and exchanging musical ideas", and "a very useful vehicle for music education".</li>
+      <li>Master and slave (slide 17): one MIDI instrument controls others, which play the same music in part. A keyboard with poor built-in sound can be "daisy-chained" to a synthesizer with excellent sound. "Since MIDI comes with a built-in timecode, the master's clock can be used to synchronize all the slave timecodes."</li>
+      <li>A "sequencer-sampler" reorders and manipulates digital-audio samples and sequences of MIDI. A Digital Audio Workstation such as ProTools records many tracks, for example 8 vocal tracks and 8 instrument tracks at once.</li>
+    </ul>
+    <pre class="calc">slide 21: 3 minutes of MIDI ≈ 3 kB;   a WAV file stores 1 minute in about 10 MB
+CD-quality WAV, 1 min: 44,100 samples/s × 2 bytes × 2 channels × 60 s = 10,584,000 B ≈ 10.6 MB
+3 min: 31,752,000 B ≈ 31.75 MB;  31,752,000 / 3,000 ≈ 10,584  → MIDI is about 10,000 times smaller</pre>
+    <ul>
+      <li>Slide 18: "Music is organized into tracks in a sequencer. Each track can be turned on or off on recording or playing back."</li>
+      <li>"MIDI channels are used to separate messages. There are 16 channels, numbered from 0 to 15." The channel forms "the last four bits (the least significant bits)" of the status byte.</li>
+      <li>Each channel is usually tied to one instrument, "for example, channel 1 is the piano, channel 10 is the drums". You can switch instruments midstream.</li>
+      <li>Slide 19: channel messages include a channel number. System messages are general messages for all instruments, for example "indicating a change in tuning or timing".</li>
+      <li>An instrument responds "by simply ignoring any "play sound" message that is not for its channel". If several notes arrive on its channel, it plays them all "provided it is multi-voice", able to play more than a single note at once.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. MIDI words, from synthesizer to General MIDI (slides 20–24)</h4>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Term</th><th class="l">Slide definition</th><th class="l">Slide</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Synthesizer</td><td class="l">a stand-alone sound generator that can vary pitch, loudness, and tone color</td><td class="l">20</td></tr>
+          <tr><td class="l">Tone module, sound module</td><td class="l">units that generate sound</td><td class="l">20</td></tr>
+          <tr><td class="l">Sequencer</td><td class="l">started as hardware for storing and editing a sequence of musical events (MIDI data); now more often a software music editor</td><td class="l">20</td></tr>
+          <tr><td class="l">MIDI keyboard</td><td class="l">produces no sound; it generates MIDI messages (it may also include a synthesizer)</td><td class="l">21</td></tr>
+          <tr><td class="l">MIDI messages</td><td class="l">"rather like assembler code", usually just a few bytes</td><td class="l">21</td></tr>
+          <tr><td class="l">Timbre</td><td class="l">the quality of the sound, for example a piano as opposed to a violin</td><td class="l">21</td></tr>
+          <tr><td class="l">Multi-timbral</td><td class="l">capable of playing many different sounds at the same time (piano, brass, drums)</td><td class="l">21</td></tr>
+          <tr><td class="l">Voice</td><td class="l">every different timbre and pitch the tone module can produce at the same time; typically 16, 32, 64, 256 voices</td><td class="l">22</td></tr>
+          <tr><td class="l">Polyphony</td><td class="l">the number of voices that can be produced at the same time</td><td class="l">23</td></tr>
+          <tr><td class="l">Patch</td><td class="l">the set of control settings that define a particular timbre</td><td class="l">24</td></tr>
+          <tr><td class="l">Bank</td><td class="l">a database of patches</td><td class="l">24</td></tr>
+          <tr><td class="l">General MIDI</td><td class="l">an agreed mapping of instruments (patches) to channels: 128 patches, and channel 10 reserved for percussion</td><td class="l">24</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Slide 23's example keeps the two counts apart. "64 voices of polyphony" means 64 different notes at once. "16-part multi-timbral" means it can sound like 16 different instruments at once.</li>
+      <li>Each voice "works independently and simultaneously to produce sounds of different timbre and pitch".</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. MIDI bytes, the envelope and sequencers (slides 25–30)</h4>
+    <ul>
+      <li>Slide 25: "The data in a MIDI status byte is between 128 and 255; each of the data bytes is between 0 and 127." 128 = 1000 0000 is the first byte with its top bit set, so the top bit alone tells a status byte from a data byte.</li>
+      <li>"Actual MIDI bytes are 8 bit, plus a 0 start and stop bit, making them 10-bit "bytes"." On the wire every byte costs 10 bits.</li>
+      <li>Fig. 6.9 is the MIDI data stream. A typical message is {status byte, data byte, data byte} = {Note On, Note Number, Note Velocity}.</li>
+      <li>A MIDI device is often programmable. It has filters for changing the bass and treble response, and it can change the "envelope", which describes "how the amplitude of a sound changes over time".</li>
+      <li>Fig. 6.10 models a digital instrument's response to Note On and Note Off messages: attack, decay, sustain, release (ADSR).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>Try it: the envelope of one note</h4></div>
+      <p class="fig-lede">The gray wave is the sound; the blue outline is its envelope, after Fig. 6.10. Note On starts the attack. The sound holds at the sustain level while the key is down, and Note Off starts the release. Step through the four phases.</p>
+      <div data-viz="adsr-steps"></div>
+      <p class="step-note" data-role="adsr-note" aria-live="polite"></p>
+      <div data-viz="adsr"></div>
+    </figure>
+    <ul>
+      <li>Slide 27: sequencers (editors) let you work in standard music notation or directly in the data. "MIDI files can also store wave table data."</li>
+      <li>A sampler samples audio. A "drum machine" always stores wave table data of real drums. So one track can be MIDI and another digital audio, such as vocals.</li>
+      <li>Slide 28: MIDI is "a full messaging protocol that can be used for whatever one likes, for example for controlling lights in a theater". One message type sends "any kind and any number of bytes".</li>
+      <li>Sequencer tricks: looping over a few bars; volume controlled over time, "time varying amplitude modulation"; and "time compression or expansion with no pitch change".</li>
+      <li>Slide 29: a large change of key makes a sampled instrument sound displeasing, so samplers use multisampling. "A sound is recorded using several bandpass filters, and the resulting recordings are assigned to different keyboard keys", so each note needs less shift.</li>
+      <li>Slide 30: "MIDI Machine Control (MMC) is a subset of the MIDI specification that can be used for controlling recording equipment, e.g. multitrack recorders." Its most common use is to "press "Play" on a remote device", for example to start a device with a poor timer at just the right time.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. MIDI hardware: 31.25 kbps, IN, OUT and THRU (slides 31–34)</h4>
+    <ul>
+      <li>"The MIDI hardware setup consists of a 31.25 kbps serial connection, with the 10-bit bytes including a 0 start and stop bit." Serial means one bit after another on one wire. "Usually, MIDI-capable units are either input devices or output devices, not both."</li>
+      <li>Fig. 6.11, a synthesizer: "The modulation wheel adds vibrato. Pitch bend alters the frequency, much like pulling a guitar string over slightly."</li>
+      <li>The ports are 5-pin connectors. "MIDI IN is the connector via which the device receives all MIDI data. MIDI OUT is the connector through which the device transmits all the MIDI data it generates itself." A third connector, THRU, "simply copies data entering the IN channel".</li>
+      <li>"MIDI communication is half-duplex": data goes one way at a time (textbook context for the term).</li>
+    </ul>
+    <pre class="calc">Fig. 6.12, a typical sequencer setup (slides 32–33)
+keyboard OUT → IN synthesizer   synthesizer THRU → IN sound module   module THRU → IN next module …
+recording: the keyboard-equipped synthesizer sends MIDI messages to a sequencer, which records them
+playback:  the sequencer sends the messages to all the sound modules and the synthesizer, which play</pre>
+    <p>Slide 34: "The 31.25 kbps data rate is actually quite restrictive."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Step</th><th class="l">Computation</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td class="l">One Note On message</td><td class="l">3 bytes × 10 bits</td><td>30 bits</td></tr>
+          <tr><td class="l">Chord with all ten fingers</td><td class="l">10 notes × 30 bits</td><td>300 bits</td></tr>
+          <tr><td class="l">Time for the chord</td><td class="l">300 / 31,250 bit/s</td><td class="hl">0.0096 s ≈ 0.01 s</td></tr>
+          <tr><td class="l">Time per note</td><td class="l">30 / 31,250 bit/s</td><td class="hl">0.00096 s ≈ 0.001 s</td></tr>
+          <tr><td class="l">Not counted on the slide</td><td class="l">10 Note Off messages, another 300 bits</td><td>0.0192 s in total</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Try it: how long a chord takes on the wire</h4></div>
+      <p class="fig-lede">Top: one MIDI byte as it travels, its 8 bits between a start bit and a stop bit. Bottom: a chord at 31,250 bits per second. Each Note On is 3 bytes = 30 bits = 0.96 ms, and the messages go one after another. Drag the number of notes. The Note Off messages that end the chord come after.</p>
+      <div data-viz="wire-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Bits, Note On only</span><span class="v" data-role="w-bits">300</span><span class="sub">notes × 30</span></div>
+        <div class="stat"><span class="label">Note On only</span><span class="v pri" data-role="w-on">9.6 ms</span><span class="sub">bits / 31,250</span></div>
+        <div class="stat"><span class="label">With Note Off</span><span class="v sec" data-role="w-off">19.2 ms</span><span class="sub">twice the bits</span></div>
+      </div>
+      <div data-viz="wire"></div>
+      <div class="legend">
+        <span><i class="sw-pri"></i>Note On message, 30 bits</span>
+        <span><i class="sw-sec"></i>Note Off message, 30 bits</span>
+      </div>
+    </figure>
+    <p>Pitch bend and modulation wheels "could generate many messages as well", which share the same 31.25 kbps.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. Structure of MIDI messages (slides 35–39)</h4>
+    <pre class="calc">Fig. 6.13   MIDI messages
+            ├ Channel messages   Voice, Mode
+            └ System messages    Common, Real-time, Exclusive</pre>
+    <ul>
+      <li>Slide 35: "A channel message can have up to 3 bytes; the first is the status byte and has its most significant bit set to 1. The four low order bits identify which of the 16 possible channels this message belongs to, with the three remaining bits holding the message. For a data byte, the most significant bit is set to zero."</li>
+      <li>Voice messages control a voice. They say "which note to play or to turn off", encode key pressure, and "specify controller effects, such as sustain, vibrato, tremolo, and the pitch wheel".</li>
+      <li>&amp;H means hexadecimal. One hex digit is four bits, so the first hex digit of a status byte is the flag plus the three message bits, and the second hex digit is the channel n.</li>
+    </ul>
+    <p class="formula">status byte = 1 t t t n n n n · (t = message, n = channel) · data byte = 0 d d d d d d d</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Table 6.3 voice message</th><th class="l">Status</th><th class="l">First 4 bits</th><th class="l">Data byte 1</th><th class="l">Data byte 2</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Note off</td><td class="l">&amp;H8n</td><td class="l">1000</td><td class="l">Key number</td><td class="l">Note off velocity</td></tr>
+          <tr class="on"><td class="l">Note on</td><td class="l">&amp;H9n</td><td class="l">1001</td><td class="l">Key number</td><td class="l">Note on velocity</td></tr>
+          <tr><td class="l">Polyphonic key pressure</td><td class="l">&amp;HAn</td><td class="l">1010</td><td class="l">Key number</td><td class="l">Amount</td></tr>
+          <tr><td class="l">Control change</td><td class="l">&amp;HBn</td><td class="l">1011</td><td class="l">Controller number</td><td class="l">Controller value</td></tr>
+          <tr><td class="l">Program change</td><td class="l">&amp;HCn</td><td class="l">1100</td><td class="l">Program number</td><td class="l">None</td></tr>
+          <tr><td class="l">Channel pressure</td><td class="l">&amp;HDn</td><td class="l">1101</td><td class="l">Pressure value</td><td class="l">None</td></tr>
+          <tr><td class="l">Pitch bend</td><td class="l">&amp;HEn</td><td class="l">1110</td><td class="l">MSB</td><td class="l">LSB</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>All data values are 0 to 127, except the controller number, 0 to 120.</li>
+      <li>Example: Note On on channel 3 is &amp;H93 = 1001 0011 = 147. With key 60 and velocity 100 the message is &amp;H93 &amp;H3C &amp;H64.</li>
+      <li>Mode messages (Table 6.4) put a code in the first data byte: &amp;H79 reset all controllers, &amp;H7A local control (second byte 0 = off, 127 = on), &amp;H7B all notes off, &amp;H7C omni mode off, &amp;H7D omni mode on, &amp;H7E mono mode on (poly off), &amp;H7F poly mode on (mono off). These codes are 121 to 127, just above the controller numbers 0 to 120 (textbook context).</li>
+      <li>System messages start with &amp;HF, flag 1 and message bits 111. They are for all instruments, so the low four bits pick the message instead of a channel.</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Table 6.5 system common</th><th class="l">Status</th><th class="l">Data bytes</th><th class="l">Table 6.6 system real-time</th><th class="l">Status</th></tr></thead>
+        <tbody>
+          <tr><td class="l">MIDI timing code</td><td class="l">&amp;HF1</td><td class="l">1</td><td class="l">Timing clock</td><td class="l">&amp;HF8</td></tr>
+          <tr><td class="l">Song position pointer</td><td class="l">&amp;HF2</td><td class="l">2</td><td class="l">Start sequence</td><td class="l">&amp;HFA</td></tr>
+          <tr><td class="l">Song select</td><td class="l">&amp;HF3</td><td class="l">1</td><td class="l">Continue sequence</td><td class="l">&amp;HFB</td></tr>
+          <tr><td class="l">Tune request</td><td class="l">&amp;HF6</td><td class="l">None</td><td class="l">Stop sequence</td><td class="l">&amp;HFC</td></tr>
+          <tr><td class="l">EOX (terminator)</td><td class="l">&amp;HF7</td><td class="l">None</td><td class="l">Active sensing</td><td class="l">&amp;HFE</td></tr>
+          <tr><td class="l"></td><td class="l"></td><td class="l"></td><td class="l">System reset</td><td class="l">&amp;HFF</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>Try it: read a byte stream like a receiver</h4></div>
+      <p class="fig-lede">Eleven bytes as they arrive, in hex with the binary below. A receiver needs only bit 7: 1 starts a new message and 0 continues it. Step through the four messages to decode each status byte with Table 6.3 and to see what a piano listening on channel 0 does.</p>
+      <div data-viz="stream-steps"></div>
+      <p class="step-note" data-role="stream-note" aria-live="polite"></p>
+      <div data-viz="stream"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. General MIDI and MIDI-to-WAV conversion (slides 40–41)</h4>
+    <ul>
+      <li>Goal of General MIDI: the same patch numbers mean the same instruments on every machine, so "patch 1 should always be a piano, not a flugelhorn".</li>
+      <li>"A standard percussion map also specifies 47 percussion sounds." Where a "note" appears on the score decides which percussion element is struck.</li>
+      <li>A General MIDI device "must support all 16 channels; must be multi-timbral (i.e., each channel can play a different instrument/program); must be polyphonic (i.e., each channel is able to play many voices); and must have a minimum of 24 dynamically allocated voices".</li>
+      <li>MIDI to WAV (slide 41): early versions of Adobe Premiere accept only WAV files. Shareware converters "consist of large lookup files" that substitute predefined or shifted WAV output for MIDI messages, "with inconsistent success".</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. Coding of audio and PCM (slides 42–44)</h4>
+    <ul>
+      <li>Slide 42: "Quantization and transformation of data are collectively known as coding of the data."</li>
+      <li>For audio, the μ-law technique for companding is usually combined with a simple algorithm that exploits the temporal redundancy in audio signals: neighbouring samples are similar. The slide glosses companding as "reduce the SNR of (a signal) using a compander".</li>
+      <li>A compander is a compressor plus an expander (textbook context). The compressor boosts quiet parts before uniform quantization and the expander undoes it, so small amplitudes get finer steps (the logarithmic quantization of Lecture 2).</li>
+      <li>PCM is Pulse Code Modulation (slide 2 writes "PCM code modulation").</li>
+    </ul>
+    <p>Slide 43: "Every compression scheme has three stages."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Stage</th><th class="l">What it does</th><th class="l">Slide example</th></tr></thead>
+        <tbody>
+          <tr><td class="l">1. Transformation</td><td class="l">the input is transformed to a new representation that is easier or more efficient to compress</td><td class="l">predictive coding: predict the next signal from previous ones and transmit the prediction error</td></tr>
+          <tr><td class="l">2. Loss</td><td class="l">"Quantization is the main lossy step": fewer reconstruction levels than in the original signal, so some information is lost</td><td class="l">quantization</td></tr>
+          <tr><td class="l">3. Coding</td><td class="l">assign a codeword (forming a binary bitstream) to each output level or symbol</td><td class="l">fixed-length code, or a variable-length code such as Huffman coding</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="calc">Fig. 6.15, PCM in general (slide 44)
+encoder: input analog speech → bandlimiting filter → μ-law or A-law compressor → linear PCM → transmission
+decoder: digital-to-analog converter → μ-law or A-law expander → low-pass filter → output analog speech</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 8</span><h4>Try it: follow a signal through Fig. 6.15</h4></div>
+      <p class="fig-lede">Step through the eight blocks. The plot shows the signal leaving the highlighted block, with the band-limited speech faint behind it. To keep the steps visible, linear PCM here takes 32 samples across the plot and uses 4 bits (16 levels) with μ = 255. Quiet parts come back finer than loud parts, which is what companding is for.</p>
+      <div data-viz="pcm-steps"></div>
+      <p class="step-note" data-role="pcm-note" aria-live="polite"></p>
+      <div data-viz="pcm"></div>
+    </figure>
+    <p>Lossy compression and entropy coding in depth come in Lectures 4 and 5.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Mistakes that cost marks</h4>
+    <ul>
+      <li>Using 10 log₁₀ on a voltage ratio. 100 times the voltage is 20 log₁₀ 100 = 40 dB, not 20 dB. Use 10 log₁₀ only for a power ratio.</li>
+      <li>Rounding the number of bits down. 50 / 6.02 = 8.31 needs 9 bits, because 8 bits give only 48.16 dB.</li>
+      <li>Giving the SQNR when the gain is asked. Going from 8 to 12 bits adds 4 × 6.02 = 24.08 dB; 48.16 dB is the 8-bit SQNR itself.</li>
+      <li>Mixing kbps and kB/s. CD audio is 1,411.2 kbps = 176.4 kB/s, and Table 6.2's column is in kilobytes. Forgetting the channels halves a stereo rate.</li>
+      <li>Putting the channel in the high bits. The status byte is 1ttt nnnn: flag, three message bits, four channel bits. 0 to 15 is the channel, 128 to 255 a status byte, 0 to 127 a data byte.</li>
+      <li>Timing MIDI with 8-bit bytes. On the wire a byte is 10 bits, so a Note On is 30 bits = 0.96 ms at 31.25 kbps, not 24 bits.</li>
+      <li>Mixing up the PCM rows. The expander, the DAC and the low-pass filter belong to the decoder. The encoder filters first, then compresses, then quantizes.</li>
+      <li>Swapping polyphony and multi-timbral. Polyphony counts voices (notes) at once; multi-timbral counts different instruments at once.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>Cheat sheet</h4>
+    <div data-viz="cheat"></div>
+  </div>
+
+  <div class="sol-part">
+    <h4>How to write it on the exam</h4>
+    <pre class="calc">SNR (definition + both forms)
+  1. SNR = the ratio of the power of the correct signal to the noise, in dB.
+  2. Power ∝ V², so voltages → 20 log₁₀(Vs / Vn), powers → 10 log₁₀(Ps / Pn).
+  3. 5 V and 0.25 V:    20 log₁₀(5 / 0.25)   = 20 log₁₀ 20   = 26.02 dB
+  4. 2 W and 0.5 mW:    10 log₁₀(2 / 0.0005) = 10 log₁₀ 4000 = 36.02 dB
+
+SQNR and bits
+  1. SQNR = 20 log₁₀(2^(N−1) / ½) = 20 N log₁₀ 2 = 6.02N dB; error ≤ half an interval.
+  2. Target 50 dB: N ≥ 50 / 6.02 = 8.31 → round up → N = 9.
+  3. Check: 8 bits → 48.16 dB &lt; 50;  9 bits → 54.18 dB ≥ 50.
+  4. Levels 2⁹ = 512;  step = 2 V / 512 = 3.91 mV;  largest error = step / 2 = 1.95 mV.
+
+Bitrate and file size
+  fₛ × bits × channels = 44,100 × 16 × 2 = 1,411,200 bit/s = 1,411.2 kbps
+  ÷ 8 = 176,400 B/s = 176.4 kB/s;   × 180 s = 31,752,000 B ≈ 31.75 MB
+
+MIDI message
+  1. Define: MIDI = protocol (early 1980s) that codes events, not samples.
+  2. Table 6.3: Note On = &amp;H9n, then key number, then velocity.
+  3. Status 1001 0101 = &amp;H95 = 149: 1 = status byte, 001 = Note On, 0101 = channel 5.
+  4. Data: 67 = &amp;H43 = 0100 0011;  90 = &amp;H5A = 0101 1010  (MSB 0, values 0 to 127).
+  5. Time: 3 bytes × 10 bits = 30 bits;  30 / 31,250 = 0.00096 s = 0.96 ms.
+
+PCM block diagram
+  encoder: bandlimiting filter → μ-law / A-law compressor → linear PCM → transmission
+  decoder: DAC → μ-law / A-law expander → low-pass filter (same cutoff as the bandpass top)</pre>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>SNR: 20 log₁₀ for voltages, 10 log₁₀ for powers. 100 × the voltage = 40 dB; 5 V / 0.25 V = 26.02 dB; 2 W / 0.5 mW = 36.02 dB.</li>
+      <li>Table 1: +10 dB = 10 × intensity, +20 dB = 10 × amplitude. Busy street 70 − average room 40 = 30 dB = 1,000 × the intensity.</li>
+      <li>Quantization: 2<sup>N</sup> levels, step = range / 2<sup>N</sup>, error at most half a step. 0 to 1 V with 8 bits: 256 levels, 3.9 mV step, 1.95 mV error.</li>
+      <li>SQNR = 20 log₁₀(2<sup>N−1</sup> / ½) = 6.02N dB: 8 bits 48.16, 12 bits 72.24, 16 bits 96 dB. 8 → 12 bits = +24.08 dB. Realistic: 6.02N + 1.76.</li>
+      <li>Bits for a target T: N = ⌈T / 6.02⌉. 50 dB → 9 bits, 512 levels; 90 dB → 15 bits.</li>
+      <li>Bitrate = fₛ × bits × channels: CD 1,411.2 kbps = 176.4 kB/s; telephone 64 kbps = 8 kB/s; stereo doubles.</li>
+      <li>Speech 50 Hz to 10 kHz, music 20 Hz to 20 kHz, by a bandpass (band-limiting) filter; the decoder's low-pass filter after the DA uses the same upper cutoff.</li>
+      <li>MIDI codes events: 3 minutes ≈ 3 kB against 31.75 MB of CD-quality WAV, about 10,000 times smaller.</li>
+      <li>Status byte 1ttt nnnn, 128 to 255; data byte 0ddddddd, 0 to 127; 16 channels 0 to 15 in the low four bits. Note On channel 5 = &amp;H95 = 1001 0101.</li>
+      <li>31.25 kbps, 10-bit bytes: a 3-byte message = 30 bits = 0.96 ms; a ten-note chord 9.6 ms, 19.2 ms with the Note Offs.</li>
+      <li>Words: voice, polyphony, multi-timbral, patch, bank; General MIDI = 128 patches, channel 10 percussion, 47 percussion sounds, 16 channels, at least 24 voices. IN, OUT, THRU, half-duplex. ADSR.</li>
+      <li>PCM: transformation, loss (quantization), coding. Encoder: bandlimiting filter → μ-law / A-law compressor → linear PCM. Decoder: DAC → expander → low-pass filter.</li>
+    </ul>
+    <p class="source">Slides: L3 p.3–44 · Notes: 03_Week2_Audio_SNR_MIDI_PCM.md</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lecture</h4>
+    <div data-role="related"></div>
+  </div>
+</article>
