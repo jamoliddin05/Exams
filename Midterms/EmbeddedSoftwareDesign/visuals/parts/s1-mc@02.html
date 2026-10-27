@@ -1,0 +1,174 @@
+<article class="q" id="s1-mc9" data-part="mc" data-num="9" data-topic="Address binding" data-ref="topic2">
+  <div class="q-head">
+    <p class="eyebrow">Question 9 · L02, Address binding</p>
+    <h3 class="q-title">Your laptop builds <code>hello.c</code> without any linker script from you, and the same binary runs at a different address on every launch. The STM32C031C6 build needs a hand-written <code>link.ld</code>, and <code>SystemCoreClock</code> is at <code>0x20000000</code> on every run. Which build stage reads <code>link.ld</code>, and why does only the embedded build need you to write it?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Compile: the compiler needs the chip's addresses to generate Thumb instructions, and an x86 compiler does not</span>
+      <span class="why">No. The compiler sees one file at a time and leaves a hole and a note wherever it needs an address it does not have.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Preprocess: <code>link.ld</code> supplies the <code>#define</code>s for the register addresses, which a laptop gets from the OS headers</span>
+      <span class="why">No. Register names come from C headers. <code>link.ld</code> describes memory regions and is read by the linker.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>Link and locate: with no loader and no MMU, every name is bound to its real address at build time, so you must describe the memory map; the laptop binds at run time with an MMU</span>
+      <span class="why">Correct. Locate is the embedded stage, and binding at build time is why its input is written by hand.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Assemble: Thumb instructions are 16 bits wide, so the assembler needs <code>link.ld</code> to know where each instruction goes</span>
+      <span class="why">No. The assembler turns one file into an <code>.o</code> with no final addresses. Instruction width has nothing to do with where code is placed.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> A name can be bound to its address at compile time, load time or run time. A laptop binds at run time: an MMU translates addresses while the program runs, so the same binary works wherever it lands.</p>
+    <p>This chip has no loader and no MMU, so binding happens at build time and is burned into the image. The locate stage does it, from the memory map you write in <code>link.ld</code>. Preprocess, compile and assemble work on one file at a time and assign no final addresses.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Only the last stage gives a name its real address</h4></div>
+    <p class="fig-lede">The five stages for <code>main.c</code>, which reads <code>SystemCoreClock</code>. Step through them and watch what the name is after each one. Its address stays unknown until locate reads <code>link.ld</code>.</p>
+    <div data-viz="pipe-steps"></div>
+    <p class="step-note" data-role="pipe-note" aria-live="polite"></p>
+    <div data-viz="pipe"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Three moments to bind a name, and who uses each</h4></div>
+    <p class="fig-lede">Time runs left to right. A blue cell means the name now has its final, real address. Before that, the program holds only a name or a virtual address.</p>
+    <div data-viz="bind"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>real address fixed</span>
+      <span><i class="sw-seg"></i>name only, no address yet</span>
+      <span><i class="sw-sec-soft"></i>virtual address, translated on every access</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Five stages: preprocess, compile, assemble, link, locate. Locate is the embedded one. With no loader and no MMU, binding happens at build time and is burned into the image, so you write the linker script by hand. A laptop binds at run time with an MMU.</p>
+    <p class="source">Source: L02 slide 2 five stages, locate is the embedded one, address binding table · L02 slide 10 items 1 and 7 · Notes: L02 › 2. Five stages, not one, and address binding</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc10" data-part="mc" data-num="10" data-topic="Flash and RAM cost" data-ref="topic2">
+  <div class="q-head">
+    <p class="eyebrow">Question 10 · L02, Flash and RAM cost</p>
+    <h3 class="q-title">A project builds and runs. You add the three globals below. By how much do FLASH used and RAM used in the build's memory report grow? Ignore alignment.</h3>
+    <pre class="calc">const uint8_t lut[64] = {1, 2, 3};
+uint32_t samples[32];
+uint32_t gain = 3;</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>FLASH +196 B, RAM +196 B</span>
+      <span class="why">No. 196 = 64 + 128 + 4 charges every variable to both memories.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>FLASH +64 B, RAM +132 B</span>
+      <span class="why">No. It forgets that the initial value of <code>gain</code> must also be stored in flash.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>FLASH +68 B, RAM +132 B</span>
+      <span class="why">Correct. Flash 64 (<code>.rodata</code>) + 4 (<code>.data</code> values) = 68. RAM 128 (<code>.bss</code>) + 4 (<code>.data</code>) = 132.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>FLASH +68 B, RAM +196 B</span>
+      <span class="why">No. A <code>const</code> table never changes, so it stays in flash and takes no RAM.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> <code>lut</code> is <code>const</code>, so it goes in <code>.rodata</code>: 64 B of flash and no RAM. <code>samples</code> starts at zero, so it goes in <code>.bss</code>: 128 B of RAM and nothing in flash, because the image records only how many bytes to clear.</p>
+    <p><code>gain</code> has a starting value, so it is <code>.data</code> and costs both: 4 B of RAM for the variable and 4 B of flash for its initial value. FLASH 64 + 4 = 68, RAM 128 + 4 = 132.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Each global lands in its section, and each section costs flash, RAM or both</h4></div>
+    <p class="fig-lede">The two bars are the growth of FLASH used and RAM used, drawn to scale in bytes. Pick a variable to see where its bytes go.</p>
+    <div data-viz="cost-steps"></div>
+    <p class="step-note" data-role="cost-note" aria-live="polite"></p>
+    <div data-viz="cost"></div>
+    <div class="legend">
+      <span><i class="sw-ter"></i><span><code>.rodata</code>, flash only</span></span>
+      <span><i class="sw-pri"></i><span><code>.data</code>, flash and RAM</span></span>
+      <span><i class="sw-sec"></i><span><code>.bss</code>, RAM only</span></span>
+    </div>
+    <div data-viz="cost-table"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>const</code> goes to <code>.rodata</code> (flash only). Zero-initialised globals go to <code>.bss</code> (RAM only, nothing stored in flash). Globals with a starting value go to <code>.data</code> and cost both: the values live in flash, the variables live in RAM.</p>
+    <p class="source">Source: L02 slide 4 four sections in flash and SRAM · L02 slide 5 <code>.data</code> exists twice, <code>.bss</code> costs nothing in flash · L02 slide 10 item 8 · Notes: L02 › 5. The awkward one: .data, and why .bss is free</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc11" data-part="mc" data-num="11" data-topic=".bss loop" data-ref="topic2">
+  <div class="q-head">
+    <p class="eyebrow">Question 11 · L02, Missing .bss loop</p>
+    <h3 class="q-title">In a student's <code>Reset_Handler</code> the <code>.data</code> copy is present, but the <code>.bss</code> loop was deleted by mistake. <code>static uint32_t presses;</code> counts button presses. Every test right after plugging the board in passes, but after pressing the reset button the count sometimes starts at a large number. What explains this?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>Without the <code>.bss</code> loop, <code>presses</code> starts as whatever that RAM held, and a reset does not clear SRAM, so after a reset it keeps the previous run's count</span>
+      <span class="why">Correct. The bug depends on what ran before, so it is intermittent.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>The hardware zeroes RAM when power is applied, but the reset button skips that step</span>
+      <span class="why">No. At any reset the hardware only loads SP and PC from two words of flash. It never clears RAM.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>presses</code> is in <code>.data</code>, so its first value is copied from flash, and flash still holds the count from the last run</span>
+      <span class="why">No. A static with no initial value is <code>.bss</code>, and stores go to RAM, never back to flash.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The RAM <code>LENGTH</code> in <code>link.ld</code> is too large, so the linker placed <code>presses</code> past the end of real RAM</span>
+      <span class="why">No. A wrong <code>LENGTH</code> moves the top of RAM, where the stack is. <code>.bss</code> starts near <code>0x20000000</code>.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> A global or static with no initial value is in <code>.bss</code>, and only the <code>.bss</code> loop in <code>Reset_Handler</code> sets it to zero. Without that loop the variable starts as whatever RAM held.</p>
+    <p>The slide's wording: the program works perfectly on a cold boot and misbehaves after a reset. A reset does not clear SRAM, so after the reset button <code>presses</code> still holds what the previous run left. The value depends on history, which is why the bug is intermittent.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>The value of <code>presses</code> through a power-on, a run and a reset</h4></div>
+    <p class="fig-lede">Two boards run the same program, one with the <code>.bss</code> loop and one without it. Step through the timeline. The reset button reruns <code>Reset_Handler</code>, but SRAM keeps its contents.</p>
+    <pre class="calc">src = &amp;_sidata;
+for (dst = &amp;_sdata; dst &lt; &amp;_edata; ) { *dst++ = *src++; }   /* copy .data: present */
+for (dst = &amp;_sbss;  dst &lt; &amp;_ebss;  ) { *dst++ = 0; }        /* zero .bss: this line was deleted */</pre>
+    <div data-viz="tl-steps"></div>
+    <p class="step-note" data-role="tl-note" aria-live="polite"></p>
+    <div data-viz="tl"></div>
+    <div class="legend">
+      <span><i class="sw-ok"></i>0, as C promises</span>
+      <span><i class="sw-bad"></i>left over from the previous run</span>
+      <span><i class="sw-seg"></i>unchanged</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Skip the <code>.bss</code> loop and globals start as whatever was in RAM. The program works on a cold boot and misbehaves after a reset, because a reset does not clear SRAM: an intermittent, history-dependent bug.</p>
+    <p class="source">Source: L02 slide 5 skip the <code>.bss</code> loop · L02 slide 8 the only step the hardware does · L02 slide 10 item 4 · Notes: L02 › 5. The awkward one: .data, and why .bss is free</p>
+  </div>
+</article>

@@ -1,0 +1,68 @@
+{
+  "title": "ESD Midterm Visuals",
+  "kicker": "Embedded System and Software Design (SOC3050) · Midterm prep",
+  "lede": "Three sample midterms in the real exam format: 33 multiple-choice questions, 60 minutes, lessons 00 to 08. The Topics tab explains every lesson with figures and lists the sample questions on it. Each question has the answer, a figure of the mechanism behind it, and the line to remember. Every number was checked in Python.",
+  "foot": "Sources: the lesson decks (L05 slide 12 = lesson 05, slide 12), the professor's midterm guide (slides/exam_midterm_overview.md) and the study notes in Midterms/EmbeddedSoftwareDesign/notes.",
+  "artifact": "https://claude.ai/artifact/PLXMNL7atJ796AWntJCHtE",
+  "out": "dist/esd-midterm-visuals.html",
+  "tabLabel": "Sample",
+  "barLabel": "Midterm",
+  "sources": {
+    "questions": "../MidtermSamples/Midterm_Sample_<N>.md",
+    "notes": "../notes/",
+    "slides": "../slides/source/",
+    "guide": "../slides/exam_midterm_overview.md"
+  },
+  "parts": [
+    {
+      "key": "ex",
+      "title": "The exam and how to prepare",
+      "index": "Exam",
+      "chip": "name"
+    },
+    {
+      "key": "mc",
+      "title": "Multiple choice · 33 questions",
+      "index": "Questions",
+      "chip": "num"
+    },
+    {
+      "key": "tp",
+      "title": "Lessons 00–08",
+      "index": "Lessons",
+      "chip": "name"
+    }
+  ],
+  "sections": [
+    {
+      "id": "topics",
+      "tab": "Topics",
+      "tabPrefix": "",
+      "noun": "tab",
+      "idPrefix": {
+        "tp": "topic",
+        "ex": "exam"
+      },
+      "title": "Topics",
+      "meta": "Lessons 00–08, the whole midterm scope, one explainer per lesson in course order. Each explainer ends with every sample question on that lesson: open one to see the options and the answer, or jump to its full explanation."
+    },
+    {
+      "id": "s1",
+      "tab": "1",
+      "title": "Sample 1",
+      "meta": "Lessons 00–08 · 60 minutes · 33 multiple choice × 1 mark, options A–D, closed book, no calculator · Q1–4 L00 · Q5–8 L01 · Q9–11 L02 · Q12–14 L03 · Q15–17 L04 · Q18–22 L05 · Q23–26 L06 · Q27–30 L07 · Q31–33 L08"
+    },
+    {
+      "id": "s2",
+      "tab": "2",
+      "title": "Sample 2",
+      "meta": "Lessons 00–08 · 60 minutes · 33 multiple choice × 1 mark, options A–D, closed book, no calculator · Q1–4 L00 · Q5–8 L01 · Q9–11 L02 · Q12–14 L03 · Q15–17 L04 · Q18–22 L05 · Q23–26 L06 · Q27–30 L07 · Q31–33 L08"
+    },
+    {
+      "id": "s3",
+      "tab": "3",
+      "title": "Sample 3",
+      "meta": "Lessons 00–08 · 60 minutes · 33 multiple choice × 1 mark, options A–D, closed book, no calculator · Q1–4 L00 · Q5–8 L01 · Q9–11 L02 · Q12–14 L03 · Q15–17 L04 · Q18–22 L05 · Q23–26 L06 · Q27–30 L07 · Q31–33 L08"
+    }
+  ]
+}

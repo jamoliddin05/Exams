@@ -1,0 +1,245 @@
+<article class="q" id="s1-mc23" data-part="mc" data-num="23" data-topic="PSC and ARR" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 23 · L06, PSC and ARR</p>
+    <h3 class="q-title">TIM3 runs from the 48 MHz clock. It must count at 2 MHz and raise an update event every 10 ms. Which register values do that?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>PSC = 24</code>, <code>ARR = 20000</code></span>
+      <span class="why">No. Both registers hold N − 1. This divides by 25 and counts 20 001 steps: 10.42 ms, about 4 % slow.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>PSC = 23</code>, <code>ARR = 9999</code></span>
+      <span class="why">No. 10 000 counts at 2 MHz is 5 ms, an update rate of 200 Hz.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span><code>PSC = 23</code>, <code>ARR = 19999</code></span>
+      <span class="why">Correct. 48 MHz / 24 = 2 MHz, and 20 000 counts of 0.5 µs make 10 ms.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>PSC = 47</code>, <code>ARR = 19999</code></span>
+      <span class="why">No. That counts at 1 MHz and updates every 20 ms, the lesson's servo frame.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> The counter steps once every PSC + 1 clocks, so 48 MHz / 24 = 2 MHz needs <code>PSC&nbsp;=&nbsp;23</code>. 10 ms at 2 MHz is 20 000 counts, 0 to 19 999, so <code>ARR&nbsp;=&nbsp;19999</code>.</p>
+    <p>Check with the slide-5b formula: 48 000 000 / (24 × 20 000) = 100 Hz, one update every 10 ms. Option A forgets the −1 in both registers, and nothing complains about it.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Two dividers in a row: PSC sets the count rate, ARR sets how far it counts</h4>
+    </div>
+    <p class="fig-lede">The top row is the time base of slide 5b with the chosen values. The chart draws CNT over 30 ms to scale: it climbs from 0 to ARR, and each drop back to 0 is an update event (dot). The dashed lines are the 10 ms target. Pick an option.</p>
+    <div data-viz="pick"></div>
+    <div data-viz="ramp"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">Count rate</span><span class="v pri" data-role="rate">2 MHz</span><span class="sub">48 MHz / (PSC + 1)</span></div>
+      <div class="stat"><span class="label">Counts per period</span><span class="v" data-role="counts">20 000</span><span class="sub">ARR + 1</span></div>
+      <div class="stat"><span class="label">Update every</span><span class="v ok" data-role="period">10 ms</span><span class="sub">counts / count rate</span></div>
+    </div>
+    <p class="verdict" data-role="verdict"></p>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>f<sub>update</sub> = f<sub>clk</sub> / ((PSC + 1)(ARR + 1)). Both registers hold N − 1: a count of N steps runs from 0 to N − 1. Count rate first (PSC), then counts per period (ARR).</p>
+    <p class="source">Source: L06 slides 5b, 17 · Notes: L06 › 6. Time base: PSC, ARR, CNT</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc24" data-part="mc" data-num="24" data-topic="Clearing UIF" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 24 · L06, clearing UIF</p>
+    <h3 class="q-title">TIM3 raises an update interrupt every 20 ms at NVIC priority 2. SysTick, at priority 3, drives <code>millis()</code>, and TIM3 channel 1 drives the servo on PA6 in PWM mode. The update handler below builds with zero warnings. What does the board do once the timer starts?</h3>
+    <pre class="calc">void TIM3_IRQHandler(void)
+{
+    if (TIM3-&gt;SR &amp; TIM_SR_UIF) {
+        TIM3-&gt;SR = TIM_SR_UIF;
+        frames++;
+    }
+}</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>It runs normally: writing 1 to a flag clears it, as it does for EXTI</span>
+      <span class="why">No. EXTI flags clear by writing 1; timer flags clear by writing 0.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Only the first frame is lost: the flag clears itself at the next update event</span>
+      <span class="why">No. Hardware only sets UIF. Software has to clear it.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The timer stops counting, and the servo pulse on PA6 stops with it</span>
+      <span class="why">No. The CPU is stuck, not the timer. The counter and the PWM channel are hardware.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span>The handler re-enters forever, <code>millis()</code> stops advancing, and the servo holds its position</span>
+      <span class="why">Correct. UIF never clears, so TIM3's handler keeps the CPU and starves the less urgent SysTick.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> Timer flags clear by writing 0. <code>TIM3-&gt;SR = TIM_SR_UIF</code> writes 1 to UIF, which leaves it set, and 0 to every other flag, which clears them.</p>
+    <p>UIF stays set, so the handler re-enters as soon as it returns. SysTick at the less urgent priority 3 never runs, so <code>millis()</code> stops. The PWM is hardware: PA6 keeps its last pulse and the servo holds still. It builds with zero warnings.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>TIM3-&gt;SR: a written 0 clears a flag, a written 1 leaves it alone</h4>
+    </div>
+    <p class="fig-lede">The low 16 bits of SR at the moment the handler runs: UIF is set, and so is CC1IF, which the PWM channel sets at every compare match. Each flag after the write is the flag before AND the bit written. Compare the question's write with the fix.</p>
+    <div data-viz="sr-steps"></div>
+    <div data-viz="sr"></div>
+    <p class="step-note" data-role="sr-note" aria-live="polite"></p>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Who gets the CPU, and what PA6 does meanwhile</h4>
+    </div>
+    <p class="fig-lede">The first 60 ms after the timer starts, to scale. Each lane is a context; a dark block means it is running. The bottom lane is the PWM pin, driven by the timer itself.</p>
+    <div data-viz="cpu-steps"></div>
+    <div data-viz="cpu"></div>
+    <p class="step-note" data-role="cpu-note" aria-live="polite"></p>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Timer flags clear by writing 0: <code>TIM3-&gt;SR = ~TIM_SR_UIF;</code>. EXTI flags clear by writing 1. Written the EXTI way, the timer handler re-enters forever, with zero warnings.</p>
+    <p class="source">Source: L06 slides 7, 17 · Notes: L06 › 8. TIM3 IRQHandler and write 0 to clear</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc25" data-part="mc" data-num="25" data-topic="millis() wrap" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 25 · L06, millis() wrap</p>
+    <h3 class="q-title">A timeout starts with <code>start = millis();</code>, which returns <code>0xFFFFFC18</code>, 1000 ms before the 32-bit millisecond counter wraps. Which test becomes true exactly when 1000 ms have passed, here and for any other start value?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>if (millis() &gt;= start + 1000u)</code></span>
+      <span class="why">No. <code>start + 1000u</code> wraps to 0, so the test is true at once.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span><code>if (millis() - start &gt;= 1000u)</code></span>
+      <span class="why">Correct. Unsigned subtraction is modulo 2³², so it is the true elapsed time across the wrap.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>if (start - millis() &gt;= 1000u)</code></span>
+      <span class="why">No. Backwards: 1 ms after the start it gives <code>0xFFFFFFFF</code> and fires.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>if (millis() &gt; start &amp;&amp; millis() - start &gt;= 1000u)</code></span>
+      <span class="why">No. It never fires: the extra check is false after the wrap, exactly when the difference reaches 1000.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> Unsigned subtraction is modulo 2³², so <code>millis() - start</code> is the true elapsed time even when <code>millis()</code> has wrapped past zero and <code>start</code> has not. At <code>millis()</code> = <code>0x00000000</code> it gives 2³² − <code>0xFFFFFC18</code> = 1000.</p>
+    <p>The absolute comparison in A breaks at the wrap: here the deadline <code>start + 1000u</code> is itself 0, so the timeout fires immediately. "<code>now - then</code> is the only comparison you write."</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Across the wrap only the subtraction counts up evenly</h4>
+    </div>
+    <p class="fig-lede">The top scale is the raw <code>millis()</code> value, which jumps from <code>0xFFFFFFFF</code> to 0 after 1000 ms. Each row is one option: green where it is true at the right time, red where it fires too early or misses. Drag the time since the start.</p>
+    <div data-viz="slider"></div>
+    <div data-viz="wrap"></div>
+    <div class="legend">
+      <span><i class="sw-ok"></i>true, on time</span>
+      <span><i class="sw-bad"></i>true too early</span>
+      <span><i class="sw-seg"></i>false, correctly</span>
+      <span><i class="sw-sec-soft"></i>false, should be true</span>
+    </div>
+    <div data-viz="vals"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>A <code>uint32_t</code> millisecond counter wraps after 2³² ms, 49.7 days. <code>if (millis() - start &gt;= period)</code> is right, always; <code>if (millis() &gt;= deadline)</code> is wrong at the wrap.</p>
+    <p class="source">Source: L06 slides 3, 18 · Notes: L06 › 3. millis and the wrap that does not matter</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc26" data-part="mc" data-num="26" data-topic="Input capture" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 26 · L06, input capture</p>
+    <h3 class="q-title">TIM14 counts at 1 MHz and captures both edges of the HC-SR04 echo on PA7. Its interrupt handler sometimes starts 1 µs after an edge and sometimes 100 µs after, depending on what else is running. Why is the measured echo width still exact to the microsecond?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>At the edge the hardware copies <code>CNT</code> into <code>CCR1</code> before the interrupt is even requested, so latency changes when the handler reads the time, not what the time says</span>
+      <span class="why">Correct. The handler is a courier, not a stopwatch.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>TIM14 has NVIC priority 1, the most urgent in the program, so its handler starts with no latency</span>
+      <span class="why">No. Priority shortens the wait but cannot remove it, and the question says the latency varies.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>Reading <code>CCR1</code> clears <code>CC1IF</code>, so no edge is ever missed</span>
+      <span class="why">No. True, but that is how the interrupt is acknowledged. It says nothing about accuracy.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Both edges are delayed by the same latency, so it cancels in the subtraction</span>
+      <span class="why">No. That is the EXTI fallback's argument (slide 13b). It fails when one edge waits longer than the other.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> Input capture takes the timestamp in hardware. The edge copies <code>CNT</code> into <code>CCR1</code>, and only then is <code>CC1IF</code> raised and the interrupt requested.</p>
+    <p>"ISR latency, 1 µs or 100 µs, changes when you read it, not what it says." Timing the pulse with an EXTI interrupt that reads <code>CNT</code> would include each handler's latency, and the latency varies with whatever else is running.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Capture stamps the edge; an EXTI handler stamps its own start</h4>
+    </div>
+    <p class="fig-lede">A 50 cm echo: 2900 µs at 58 µs per cm. The two panels zoom in on the rising and the falling edge, with TIM14's count on the scale. The rising-edge handler starts 5 µs late. Drag the falling-edge latency and compare the two widths.</p>
+    <div data-viz="slider"></div>
+    <div data-viz="edges"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>CCR1 ← CNT, in hardware at the edge</span>
+      <span><i class="sw-sec"></i>handler starts; an EXTI handler reads CNT here</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><span class="label">Input capture</span><span class="v ok" data-role="cap">2900 µs</span><span class="sub">CCR1 fall − CCR1 rise</span></div>
+      <div class="stat"><span class="label">EXTI + read CNT</span><span class="v sec" data-role="exti">2995 µs</span><span class="sub">CNT in handler, fall − rise</span></div>
+      <div class="stat"><span class="label">Distance</span><span class="v" data-role="cm">50 / 51 cm</span><span class="sub">capture / EXTI, width / 58</span></div>
+    </div>
+    <pre class="calc" data-role="calc"></pre>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Input capture: on the edge the hardware copies <code>CNT</code> into <code>CCR1</code>, then raises <code>CC1IF</code>. The timestamp is taken before the interrupt is even requested, so latency changes when you read it, not what it says.</p>
+    <p class="source">Source: L06 slides 12, 13b · Notes: L06 › 13. Input capture, the hardware takes the timestamp</p>
+  </div>
+</article>

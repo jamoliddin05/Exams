@@ -1,0 +1,138 @@
+<article class="q" id="s1-mc5" data-part="mc" data-num="5" data-topic="Load–store" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 5 · L01, Load–store vs register–memory</p>
+    <h3 class="q-title">On an x86 PC, <code>counter++</code> on a global <code>int</code> compiles to one instruction, <code>add dword [counter], 1</code>. On the STM32C031 the same line compiles to three: <code>ldr r0, [r1]</code>, <code>adds r0, r0, #1</code>, <code>str r0, [r1]</code>. What explains the difference, and what does it cost?</h3>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span>The Cortex-M0+ is a register–memory machine, so its ALU must copy the value into a register before it can add to it</span><span class="why">No. The models are swapped: the Cortex-M0+ is load–store, the x86 is register–memory.</span></li>
+    <li><span class="key">B</span><span>The Cortex-M0+ is a load–store machine, so its three instructions make three bus accesses where the x86 makes one</span><span class="why">No. <code>adds</code> works on <code>r0</code> only. Both versions read memory once and write it once.</span></li>
+    <li><span class="key">C</span><span>The x86 is a load–store machine too, but its decoder hides the load and the store inside one long instruction</span><span class="why">No. The x86 is the textbook register–memory machine: its ALU operand may be an address.</span></li>
+    <li class="right"><span class="key">D</span><span>The Cortex-M0+ is a load–store machine: only <code>ldr</code> and <code>str</code> touch memory, so it needs more instructions, but both versions make the same two bus accesses</span><span class="why">Correct. Load–store costs instructions, not memory traffic.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: D.</strong> On a load–store machine the ALU sees registers only, and memory is reached only by <code>ldr</code> and <code>str</code>. The x86 is register–memory, so one instruction reads <code>counter</code>, adds 1 and writes it back.</p>
+    <p>Both versions read memory once and write it once. The slide's summary is "load–store costs instructions, not memory traffic". The three instructions only spell out what the one x86 instruction hides.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>One instruction against three, and two bus accesses on both</h4></div>
+    <p class="fig-lede">Each column is one phase of <code>counter++</code>, starting from <code>counter = 41</code>. The top row of each machine is its instruction stream, the bottom row is what reaches the memory bus. Step through the phases.</p>
+    <div data-viz="lanes-steps"></div>
+    <p class="step-note" data-role="lanes-note" aria-live="polite"></p>
+    <div data-viz="lanes"></div>
+    <div class="legend">
+      <span><i class="sw-sec"></i>x86 instruction</span>
+      <span><i class="sw-pri"></i>Cortex-M0+ instruction</span>
+      <span><i class="sw-ter-soft"></i>memory bus access</span>
+    </div>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>This chip is load–store: only <code>ldr</code>/<code>str</code> touch memory. <code>counter++</code> is 3 instructions here and 1 on the register–memory x86, but 2 bus accesses on both.</p>
+    <p class="source">Source: L01 slide 4 · Guide §2 key contrasts · Notes: L01 › 4. Load and store: the two machine models</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc6" data-part="mc" data-num="6" data-topic="Signed branches" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 6 · L01, Signed vs unsigned branches</p>
+    <h3 class="q-title">A calibration offset is declared <code>uint32_t</code> by mistake. This time <code>get_offset()</code> returns −3. The code is built with <code>gcc -Os</code>. What does the board do?</h3>
+    <pre class="calc">uint32_t delta = get_offset();   /* returns -3 this time */
+if (delta &lt; 100) { ok(); } else { alarm(); }</pre>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span>It calls <code>ok()</code>, because −3 is less than 100</span><span class="why">No. That holds for a signed <code>int</code>. <code>delta</code> is unsigned, so −3 became 4 294 967 293.</span></li>
+    <li><span class="key">B</span><span>It calls <code>ok()</code>, because <code>cmp</code> leaves N = 1 and the compiler branches on N with <code>blt</code></span><span class="why">No. The compiler uses <code>blt</code> only for signed types. For <code>uint32_t</code> it uses <code>bcc</code>/<code>bcs</code>, which read C.</span></li>
+    <li><span class="key">C</span><span>Nothing runs: the build fails, because −3 cannot be stored in a <code>uint32_t</code></span><span class="why">No. The conversion is legal C. It compiles without an error, which is why the bug is silent.</span></li>
+    <li class="right"><span class="key">D</span><span>It calls <code>alarm()</code>: <code>delta</code> is unsigned, so the compiler uses an unsigned branch (<code>bcc</code>/<code>bcs</code>), and <code>0xFFFFFFFD</code> read as unsigned is 4 294 967 293, which is not below 100</span><span class="why">Correct. Unsigned compare, C = 1, so <code>alarm()</code>.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: D.</strong> −3 stored in a <code>uint32_t</code> is the bit pattern <code>0xFFFFFFFD</code>. The compiler picks the branch from the variable's type: an unsigned <code>&lt;</code> becomes <code>cmp</code> plus <code>bcc</code>/<code>bcs</code>, which read the carry flag. 4 294 967 293 ≥ 100, so C = 1 and <code>alarm()</code> runs.</p>
+    <p>A signed <code>int</code> would use <code>blt</code>/<code>bge</code>, which read N and V, and −3 &lt; 100 would hold. The two readings agree for 0 to 99 and split only for negative values: the slide's "comparison that behaves oddly at the extremes of a range".</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>The same 32 bits sit in two places on the number line</h4></div>
+    <p class="fig-lede">Pick the value <code>get_offset()</code> returns. The top line reads the bits as <code>int32_t</code>, the way <code>blt</code>/<code>bge</code> do. The bottom line reads them as <code>uint32_t</code>, the way <code>bcc</code>/<code>bcs</code> do. Green is <code>&lt; 100</code>, so <code>ok()</code>; red is <code>alarm()</code>.</p>
+    <div data-viz="slider"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">delta in r0</span><span class="v" data-role="hex">0xFFFFFFFD</span><span class="sub">the bit pattern</span></div>
+      <div class="stat"><span class="label">cmp r0, &#35;100</span><span class="v" data-role="flags">1 0 1 0</span><span class="sub">N Z C V</span></div>
+      <div class="stat"><span class="label">As int32_t</span><span class="v" data-role="signed">ok()</span><span class="sub" data-role="signed-sub">blt: N ≠ V</span></div>
+      <div class="stat"><span class="label">As uint32_t, the board</span><span class="v pri" data-role="unsigned">alarm()</span><span class="sub" data-role="unsigned-sub">bcc: C = 0</span></div>
+    </div>
+    <p class="verdict" data-role="verdict"></p>
+    <div data-viz="lines"></div>
+    <div class="legend">
+      <span><i class="sw-ok"></i>delta &lt; 100, ok()</span>
+      <span><i class="sw-bad"></i>delta ≥ 100, alarm()</span>
+    </div>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>cmp</code> sets N Z C V and the next branch reads them. <code>blt</code>/<code>bge</code> are signed, <code>bcc</code>/<code>bcs</code> are unsigned, and the compiler picks by the variable's type. A comparison that fails only at the extremes of its range is a signedness bug.</p>
+    <p class="source">Source: L01 slide 7 · Guide §2 key contrasts · Notes: L01 › 7. Flags and conditional branches</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc7" data-part="mc" data-num="7" data-topic="LR value" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 7 · L01, LR and the Thumb bit</p>
+    <h3 class="q-title">In <code>main</code>, the instruction <code>bl clock_init</code> sits at address <code>0x08000312</code>. You stop the debugger at the first instruction of <code>clock_init</code>. What does <code>LR</code> read, and where does execution continue when <code>clock_init</code> returns with <code>bx lr</code>?</h3>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span><code>LR</code> is unchanged, because <code>bl</code> pushed the return address <code>0x08000316</code> onto the stack</span><span class="why">No. That is a stack-based machine such as the AVR. ARM is a link-register machine: <code>bl</code> writes <code>LR</code>.</span></li>
+    <li><span class="key">B</span><span><code>LR = 0x08000316</code>, and execution continues at <code>0x08000316</code></span><span class="why">No. <code>bl</code> sets bit 0, the Thumb bit, so <code>LR</code> is odd.</span></li>
+    <li class="right"><span class="key">C</span><span><code>LR = 0x08000317</code>, and execution continues at <code>0x08000316</code></span><span class="why">Correct. Next instruction | 1 into <code>LR</code>; <code>bx lr</code> clears bit 0 again.</span></li>
+    <li><span class="key">D</span><span><code>LR = 0x08000315</code>, and execution continues at <code>0x08000314</code></span><span class="why">No. That counts <code>bl</code> as 2 bytes. It is one of the six 32-bit instructions, 4 bytes.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: C.</strong> <code>bl</code> is a 32-bit instruction, so the next instruction starts at <code>0x08000312 + 4 = 0x08000316</code>. <code>bl</code> writes that address into <code>LR</code> with bit 0 set, the Thumb bit: <code>0x08000316 | 1 = 0x08000317</code>.</p>
+    <p><code>bx lr</code> reads bit 0 as "Thumb" and branches to <code>LR &amp; ~1 = 0x08000316</code>, the instruction right after the call. Nothing is skipped and nothing is off by one.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>bl puts next | 1 into LR, and bx lr clears bit 0 on the way back</h4></div>
+    <p class="fig-lede">The left column is <code>main</code> in flash, one row per 2-byte halfword. <code>bl</code> takes two rows. Step through the call and the return.</p>
+    <div data-viz="lr-steps"></div>
+    <p class="step-note" data-role="lr-note" aria-live="polite"></p>
+    <div data-viz="lr"></div>
+    <pre class="calc" data-role="lr-calc"></pre>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>bl</code> (4 bytes) writes the return address into <code>LR</code> with bit 0 set: <code>LR</code> = next | 1, always odd. <code>bx lr</code> branches to <code>LR &amp; ~1</code>, the instruction after the call.</p>
+    <p class="source">Source: L01 slides 8, 17, 20 · Notes: L01 › 19. LR is odd too: reading a return address</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc8" data-part="mc" data-num="8" data-topic="Literal pool" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 8 · L01, Literal pool</p>
+    <h3 class="q-title"><code>SystemInit()</code> needs the FLASH base address <code>0x40022000</code> in <code>r2</code>. Which instruction or pair does <code>arm-none-eabi-gcc</code> emit for the Cortex-M0+?</h3>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span><code>movs r2, #0x40022000</code></span><span class="why">No. The <code>movs</code> immediate is 8 bits, 0 to 255. This cannot be encoded.</span></li>
+    <li class="right"><span class="key">B</span><span><code>ldr r2, [pc, #44]</code>, which loads the word <code>0x40022000</code> from a literal pool stored in flash just after the function</span><span class="why">Correct. ARM's answer: a literal pool, loaded PC-relative.</span></li>
+    <li><span class="key">C</span><span><code>lui r2, 0x40022</code> followed by <code>addi r2, r2, 0</code></span><span class="why">No. That is RISC-V's answer, two halves. These are not Thumb instructions.</span></li>
+    <li><span class="key">D</span><span><code>movw r2, #0x2000</code> followed by <code>movt r2, #0x4002</code></span><span class="why">No. That is the Thumb-2 answer on a Cortex-M3 or M4. The M0+ is Thumb-1 plus six and has no <code>movw</code>/<code>movt</code>.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: B.</strong> A 16-bit instruction cannot hold a 32-bit constant: after the opcode and the register, <code>movs</code> has 8 bits left, enough for 0 to 255. So the compiler parks <code>0x40022000</code> in a literal pool, a list of words just after the function, and loads it relative to the PC.</p>
+    <p>Every fixed-width machine needs some answer to this. RISC-V builds the constant in two halves with <code>lui</code> and <code>addi</code>, and a Cortex-M4 uses <code>movw</code> and <code>movt</code>. The M0+ has neither.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>A 32-bit constant does not fit in a 16-bit instruction</h4></div>
+    <p class="fig-lede">The two real encodings from <code>SystemInit</code> next to the constant. Blue cells are 1 bits. <code>movs</code> has an 8-bit immediate field. The <code>ldr</code> spends its 8 bits on a word offset instead: 11 words, 44 bytes.</p>
+    <div data-viz="bits"></div>
+  </figure>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 2</span><h4>The constant waits in a literal pool after the function</h4></div>
+    <p class="fig-lede">The start of <code>SystemInit</code> in flash and its literal pool, from the real build. The <code>ldr</code> counts from its own address + 4. The pool lists every peripheral address the function touches.</p>
+    <div data-viz="pool"></div>
+    <p class="fig-lede">How other machines get a 32-bit constant into a register, with this question's options.</p>
+    <div data-viz="machines"></div>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>A 16-bit instruction cannot hold a 32-bit constant. ARM's answer is a literal pool next to the code, loaded PC-relative (<code>ldr r2, [pc, #44]</code>). RISC-V uses <code>lui</code> + <code>addi</code>; an M4 uses <code>movw</code>/<code>movt</code>, which the M0+ lacks.</p>
+    <p class="source">Source: L01 slides 12, 17 · Notes: L01 › 12. Literal pools: where big constants live</p>
+  </div>
+</article>

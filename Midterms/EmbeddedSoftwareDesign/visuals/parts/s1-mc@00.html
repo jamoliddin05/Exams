@@ -1,0 +1,271 @@
+<article class="q" id="s1-mc1" data-part="mc" data-num="1" data-topic="Little-endian" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 1 · L00, Little-endian bytes</p>
+    <h3 class="q-title"><code>uint32_t x = 0x1A2B3C4D;</code> is stored at address <code>0x20000100</code> on the STM32C031. A debugger's memory view lists the bytes from <code>0x20000100</code> to <code>0x20000103</code>, lowest address first. What does it show?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>1A 2B 3C 4D</code></span>
+      <span class="why">No. That is big-endian, network byte order. Every STM32 is little-endian.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span><code>4D 3C 2B 1A</code></span>
+      <span class="why">Correct. The least significant byte, 0x4D, goes to the lowest address.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>D4 C3 B2 A1</code></span>
+      <span class="why">No. That reverses the hex digits. Byte order moves whole bytes.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>3C 4D 1A 2B</code></span>
+      <span class="why">No. That puts the low halfword first but writes each halfword big-endian.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> Every STM32 is little-endian, so the least significant byte goes to the lowest address. <code>0x4D</code> (bits 7:0) sits at <code>0x20000100</code>, then <code>0x3C</code> and <code>0x2B</code>, and <code>0x1A</code> (bits 31:24) sits at <code>0x20000103</code>.</p>
+    <p>A is big-endian, the convention of the 68000, classic SPARC and every internet header. C and D are not byte orders any machine uses for a 32-bit word.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Each byte of 0x1A2B3C4D goes to the address of its rank</h4>
+    </div>
+    <p class="fig-lede">Top row: the value as the CPU holds it, most significant byte on the left. Bottom row: memory, lowest address on the left. Step through the four addresses, then compare with big-endian.</p>
+    <div data-viz="le-steps"></div>
+    <p class="step-note" data-role="le-note" aria-live="polite"></p>
+    <div data-viz="le"></div>
+    <div data-viz="le-table"></div>
+  </figure>
+
+  <div class="q-head">
+    <h4>Why the other options are wrong</h4>
+    <div class="why-grid">
+      <div class="mini">
+        <span class="label">Option A</span>
+        <h5>Big-endian</h5>
+        <p>Most significant byte first. The 68000, classic SPARC and internet headers use it, which is what <code>htonl()</code> is for.</p>
+        <div class="chips"><span>+0</span><span class="out">1A</span><span class="out">2B</span><span class="out">3C</span><span class="out">4D</span></div>
+      </div>
+      <div class="mini">
+        <span class="label">Option C</span>
+        <h5>Digits reversed, not bytes</h5>
+        <p>Reading the hex string backwards splits every byte. The two digits of a byte always travel together.</p>
+        <div class="chips"><span>1A2B3C4D</span><span class="arrow">reversed</span><span class="out">D4C3B2A1</span></div>
+      </div>
+      <div class="mini">
+        <span class="label">Option D</span>
+        <h5>Halfwords swapped</h5>
+        <p>Low halfword <code>0x3C4D</code> first, high halfword <code>0x1A2B</code> second, each written big-endian. Little-endian also reverses the bytes inside each halfword.</p>
+        <div class="chips"><span>3C4D</span><span>1A2B</span><span class="arrow">vs</span><span class="out">4D 3C</span><span class="out">2B 1A</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Little-endian: the least significant byte goes to the lowest address. <code>0x1A2B3C4D</code> at <code>a</code> is <code>4D 3C 2B 1A</code> from <code>a</code> to <code>a + 3</code>. Every STM32 is little-endian; network byte order is big-endian.</p>
+    <p class="source">Source: L00 slide 10 · Notes: L00 › 11. The data model: width, alignment, byte order</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc2" data-part="mc" data-num="2" data-topic="I/O model" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 2 · L00, I/O model and address spaces</p>
+    <h3 class="q-title">An AVR reaches <code>PORTB</code> with the <code>IN</code> and <code>OUT</code> instructions, and reads a constant table in flash with <code>LPM</code> (the <code>PROGMEM</code> keyword). The STM32C031 reaches a GPIO register, a global variable and a <code>const</code> table in flash with the same <code>ldr</code> instruction. Which option names both machines' choices correctly?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>AVR: port-mapped I/O, Harvard. STM32C031: memory-mapped I/O, one von Neumann address space</span>
+      <span class="why">Correct. This is slide 15's AVR vs Cortex-M table.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>AVR: memory-mapped I/O, Harvard. STM32C031: port-mapped I/O, one von Neumann address space</span>
+      <span class="why">No. The I/O models are swapped. Dedicated IN and OUT instructions mean port-mapped.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>AVR: port-mapped I/O, von Neumann. STM32C031: memory-mapped I/O, Harvard</span>
+      <span class="why">No. The address spaces are swapped. LPM exists because the AVR is Harvard.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>AVR: port-mapped I/O, Harvard. STM32C031: memory-mapped I/O, Harvard, since some Cortex-M cores fetch code and data over separate buses</span>
+      <span class="why">No. Separate buses are an implementation choice underneath. The address map stays single.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> <code>IN</code> and <code>OUT</code> reach a separate I/O space through dedicated instructions, which is port-mapped I/O. <code>LPM</code> exists because code and data live in separate address spaces, which is Harvard.</p>
+    <p>The STM32C031 has no port space and one unified address space. One <code>ldr</code> reaches a register, a variable and a flash constant, and only the address tells them apart. D is the trap. Separate buses on some cores do not change the single map.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Three spaces and three kinds of instruction on the AVR, one map and one ldr here</h4>
+    </div>
+    <p class="fig-lede">Left: every AVR space starts at 0, so a number alone does not say where it points, and each space has its own instructions. Right: the STM32C031 map, not to scale. The three blue regions hold the register, the variable and the table from the question.</p>
+    <div data-viz="spaces"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Two questions, two answers each: where each option puts the two machines</h4>
+    </div>
+    <p class="fig-lede">Columns: how software reaches a device. Rows: one address space or two. The dashed green cells are where the machines really sit. Pick an option to see where it puts them.</p>
+    <div data-viz="grid-steps"></div>
+    <p class="step-note" data-role="grid-note" aria-live="polite"></p>
+    <div data-viz="grid"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>AVR: port-mapped I/O (<code>IN</code>/<code>OUT</code>) and Harvard (<code>LPM</code>, <code>PROGMEM</code>). This chip: memory-mapped I/O with no port space, and one unified address space. Everything the CPU reaches, it reaches by address.</p>
+    <p class="source">Source: L00 slide 4, slide 15, slide 17 items 12 and 13 · Notes: L00 › 4. Reaching a device: memory mapped vs port mapped IO</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc3" data-part="mc" data-num="3" data-topic="Vectored dispatch" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 3 · L00, Vectored dispatch</p>
+    <h3 class="q-title">In <code>startup.c</code>, a copy-paste slip puts <code>USART2_IRQHandler</code> in the vector-table entry that belongs to TIM3. The code builds with no warning. What happens when TIM3 raises its interrupt?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>The NVIC notices that the address is not TIM3's handler and raises a HardFault</span>
+      <span class="why">No. Nothing checks who owns an address. A slot is just a number.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>The NVIC looks up <code>TIM3_IRQHandler</code> by name and runs it, so the slip does no harm</span>
+      <span class="why">No. The NVIC does not search. It indexes a table of addresses.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The CPU runs <code>Default_Handler</code>, because the function in TIM3's entry has the wrong name</span>
+      <span class="why">No. Names are gone at run time. The slot holds USART2_IRQHandler's address.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span>The CPU jumps to <code>USART2_IRQHandler</code> and runs it, because nothing checks what an entry holds</span>
+      <span class="why">Correct. "Put the wrong address in a slot and the chip jumps there anyway."</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> Dispatch on this chip is vectored. TIM3's number indexes a table of plain addresses, and the hardware loads the address in that slot and jumps there. There is no registration call and no check.</p>
+    <p>The hardware never sees names. A name only decides, at build time, which address goes into the table. Once the wrong address is there, USART2's code runs for every TIM3 interrupt.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The NVIC follows whatever address sits in slot 32</h4>
+    </div>
+    <p class="fig-lede">TIM3 is IRQ 16, so it owns slot 16 + 16 = 32. The table holds addresses, drawn here by the name of the function at that address. Step through the dispatch, then fix the table.</p>
+    <div data-viz="vt-steps"></div>
+    <p class="step-note" data-role="vt-note" aria-live="polite"></p>
+    <div data-viz="vt"></div>
+  </figure>
+
+  <div class="q-head">
+    <h4>Why the other options are wrong</h4>
+    <div class="why-grid">
+      <div class="mini">
+        <span class="label">Option A</span>
+        <h5>No check, no fault</h5>
+        <p>A slot holds 32 bits and nothing else. The hardware cannot tell TIM3's code from USART2's code, so it has nothing to fault on.</p>
+      </div>
+      <div class="mini">
+        <span class="label">Option B</span>
+        <h5>No search by name</h5>
+        <p>Function names live in the source and the linker. Flash holds only numbers, and "the NVIC does not search for your handler".</p>
+      </div>
+      <div class="mini">
+        <span class="label">Option C</span>
+        <h5>Default_Handler needs its own address in the slot</h5>
+        <p>A misspelled handler name leaves the weak default's address in the slot (L04 slide 8). Here the slot holds USART2_IRQHandler's address, so that is what runs.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Vectored dispatch: the source's number indexes a table, and this chip's table holds plain addresses. There is no registration call. A handler is connected because its address sits in the right slot. Put the wrong address in a slot and the chip jumps there anyway.</p>
+    <p class="source">Source: L00 slide 9, slide 17 item 11 · Notes: L00 › 10. The exception model: vectored dispatch</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc4" data-part="mc" data-num="4" data-topic="Clock gate" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 4 · L00, Clock gate</p>
+    <h3 class="q-title">Right after reset, the code writes <code>USART2-&gt;CR1 = 0x0000000D;</code> and then reads <code>USART2-&gt;CR1</code> back. It reads <code>0x00000000</code>. The build had no warnings and nothing faulted. What is the first suspect?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>The pin multiplexer: PA2 still belongs to GPIO, so USART2 cannot drive it</span>
+      <span class="why">No. A wrong pin owner leaves the pin silent, but CR1 still reads back what was written.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>The clock gate: USART2's enable bit in RCC is still 0, so the peripheral ignores the write</span>
+      <span class="why">Correct. "A peripheral with no clock reads back as zero and ignores every write."</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The baud divisor: it was computed from the CPU clock instead of USART2's bus clock</span>
+      <span class="why">No. A wrong divisor gives garbage on the wire. CR1 still reads back.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The register role: <code>CR1</code> is a status register, so the hardware overwrites what software writes</span>
+      <span class="why">No. CR1 is the control register, the one software writes.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> Every peripheral powers up with its clock switched off, to save energy. Until its RCC enable bit is set, "a peripheral with no clock reads back as zero and ignores every write", and nothing reports an error. This is the single most common first-week failure.</p>
+    <p>The pin multiplexer is the other gate, and it fails just as silently. It cannot make a register read back zero, though. Only the clock gate does that.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>With the clock gate shut, the store reaches an address and nothing answers</h4>
+    </div>
+    <p class="fig-lede">The CPU stores <code>0x0000000D</code> (UE, RE and TE set) into CR1 and loads it back. Switch between the reset state and the state after the RCC enable bit is set.</p>
+    <div data-viz="gate-steps"></div>
+    <p class="step-note" data-role="gate-note" aria-live="polite"></p>
+    <div data-viz="gate"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Each suspect leaves a different symptom</h4>
+    </div>
+    <p class="fig-lede">All three build without a warning and look like correct code that does nothing. The read-back value tells them apart. Option D names no failure at all, since CR1 is the control register you write.</p>
+    <div data-viz="symptoms"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>If a configured peripheral reads back as zero, suspect the clock gate first. Every peripheral powers up unclocked, and writes vanish with no error. A wrong pin owner gives a silent pin; a divisor from the wrong clock gives garbage.</p>
+    <p class="source">Source: L00 slide 11, slide 17 item 7, slide 6, slide 12 · Notes: L00 › 12. Two gates: clock gate and pin multiplexer</p>
+  </div>
+</article>

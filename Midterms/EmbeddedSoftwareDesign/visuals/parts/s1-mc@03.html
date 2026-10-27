@@ -1,0 +1,185 @@
+<article class="q" id="s1-mc12" data-part="mc" data-num="12" data-topic="volatile" data-ref="topic3">
+  <div class="q-head">
+    <p class="eyebrow">Question 12 · L03, volatile and the as-if rule</p>
+    <h3 class="q-title">A timer ISR sets a flag and <code>main()</code> waits for it. Built at <code>-O0</code>, the LED turns on. Built at <code>-Os</code>, it never does, although the ISR runs and sets <code>done</code>. What explains this, and what is the fix?</h3>
+    <pre class="calc">uint8_t done = 0;                         /* global */
+void TIM3_IRQHandler(void) { /* ... */ done = 1; }
+int main(void) {
+    /* ... start the timer ... */
+    while (done == 0) { }
+    led_on();
+}</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>The ISR's write lands in the middle of <code>main()</code>'s read-modify-write; wrap the loop in <code>__disable_irq()</code> / <code>__enable_irq()</code>.</span>
+      <span class="why">No. That is the fix for the other hazard, and with interrupts off around the loop the ISR could never run at all.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>A one-byte flag tears when the ISR writes it; declare it <code>uint32_t</code>.</span>
+      <span class="why">No. One byte is one access with one writer. Nothing can tear, and the width does not change the compiler's reasoning.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>At <code>-Os</code> interrupts stay masked while <code>main()</code> sits in an empty loop; call <code>__enable_irq()</code> inside the loop.</span>
+      <span class="why">No. The optimisation level never touches PRIMASK, and the question says the ISR runs.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span>By the as-if rule the compiler reads <code>done</code> once and loops on a register copy; declare it <code>volatile uint8_t done</code>.</span>
+      <span class="why">Correct. The ISR is an observer C does not know about. <code>volatile</code> makes every read happen.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> The loop body does not modify <code>done</code>, so by the rules of C it cannot change inside the loop. Under the as-if rule the compiler may read it once and loop on a register, because the program it produces behaves the same as far as C can observe.</p>
+    <p>The ISR's write is a change C does not know about. Declaring <code>volatile uint8_t done</code> extends what counts as observable: every read written in the source must really happen, in order, so the loop sees the 1. At <code>-O0</code> nothing is cached, which is why the bug only shows up at <code>-Os</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Plain <code>done</code> is read once; <code>volatile done</code> is read on every pass</h4>
+    </div>
+    <p class="fig-lede">Eight passes of the wait loop. The ISR runs between pass 3 and pass 4 and writes 1 into RAM. Watch the bottom row: it is the value the loop actually tests. Switch between the two declarations.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="passes"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>load from RAM</span>
+      <span><i class="sw-sec"></i>written by the ISR</span>
+      <span><i class="sw-bad"></i>stale copy, RAM already says 1</span>
+      <span><i class="sw-ok"></i>loop sees 1 and exits</span>
+    </div>
+    <pre class="calc" data-role="asm"></pre>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>As-if rule: the compiler only has to keep the observable behaviour the language defines. Hardware and ISRs are observers C does not know about, so a shared flag needs <code>volatile</code>. <code>volatile</code> makes accesses real; it is not a lock and makes nothing atomic.</p>
+    <p class="source">Source: L03 slide 4 · L01 slide 21 · Notes: L03 › 4. Hazard one: the compiler does not believe you</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc13" data-part="mc" data-num="13" data-topic="Lost update" data-ref="topic3">
+  <div class="q-head">
+    <p class="eyebrow">Question 13 · L03, the lost update</p>
+    <h3 class="q-title"><code>counter</code> holds 40. <code>main()</code> executes <code>counter++</code> as <code>ldr r0, [r1]</code> / <code>adds r0, #1</code> / <code>str r0, [r1]</code>. A timer interrupt is taken right after the <code>ldr</code>, and its handler executes <code>counter += 3</code> in full before <code>main()</code> resumes. Nothing else touches <code>counter</code>. What does <code>counter</code> hold after <code>main()</code>'s <code>str</code>?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>41</span>
+      <span class="why">Correct. <code>main()</code> adds 1 to the 40 it loaded before the interrupt and stores 41 over the handler's 43.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>43</span>
+      <span class="why">No. That would need <code>main()</code>'s store to be lost, but <code>main()</code> stores last.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>44</span>
+      <span class="why">No. 44 = 40 + 3 + 1 is the right total, which only a critical section around <code>counter++</code> guarantees.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>40</span>
+      <span class="why">No. Every store wrote a new value; the last one wrote 41.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> <code>main()</code> loaded 40 into <code>r0</code> before the interrupt. The handler reads 40 from RAM, adds 3 and stores 43. When <code>main()</code> resumes, its <code>r0</code> still holds 40 (the hardware stacked and restored it), so it computes 41 and stores 41 over the 43.</p>
+    <p>Two updates ran and only one survived. This is the lost update of slide 5, with +3 instead of +1.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Step through the interleaving: the handler's +3 is overwritten</h4>
+    </div>
+    <p class="fig-lede">Time runs down the rows. The two right columns show <code>main()</code>'s register copy and the value in RAM after each instruction.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="lanes"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Only an interrupt taken between <code>ldr</code> and <code>str</code> loses the update</h4>
+    </div>
+    <p class="fig-lede">An interrupt is taken between two instructions. There are four places it can land around <code>main()</code>'s three. The two inside the window give 41; the two outside give the correct 44.</p>
+    <div data-viz="window"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>On a load–store machine <code>counter++</code> is <code>ldr</code>, <code>adds</code>, <code>str</code>. An ISR that updates the same variable between the <code>ldr</code> and the <code>str</code> is overwritten by <code>main()</code>'s stale value. <code>volatile</code> does not help; the sequence must be made indivisible.</p>
+    <p class="source">Source: L03 slide 5 · L01 slide 4 · Notes: L03 › 5. Hazard two: the interrupt lands mid-update</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc14" data-part="mc" data-num="14" data-topic="Dual-core lock" data-ref="topic3">
+  <div class="q-head">
+    <p class="eyebrow">Question 14 · L03, mutual exclusion on one core and on two</p>
+    <h3 class="q-title">On the single-core STM32C031, <code>__disable_irq(); counter++; __enable_irq();</code> makes <code>main()</code>'s increment safe from an ISR. The same code is moved to a dual-core chip, where code on the other core also increments <code>counter</code>. What happens?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>It stays safe: <code>__disable_irq()</code> sets <code>PRIMASK</code> on both cores, so the other core waits too.</span>
+      <span class="why">No. Each core has its own PRIMASK. <code>cpsid i</code> sets only the bit of the core that executes it.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>Updates can still be lost: masking stops only the other context on this core, and the second core keeps running. Two cores need an atomic read-modify-write instruction such as <code>ldrex</code>/<code>strex</code>.</span>
+      <span class="why">Correct. This is the third row of slide 5's table.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>Updates can still be lost, and declaring <code>counter</code> as <code>volatile</code> fixes it.</span>
+      <span class="why">No. <code>volatile</code> makes accesses real, not indivisible.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>It stays safe, because larger ARM cores do <code>counter++</code> in a single instruction.</span>
+      <span class="why">No. ARM cores are load–store, so a plain <code>counter++</code> still compiles to a load, an add and a store.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> Masking interrupts gives mutual exclusion only against contexts that need this core to run: the other context cannot run if it cannot start. A second core does not need to start anything. It runs its own <code>ldr</code>, <code>adds</code>, <code>str</code> in parallel, and the two sequences can interleave just like main and an ISR.</p>
+    <p>Between cores you need an atomic read-modify-write instruction: <code>ldrex</code>/<code>strex</code> on larger ARM cores, <code>lock cmpxchg</code> on x86. The Cortex-M0+ is single-core and has neither, which is exactly why masking is the right tool on this chip and would be the wrong tool on a phone.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>PRIMASK holds one core; the other core's increment still interleaves</h4>
+    </div>
+    <p class="fig-lede">Core 0 runs the masked <code>counter++</code>. Core 1 has its own PRIMASK, still 0, and increments the same RAM word at the same time. Both load 5, both store 6.</p>
+    <div data-viz="cores"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Same idea everywhere, a different tool for each kind of contention</h4>
+    </div>
+    <p class="fig-lede">Slide 5's table. Mutual exclusion means at most one context inside the critical section at a time. Only the way you get it changes. The highlighted row is the dual-core case of this question.</p>
+    <div data-viz="table"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>ISR vs <code>main()</code> on one core: turn interrupts off. Two threads under an OS: a mutex. Two cores: an atomic read-modify-write instruction (<code>ldrex</code>/<code>strex</code>, <code>lock cmpxchg</code>). The Cortex-M0+ is single-core and has neither, so masking is its answer.</p>
+    <p class="source">Source: L03 slide 5 · L03 slide 10 item 10 · Notes: L03 › 5. Hazard two: the interrupt lands mid-update</p>
+  </div>
+</article>

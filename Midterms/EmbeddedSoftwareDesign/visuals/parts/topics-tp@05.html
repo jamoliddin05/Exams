@@ -1,0 +1,692 @@
+<article class="q" id="topic5" data-part="tp" data-num="5" data-topic="GPIO and interrupts">
+  <div class="q-head">
+    <p class="eyebrow">Lesson 05 · Week 4 · 5 of 33 exam questions</p>
+    <h3 class="q-title">GPIO and Interrupts: One Pin, Two Ways to Listen</h3>
+    <p class="fig-lede">"The first peripheral, one register at a time, all the way to an interrupt." GPIO fills in the empty slots of lesson 00's peripheral model, and every pin turns out to be a bit position you can calculate. Two buttons then show the two ways to listen: button A is polled once per millisecond, and button B interrupts through EXTI, the NVIC and the vector table of lesson 04.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. The pins, the model, and what a register is (pin maps, slides 1–2)</h4>
+    <p>Inside the chip the header positions disappear. Every pin is one bit position in its port's registers: pin n of GPIOA is bit n of <code>IDR</code> and bits 2n+1 : 2n of <code>MODER</code>.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Pin</th><th class="l">Job in this lesson</th><th class="l">MODER</th></tr></thead>
+        <tbody>
+          <tr><td class="l">PA0</td><td class="l">button A, polled, pull-up</td><td class="l">00 input</td></tr>
+          <tr><td class="l">PA1</td><td class="l">button B, EXTI line 1, pull-up</td><td class="l">00 input</td></tr>
+          <tr><td class="l">PA2, PA3</td><td class="l">USART2 TX, RX to the serial monitor</td><td class="l">10 alternate function, AF1</td></tr>
+          <tr><td class="l">PA5 (header D13)</td><td class="l">LD4 heartbeat, the on-board LED</td><td class="l">01 output</td></tr>
+          <tr><td class="l">PB0–PB7</td><td class="l">LED bar, one bit per LED</td><td class="l">01 output</td></tr>
+          <tr><td class="l">PA13, PA14</td><td class="l">SWD debug lines, left alone</td><td class="l">10 from reset</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Lesson 00 drew every peripheral with the same empty slots. GPIO is the first time they are filled in, and every later peripheral fills the same table.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Model slot</th><th class="l">GPIO on this chip</th></tr></thead>
+        <tbody>
+          <tr><td class="l">clock gate</td><td class="l"><code>RCC-&gt;IOPENR</code>, one bit per port (A, B, C, D, F)</td></tr>
+          <tr><td class="l">control</td><td class="l"><code>MODER</code> what the pin is · <code>OTYPER</code> how it drives · <code>OSPEEDR</code> how fast · <code>PUPDR</code> pull resistor · <code>AFR[2]</code> which peripheral</td></tr>
+          <tr><td class="l">data in</td><td class="l"><code>IDR</code>, what the pin is right now</td></tr>
+          <tr><td class="l">data out</td><td class="l"><code>ODR</code>, what the pin should be; <code>BSRR</code>, <code>BRR</code> change it without reading</td></tr>
+          <tr><td class="l">event</td><td class="l">not in GPIO at all; a separate block, <b>EXTI</b>, watches pins</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>A register is "a 32-bit number at a fixed address". Writing to that address changes the hardware. Reading it tells you what the hardware is doing.</li>
+      <li>Bits are numbered 31 on the left to 0 on the right. "One hex digit is exactly four bits", so a register is read four bits at a time.</li>
+    </ul>
+    <pre class="calc">hex       E    B    F    F    F    F    F    F
+binary  1110 1011 1111 1111 1111 1111 1111 1111
+bits   31..28                               3..0</pre>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">C</th><th class="l">Meaning</th><th class="l">Example</th></tr></thead>
+        <tbody>
+          <tr><td class="l">1u &lt;&lt; n</td><td class="l">a number with only bit n set</td><td class="l">1u &lt;&lt; 5 = 0x20 = ...0010 0000</td></tr>
+          <tr><td class="l">x &amp; ~mask</td><td class="l">clear the bits that are 1 in mask</td><td class="l">clear bits 11:10 with ~(3u &lt;&lt; 10)</td></tr>
+          <tr><td class="l">x | value</td><td class="l">set the bits that are 1 in value</td><td class="l">set bit 10 with 1u &lt;&lt; 10</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. Base + offset, and the one rule for pin n (slides 3–4)</h4>
+    <p>GPIOA's registers start at the base address <code>0x50000000</code>, each at a fixed offset. GPIOB uses the same layout at <code>0x50000400</code>: "same offsets, different base".</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Register</th><th class="l">Offset</th><th class="l">GPIOA address</th><th class="l">GPIOA reset</th><th class="l">Its job</th><th class="l">Slot</th></tr></thead>
+        <tbody>
+          <tr><td class="l">MODER</td><td class="l">0x00</td><td class="l">0x50000000</td><td class="l">0xEBFFFFFF</td><td class="l">in, out, alternate, analog</td><td class="l">control</td></tr>
+          <tr><td class="l">OTYPER</td><td class="l">0x04</td><td class="l">0x50000004</td><td class="l">0x00000000</td><td class="l">push-pull or open-drain</td><td class="l">control</td></tr>
+          <tr><td class="l">OSPEEDR</td><td class="l">0x08</td><td class="l">0x50000008</td><td class="l">0x0C000000</td><td class="l">how fast the edges change</td><td class="l">control</td></tr>
+          <tr><td class="l">PUPDR</td><td class="l">0x0C</td><td class="l">0x5000000C</td><td class="l">0x24000000</td><td class="l">pull-up, pull-down or neither</td><td class="l">control</td></tr>
+          <tr><td class="l">IDR</td><td class="l">0x10</td><td class="l">0x50000010</td><td class="l">the pins' levels</td><td class="l">read: what the pin is now</td><td class="l">data in</td></tr>
+          <tr><td class="l">ODR</td><td class="l">0x14</td><td class="l">0x50000014</td><td class="l">0x00000000</td><td class="l">what the pin should be</td><td class="l">data out</td></tr>
+          <tr><td class="l">BSRR</td><td class="l">0x18</td><td class="l">0x50000018</td><td class="l">write only</td><td class="l">set or reset pins, no read</td><td class="l">data out</td></tr>
+          <tr><td class="l">LCKR</td><td class="l">0x1C</td><td class="l">0x5000001C</td><td class="l">0x00000000</td><td class="l">freeze the configuration until reset (not used)</td><td class="l">control</td></tr>
+          <tr><td class="l">AFR[0], AFR[1]</td><td class="l">0x20, 0x24</td><td class="l">0x50000020, …24</td><td class="l">0x00000000</td><td class="l">which peripheral owns the pin</td><td class="l">control</td></tr>
+          <tr><td class="l">BRR</td><td class="l">0x28</td><td class="l">0x50000028</td><td class="l">write only</td><td class="l">reset pins only</td><td class="l">data out</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>In C you never type these addresses. ST's header describes the port as a struct, <code>GPIO_TypeDef</code>, placed at the base. <code>GPIOA-&gt;IDR</code> is the member at 0x10, so it is address 0x50000010.</li>
+      <li>Peripherals live at ordinary addresses (memory-mapped I/O), so the CPU reaches them with ordinary <code>ldr</code> and <code>str</code>.</li>
+      <li>Every register gives each of the 16 pins the same amount of space, in order. So the position of pin n's bits is always a small calculation. "This is the whole map."</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Register kind</th><th class="l">Bits per pin</th><th class="l">Pin n is at</th><th>Pin 0</th><th>Pin 1</th><th>Pin 5</th><th>Pin 13</th></tr></thead>
+        <tbody>
+          <tr><td class="l">OTYPER, IDR, ODR, BRR</td><td class="l">1</td><td class="l">bit n</td><td>0</td><td>1</td><td>5</td><td>13</td></tr>
+          <tr><td class="l">MODER, OSPEEDR, PUPDR</td><td class="l">2</td><td class="l">bits 2n+1 : 2n</td><td>1:0</td><td>3:2</td><td>11:10</td><td>27:26</td></tr>
+          <tr><td class="l">AFR[n / 8]</td><td class="l">4</td><td class="l">bits 4(n mod 8)+3 : 4(n mod 8)</td><td>AFR[0] 3:0</td><td>AFR[0] 7:4</td><td>AFR[0] 23:20</td><td>AFR[1] 23:20</td></tr>
+          <tr><td class="l">BSRR</td><td class="l">1 + 1</td><td class="l">bit n sets, bit n+16 resets</td><td>0 / 16</td><td>1 / 17</td><td>5 / 21</td><td>13 / 29</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Pin n's field in every kind of GPIO register</h4></div>
+      <p class="fig-lede">Drag n. Each bar is one 32-bit register at one scale, bit 31 on the left, with the pin number written in each field. Pin n's field widens from 1 bit to 2 to 4 and moves left with it. BSRR gives every pin two bits: a set bit in the low half and a reset bit 16 places higher.</p>
+      <div data-viz="pin-slider"></div>
+      <div data-viz="pin-bars"></div>
+      <pre class="calc" data-role="pin-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. MODER: what is this pin? (slides 5–6)</h4>
+    <p>Offset 0x00, two bits per pin at bits 2n+1 : 2n.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Value</th><th class="l">Mode</th><th class="l">The pin is…</th></tr></thead>
+        <tbody>
+          <tr><td class="l">00</td><td class="l">Input</td><td class="l">read by IDR; nothing drives it</td></tr>
+          <tr><td class="l">01</td><td class="l">Output</td><td class="l">driven by ODR</td></tr>
+          <tr><td class="l">10</td><td class="l">Alternate function</td><td class="l">handed to a peripheral (UART, timer, SPI…) chosen by AFR</td></tr>
+          <tr><td class="l">11</td><td class="l">Analog</td><td class="l">disconnected from the digital logic, for the ADC or to save power</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>PA5 (LD4) as an output: pin 5 → bits 11:10 → write 01 there and leave the other 30 bits alone. In C that is <code>GPIOA-&gt;MODER = (GPIOA-&gt;MODER &amp; ~(3u &lt;&lt; 10)) | (1u &lt;&lt; 10);</code>, taken apart in section 8.</li>
+      <li>The reset value is <code>0xEBFFFFFF</code>. "Every pin is 11, analog, except PA13 and PA14, which are 10", alternate function. They are the SWD debug lines, and the debugger must reach the chip before any of your code has run.</li>
+      <li>Analog is the safe default. Nothing is driven, and a floating input draws no current.</li>
+      <li>But "an analog pin reads 0 in IDR, whatever voltage is on it". A button that reads 0 when pressed then reads pressed, forever.</li>
+      <li>"So input mode is written, never assumed." <code>gpio_init()</code> writes 00 explicitly.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Reading a MODER value two bits at a time</h4></div>
+      <p class="fig-lede">Each hex digit becomes four bits, and each pair of bits is one pin's mode, pin 15 on the left and pin 0 on the right. Switch to the value after start-up (section 8) to see the five fields the program wrote.</p>
+      <div data-viz="moder-steps"></div>
+      <p class="step-note" data-role="moder-note" aria-live="polite"></p>
+      <div data-viz="moder"></div>
+      <div class="legend">
+        <span><i class="sw-ter-soft"></i>00 input</span>
+        <span><i class="sw-pri-soft"></i>01 output</span>
+        <span><i class="sw-sec-soft"></i>10 alternate function</span>
+        <span><i class="sw-seg"></i>11 analog</span>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. OTYPER, OSPEEDR and PUPDR: drive, edge speed, pull (slides 7–9)</h4>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Register</th><th class="l">Bits per pin</th><th class="l">Codes</th><th class="l">GPIOA reset</th><th class="l">This lesson</th></tr></thead>
+        <tbody>
+          <tr><td class="l">OTYPER (0x04)</td><td class="l">1</td><td class="l">0 push-pull, 1 open-drain</td><td class="l">0x00000000, all push-pull</td><td class="l">left at reset</td></tr>
+          <tr><td class="l">OSPEEDR (0x08)</td><td class="l">2</td><td class="l">00 very low, 01 low, 10 high, 11 very high</td><td class="l">0x0C000000: PA13 = 11</td><td class="l">left at reset, very low</td></tr>
+          <tr><td class="l">PUPDR (0x0C)</td><td class="l">2</td><td class="l">00 none, 01 pull-up, 10 pull-down, 11 reserved</td><td class="l">0x24000000: PA14 = 10, PA13 = 01</td><td class="l">PA0, PA1 pull-up → 0x24000005</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Push-pull drives "high and low, the normal choice". Every output pin has a P-MOS from the pin to 3.3 V and an N-MOS from the pin to ground. Their gates are driven together by the inverse of the ODR bit, so exactly one is on. A P-MOS conducts when its gate is low, an N-MOS when its gate is high.</li>
+      <li>Open-drain switches the P-MOS off for good. Only the N-MOS is left, with its drain on the pin. It can pull the pin low or let go, and high has to come from a resistor.</li>
+      <li>"Two open-drain outputs can share one wire safely." The worst they can do is both pull low. The wire is 1 only if every chip lets go, a wired-AND. This is how I²C puts many chips on two wires (lesson 09 sets OTYPER).</li>
+      <li>Two push-pull outputs on one wire, one driving high and the other low, connect 3.3 V to ground through two transistors. That is a short.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Push-pull drives both ways; open-drain only pulls low, so outputs can share a wire</h4></div>
+      <p class="fig-lede">Transistors are drawn as switches: green is on. Blue wires carry the current that sets the level. Step through one push-pull output, then two chips on one open-drain wire, then the same wire with two push-pull outputs.</p>
+      <div data-viz="drive-steps"></div>
+      <p class="step-note" data-role="drive-note" aria-live="polite"></p>
+      <div data-viz="drive"></div>
+    </figure>
+    <ul>
+      <li>OSPEEDR "speed" is "how sharply the output switches", the slope of each edge. It does not set how often software can toggle the pin. Sharp edges are needed for SPI at tens of MHz, and they radiate more noise and cost more current. "Choose the slowest speed that works: it is the quietest."</li>
+      <li>PUPDR: "A pin connected to nothing is not 0 and not 1; it drifts, and reads randomly." A pull resistor gives it a default. A button wired to GND needs a pull-up: released, the pin reads 1; pressed, the button overpowers the resistor and the pin reads 0.</li>
+      <li>The reset value leaves the two debug lines pulled and every other pin floating:</li>
+    </ul>
+    <pre class="calc">PUPDR reset 0x24000000 = 00 10 01 00 00 00 ... 00
+pin                       15 14 13 12 11 10 ...  0
+PA14 = 10 pull-down, PA13 = 01 pull-up, the rest 00 none
+
+OSPEEDR reset 0x0C000000: bits 27:26 = 11, PA13 very high, the rest very low</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. IDR and ODR: reading a pin, and writing it the obvious way (slides 10–11)</h4>
+    <ul>
+      <li>IDR: offset 0x10, one bit per pin, read only (writing it does nothing). It is "a live photograph of all 16 pins at the moment you read it".</li>
+      <li>To look at one pin, "shift it down to bit 0 and mask everything else away": <code>(GPIOA-&gt;IDR &gt;&gt; 1) &amp; 1u</code> for PA1, or test <code>GPIOA-&gt;IDR &amp; (1u &lt;&lt; 1)</code>.</li>
+    </ul>
+    <pre class="calc">IDR = 0x0000A001 = ... 1010 0000 0000 0001
+                       15   12    8    4  0
+PA15 = 1, PA13 = 1, PA0 = 1, every other pin = 0
+(0x0000A001 &gt;&gt; 1) &amp; 1 = 0      so PA1 is LOW</pre>
+    <ul>
+      <li>Two warnings. A pin in analog mode always reads 0 in IDR. A pin in output mode reads what it is actually doing, which is usually, but not always, what ODR asked for.</li>
+      <li>ODR: offset 0x14, one bit per pin, what each output should be. <code>ODR |= (1u &lt;&lt; 5)</code> sets PA5 high, <code>ODR &amp;= ~(1u &lt;&lt; 5)</code> sets it low, <code>ODR ^= (1u &lt;&lt; 5)</code> toggles it.</li>
+      <li>"These look like one step. They are three." This core is load/store (lesson 01), so it cannot change a bit in a peripheral register directly. <code>GPIOA-&gt;ODR |= 1u &lt;&lt; 5</code> compiles to:</li>
+    </ul>
+    <pre class="calc">movs r2, #160
+movs r3, #32               r3 = 1 &lt;&lt; 5
+lsls r2, r2, #23           r2 = 160 &lt;&lt; 23 = 0x50000000 (GPIOA)
+ldr  r1, [r2, #20]    1.   READ   ODR   (offset 20 = 0x14)
+orrs r3, r1           2.   MODIFY OR in bit 5
+str  r3, [r2, #20]    3.   WRITE  ODR back</pre>
+    <p>"Read, modify, write." Most of the time that is fine. Section 6 shows when it is not.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. BSRR and BRR, and why BSRR is the safe one (slides 12–13)</h4>
+    <ul>
+      <li>BSRR: offset 0x18, write only, two halves. Bits 31:16 reset pins 15–0, bits 15:0 set pins 15–0.</li>
+      <li>A 1 at bit n → pin n goes high. A 1 at bit n + 16 → pin n goes low. A 0 anywhere → nothing changes for that pin.</li>
+      <li>"Because zeros mean leave alone, one write can set some pins, clear others and ignore the rest." The LED bar writes eight pins at once: <code>GPIOB-&gt;BSRR = ((uint32_t)(uint8_t)~leds &lt;&lt; 16) | leds;</code></li>
+      <li>BRR (offset 0x28) is the reset half on its own. <code>GPIOA-&gt;BRR = 1u &lt;&lt; 5</code> also sets PA5 low.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Building a BSRR value bit by bit</h4></div>
+      <p class="fig-lede">Top: the 32 bits written, with the reset half in plum and the set half in blue, and the hex digit under every four bits. Bottom: what happens to each of the port's 16 pins. A pin whose two bits are both 0 is untouched.</p>
+      <div data-viz="bsrr-steps"></div>
+      <p class="step-note" data-role="bsrr-note" aria-live="polite"></p>
+      <div data-viz="bsrr"></div>
+      <pre class="calc" data-role="bsrr-calc"></pre>
+    </figure>
+    <ul>
+      <li>Suppose <code>main()</code> turns PA5 on with <code>ODR |= 1 &lt;&lt; 5</code>, and an interrupt handler turns PA6 on with <code>ODR |= 1 &lt;&lt; 6</code>. The interrupt arrives between main's load and its store.</li>
+      <li><code>main()</code> writes back a copy of ODR it read before the handler changed it. "The handler's work is silently undone." This is lesson 03's lost update.</li>
+      <li>With BSRR there is nothing to read, so there is nothing stale to write back. <code>GPIOA-&gt;BSRR = 1u &lt;&lt; 5</code> compiles to a single <code>str r2, [r3, #24]</code> (offset 24 = 0x18).</li>
+      <li>"One store. An interrupt can land before it or after it, never inside it." That property is called atomic, and it is why BSRR exists.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>An interrupt inside read-modify-write loses the handler's update</h4></div>
+      <p class="fig-lede">Two contexts share ODR. The LEDs under each column show PA6 and PA5 after that step. Step through the four moments, then switch to the BSRR version, where each side writes with one store.</p>
+      <div data-viz="rmw-steps"></div>
+      <p class="step-note" data-role="rmw-note" aria-live="polite"></p>
+      <div data-viz="rmw"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. AFR: which peripheral gets the pin? (slide 14)</h4>
+    <ul>
+      <li>When MODER says 10, alternate function, "AFR says which one". Four bits per pin, so it takes two registers: AFR[0] for pins 0–7 and AFR[1] for pins 8–15. Pin n sits in AFR[n / 8] at bits 4(n mod 8)+3 : 4(n mod 8).</li>
+      <li>"The number means nothing by itself." It is looked up in the datasheet's alternate-function table, and it is different for every pin.</li>
+      <li>The serial port is USART2 on PA2 and PA3, both AF1:</li>
+    </ul>
+    <pre class="calc">AFR[0] after uart2_init() = 0x00001100
+  = 0000 0000 0000 0000 0001 0001 0000 0000
+pin  7    6    5    4    3    2    1    0
+                         AF1  AF1</pre>
+    <ul>
+      <li>"A wrong AF number gives a pin that looks configured and carries nothing", with no error and no fault. Lesson 06 meets that trap with a timer.</li>
+      <li>The LEDs and the buttons are plain inputs and outputs, so they never touch AFR.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. The helpers, traced: clear, then set (slides 15–17)</h4>
+    <pre class="calc">static void pin_mode(GPIO_TypeDef *port, uint32_t pin, uint32_t mode)
+{
+    port-&gt;MODER = (port-&gt;MODER &amp; ~(3u &lt;&lt; (pin * 2u))) | (mode &lt;&lt; (pin * 2u));
+}
+/* MODE_INPUT 0, MODE_OUTPUT 1, MODE_AF 2, MODE_ANALOG 3 */</pre>
+    <p>Step by step for <code>pin_mode(GPIOA, 5, MODE_OUTPUT)</code>, with the real numbers:</p>
+    <pre class="calc">where are pin 5's bits?     pin * 2              = 10, bits 11:10
+a mask covering them        3u &lt;&lt; 10             = 0x00000C00
+everything except them      ~(3u &lt;&lt; 10)          = 0xFFFFF3FF
+read the register           port-&gt;MODER          = 0xEBFFFFFF (reset)
+erase pin 5's two bits      MODER &amp; 0xFFFFF3FF   = 0xEBFFF3FF
+the new mode, in place      1u &lt;&lt; 10             = 0x00000400
+put it in                   0xEBFFF3FF | 0x400   = 0xEBFFF7FF</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Clear, then set: only pin 5's two bits change</h4></div>
+      <p class="fig-lede">The same steps as bits, two-bit fields grouped and numbered by pin. The plum frame is pin 5's field. The last two buttons show the two tempting shortcuts and what they break.</p>
+      <div data-viz="cts-steps"></div>
+      <p class="step-note" data-role="cts-note" aria-live="polite"></p>
+      <div data-viz="cts"></div>
+      <div class="legend">
+        <span><i class="sw-pri"></i>bit = 1</span>
+        <span><i class="sw-seg"></i>bit = 0</span>
+      </div>
+    </figure>
+    <ul>
+      <li>Only bits 11:10 changed, from 11 to 01. "The other 15 pins are exactly as they were."</li>
+      <li>A plain <code>MODER = 1u &lt;&lt; 10</code> would also set the other 15 pins to input, including the debug pins.</li>
+      <li><code>MODER |= 1u &lt;&lt; 10</code> alone turns 11 into 11, still analog, "because OR can only turn bits on".</li>
+    </ul>
+    <p>The same function, called at start-up (slide 16), replayed on the reset value:</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">After</th><th class="l">GPIOA-&gt;MODER</th><th class="l">Changed</th></tr></thead>
+        <tbody>
+          <tr><td class="l">reset</td><td class="l">0xEBFFFFFF</td><td class="l"></td></tr>
+          <tr><td class="l">pin_mode(GPIOA, 5, OUTPUT)</td><td class="l">0xEBFFF7FF</td><td class="l">PA5: 11 → 01</td></tr>
+          <tr><td class="l">pin_mode(GPIOA, 0, INPUT)</td><td class="l">0xEBFFF7FC</td><td class="l">PA0: 11 → 00</td></tr>
+          <tr><td class="l">pin_mode(GPIOA, 1, INPUT)</td><td class="l">0xEBFFF7F0</td><td class="l">PA1: 11 → 00</td></tr>
+          <tr><td class="l">uart2_init(), PA2 and PA3 to AF</td><td class="l"><b>0xEBFFF7A0</b></td><td class="l">PA2, PA3: 11 → 10</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="calc">0x...F7A0 = ... 11 11 01 11 10 10 00 00
+pin             7  6  5  4  3  2  1  0
+                an an out an AF AF in in</pre>
+    <p><code>pin_pull()</code> (slide 17) is the same line on PUPDR, because PUPDR has the identical two-bits-per-pin layout (PULL_NONE 0, PULL_UP 1, PULL_DOWN 2).</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">After</th><th class="l">GPIOA-&gt;PUPDR</th></tr></thead>
+        <tbody>
+          <tr><td class="l">reset</td><td class="l">0x24000000</td></tr>
+          <tr><td class="l">pin_pull(GPIOA, 0, PULL_UP)</td><td class="l">0x24000001, bits 1:0 = 01</td></tr>
+          <tr><td class="l">pin_pull(GPIOA, 1, PULL_UP)</td><td class="l"><b>0x24000005</b>, bits 3:2 = 01</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>"5 is 0101: pull-up on pin 1, pull-up on pin 0." Because MODER, OSPEEDR and PUPDR share the layout, "one line of code configures any of them for any pin".</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Before any of it: the clock gate (slide 18)</h4>
+    <ul>
+      <li>Every GPIO register is dead until the port's clock is on: <code>RCC-&gt;IOPENR |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN;</code>, "FIRST, always". IOPENR has one bit per port: A bit 0, B bit 1, C bit 2, D bit 3, F bit 5.</li>
+      <li>Without it, "writes to GPIOA vanish and reads return 0", with no error and no fault. Lesson 04's Lab Part 0 showed it: the LED dead, everything else working, and both pieces of code looking correct.</li>
+      <li>So the order in <code>gpio_init()</code> is fixed. Every peripheral in the course starts the same way: "clock, configure, use".</li>
+    </ul>
+    <pre class="calc">1. clock the ports            RCC-&gt;IOPENR
+2. set each pin's mode        MODER
+3. pulls, types, speeds       PUPDR, OTYPER, OSPEEDR
+4. only then use the pins     IDR, ODR, BSRR</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Buttons: pull-up, active low, and bounce (slides 19–20)</h4>
+    <p>A button is a switch to ground. Pressed, it connects the pin to 0 V. Released, it connects the pin to nothing, which is why the pull-up of section 4 is needed.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Button</th><th class="l">Pin level</th><th class="l">IDR bit</th><th class="l">button_down() returns</th></tr></thead>
+        <tbody>
+          <tr><td class="l">released</td><td class="l">high (pull-up wins)</td><td class="l">1</td><td class="l">false</td></tr>
+          <tr><td class="l">pressed</td><td class="l">low (switch wins)</td><td class="l"><b>0</b></td><td class="l">true</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>"This is active low: the interesting state reads 0." The code hides it in one place: <code>button_down(pin)</code> returns <code>pin_read(GPIOA, pin) == 0u</code>.</li>
+      <li>"Metal contacts do not close cleanly. They hit, bounce apart, and hit again, for about a millisecond."</li>
+      <li>Wokwi's pushbutton simulates this. By default it makes 10 to 100 transitions over about a millisecond on every press, and the attribute <code>"bounce": "0"</code> turns it off.</li>
+      <li>"A program that treats every falling edge as a press sees many presses from one." Debouncing is part of reading a button.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>One press: every edge for EXTI, a few samples for a 1 kHz poll</h4></div>
+      <p class="fig-lede">PA1's level during one press, with the bounce drawn spread out so you can see it (real bounce edges are microseconds apart). The dots are the 1 ms samples of a polling loop. Drag the phase of the samples: usually the poll sees one clean change, and only when two samples land inside the bounce does it see more.</p>
+      <div data-viz="bounce-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Edges in the signal</span><span class="v sec" data-role="bounce-edges">13</span><span class="sub">EXTI with both edges enabled sees each one</span></div>
+        <div class="stat"><span class="label">Level changes polled</span><span class="v pri" data-role="bounce-poll">1</span><span class="sub">what button A's loop sees at 1 kHz</span></div>
+      </div>
+      <div data-viz="bounce"></div>
+      <p class="step-note" data-role="bounce-note" aria-live="polite"></p>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. Button A: poll, and believe only what holds (slides 21–22)</h4>
+    <p>The main loop samples button A once per millisecond. A new level is believed only after it has "held unchanged for DEBOUNCE_MS samples in a row" (DEBOUNCE_MS is 20).</p>
+    <pre class="calc">typedef struct {
+    uint8_t  stable;     /* the level we have ACCEPTED: 1 = pressed */
+    uint8_t  raw;        /* the most recent sample, believed or not */
+    uint16_t held_ms;    /* samples in a row raw has stayed the same */
+    uint32_t changes;    /* times raw has moved, bounce included    */
+} debounce_t;
+
+static int debounce_step(debounce_t *d, uint8_t raw)
+{
+    if (raw != d-&gt;raw) {                 /* level moved: restart the count */
+        d-&gt;raw = raw;  d-&gt;held_ms = 0;  d-&gt;changes++;
+        return 0;
+    }
+    if (d-&gt;held_ms &lt; DEBOUNCE_MS) {
+        d-&gt;held_ms++;
+        if (d-&gt;held_ms == DEBOUNCE_MS &amp;&amp; raw != d-&gt;stable) {
+            d-&gt;stable = raw;
+            return raw ? +1 : -1;        /* +1 press, -1 release */
+        }
+    }
+    return 0;
+}</pre>
+    <ul>
+      <li><code>main()</code> starts with <code>debounce_t a = { 0 };</code> (released, nothing seen) and calls <code>debounce_step(&amp;a, button_down(BTN_A_PIN))</code> every 1 ms. It returns +1 on a press, −1 on a release, and 0 the rest of the time.</li>
+      <li>In words: if the sample differs from the last one, remember it and start counting again. If it is the same, count. When the count reaches DEBOUNCE_MS and the level differs from what was accepted, accept it and report the change.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 8</span><h4>The debouncer, traced on a press that bounces twice</h4></div>
+      <p class="fig-lede">DEBOUNCE_MS is shrunk to 3 so the trace fits (the program uses 20). Each column is one call, one millisecond apart, showing the struct's fields after the call. The ochre bar is held_ms against the threshold of 3.</p>
+      <div data-viz="deb-steps"></div>
+      <p class="step-note" data-role="deb-note" aria-live="polite"></p>
+      <div data-viz="deb"></div>
+    </figure>
+    <ul>
+      <li>"The press is reported at ms 8, not ms 3", when the contact first touched. The delay is DEBOUNCE_MS after the last bounce, "the price of certainty". At 20 ms it is far below what a person notices.</li>
+      <li><code>changes</code> went up at ms 3, 4 and 5: three level changes for one press. That is the "level changes seen at 1 kHz" the program prints, and why it is sometimes more than 1.</li>
+      <li>Slide 22, polling "is a filter". Bounce transitions are microseconds apart and samples a millisecond apart, so most bounces fall between two samples and are never seen (Figure 7). Button A reports one or two level changes per press because the sampling is too slow to see the mess. The button itself bounces just as much as B.</li>
+      <li>Polling "depends on the loop coming back". A <code>printf</code> at 115200 baud costs about 87 µs per character (10 bits / 115200 = 86.8 µs) and delays the next sample. For a button that is harmless. "For a pulse shorter than the loop, it is invisible."</li>
+      <li>"Polling is simple, cheap and predictable", often right for a human-speed button. It is wrong "when you must not miss an event, or when the CPU has better things to do than ask".</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. Button B: three hops from pin to function (slide 23)</h4>
+    <ul>
+      <li>"GPIO does not interrupt." A separate block, EXTI (extended interrupt and event controller), watches pins and raises interrupts.</li>
+      <li>The path is PA1 → EXTICR (which port?) → EXTI line 1 (edge, pending, mask) → NVIC IRQ 5 → vector 21 → handler. "Every arrow has its own switch, and every switch defaults to OFF."</li>
+      <li><code>NVIC_EnableIRQ()</code> and <code>NVIC_SetPriority()</code> write the NVIC for you. Every EXTI register is written by hand.</li>
+      <li>One more switch sits in neither block. <code>PRIMASK</code>, a core register, turns off every interrupt at once. It is "the one switch that starts on" (0 = interrupts enabled).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 9</span><h4>An edge on PA1 crosses every switch in order</h4></div>
+      <p class="fig-lede">Step through the hops. Each one names its register and the value it holds after <code>button_b_irq_init()</code>, and says what you see if that switch is left off.</p>
+      <div data-viz="path-steps"></div>
+      <p class="step-note" data-role="path-note" aria-live="polite"></p>
+      <div data-viz="path"></div>
+      <pre class="calc" data-role="path-calc"></pre>
+    </figure>
+    <p>Every register of the two blocks: EXTI (<code>EXTI_TypeDef</code>, base 0x40021800) and the NVIC (<code>NVIC_Type</code> in <code>core_cm0plus.h</code>, base 0xE000E100).</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Block</th><th class="l">Offset</th><th class="l">Register</th><th class="l">Its job</th><th class="l">This lesson</th></tr></thead>
+        <tbody>
+          <tr><td class="l">EXTI</td><td class="l">0x00</td><td class="l">RTSR1</td><td class="l">rising-edge trigger enable, bit n = line n</td><td class="l">bit 1 set</td></tr>
+          <tr><td class="l">EXTI</td><td class="l">0x04</td><td class="l">FTSR1</td><td class="l">falling-edge trigger enable</td><td class="l">bit 1 set</td></tr>
+          <tr><td class="l">EXTI</td><td class="l">0x08</td><td class="l">SWIER1</td><td class="l">software trigger: write 1 = an edge on that line</td><td class="l">debugger only</td></tr>
+          <tr><td class="l">EXTI</td><td class="l">0x0C</td><td class="l">RPR1</td><td class="l">rising edge latched; write 1 to clear</td><td class="l">read, cleared</td></tr>
+          <tr><td class="l">EXTI</td><td class="l">0x10</td><td class="l">FPR1</td><td class="l">falling edge latched; write 1 to clear</td><td class="l">read, cleared</td></tr>
+          <tr><td class="l">EXTI</td><td class="l">0x60–0x6C</td><td class="l">EXTICR[0]–[3]</td><td class="l">which port feeds each line, four lines per register</td><td class="l">EXTICR[0]: line 1 = port A</td></tr>
+          <tr><td class="l">EXTI</td><td class="l">0x80</td><td class="l">IMR1</td><td class="l">interrupt mask: 1 = on to the NVIC</td><td class="l">bit 1 set</td></tr>
+          <tr><td class="l">EXTI</td><td class="l">0x84</td><td class="l">EMR1</td><td class="l">event mask: wake-up without an interrupt</td><td class="l">not used</td></tr>
+          <tr><td class="l">NVIC</td><td class="l">0x000</td><td class="l">ISER</td><td class="l">set-enable, bit n = IRQ n; writing 0 does nothing</td><td class="l">0x00000020, bit 5</td></tr>
+          <tr><td class="l">NVIC</td><td class="l">0x080</td><td class="l">ICER</td><td class="l">clear-enable, the same layout</td><td class="l">not used</td></tr>
+          <tr><td class="l">NVIC</td><td class="l">0x100</td><td class="l">ISPR</td><td class="l">set-pending: raise an IRQ by software</td><td class="l">debugger only</td></tr>
+          <tr><td class="l">NVIC</td><td class="l">0x180</td><td class="l">ICPR</td><td class="l">clear-pending</td><td class="l">not used</td></tr>
+          <tr><td class="l">NVIC</td><td class="l">0x300–0x31C</td><td class="l">IPR[0]–[7]</td><td class="l">priority, one byte per IRQ, top 2 bits used</td><td class="l">IPR[1] = 0x00008000</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>EXTI offsets 0x14–0x5C and 0x70–0x7C are reserved. IMR1 bits 19, 23, 25 and 31 are direct lines from other peripherals.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. Hop 1: EXTICR picks the port (slide 24)</h4>
+    <ul>
+      <li>EXTI has 16 lines for GPIO, numbered 0–15. "Line n watches pin n", of the port that EXTICR chooses with a port code: A = 0, B = 1, C = 2, D = 3, F = 5.</li>
+      <li>Each line is a multiplexer: several inputs, one output, and a select number. "Only one input reaches the output at a time", so line 1 can watch PA1 or PB1, never both.</li>
+      <li>Each line gets 8 bits, four lines per register: line n → <code>EXTICR[n / 4]</code>, bits 8(n mod 4)+7 : 8(n mod 4). The port code sits in the low bits of that byte.</li>
+      <li>Line 1 for PA1: EXTICR[0] bits 15:8 = 0, so EXTICR[0] = 0x00000000. Line 13 for PC13 (Lab Part 7): EXTICR[3] bits 15:8 = 2, so EXTICR[3] = 0x00000200.</li>
+    </ul>
+    <pre class="calc">const uint32_t line  = 1;                       /* = pin number */
+const uint32_t shift = (line % 4u) * 8u;        /* = 8          */
+EXTI-&gt;EXTICR[line / 4u] = (EXTI-&gt;EXTICR[line / 4u] &amp; ~(0xFFu &lt;&lt; shift))
+                        | (EXTI_PORT_A &lt;&lt; shift);</pre>
+    <ul>
+      <li>"PA1 and PB1 cannot both interrupt." They share line 1.</li>
+      <li>"Port A's code is 0, the reset value." Forget EXTICR and a port-A button works by accident. Move it to port C and it silently stops.</li>
+      <li>On the STM32C0, EXTICR is in EXTI. On an STM32F4 the same job is <code>SYSCFG-&gt;EXTICR[]</code>, so code copied from an F4 tutorial will not compile here.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 10</span><h4>Line n is a multiplexer, and its select code is one byte of EXTICR</h4></div>
+      <p class="fig-lede">Pick a port and drag the line number. The mux passes pin n of the chosen port, and the byte for line n in EXTICR[n / 4] holds that port's code. The register value assumes the other three lines are left at reset. Not every port has every pin on this 48-pin package (there is no PC1), but the field is the same.</p>
+      <div data-viz="exti-port"></div>
+      <div data-viz="exti-slider"></div>
+      <div data-viz="exti"></div>
+      <pre class="calc" data-role="exti-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>14. Hop 2 and hop 3: edges, pending, mask, then the NVIC (slides 25–26)</h4>
+    <p>Inside EXTI, line 1 is bit 1 in each of five registers, <code>1u &lt;&lt; 1</code> = 0x00000002.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Register</th><th class="l">Bit 1 set means</th><th class="l">This lesson</th></tr></thead>
+        <tbody>
+          <tr><td class="l">RTSR1</td><td class="l">trigger on a rising edge (release)</td><td class="l">set</td></tr>
+          <tr><td class="l">FTSR1</td><td class="l">trigger on a falling edge (press)</td><td class="l">set</td></tr>
+          <tr><td class="l">RPR1</td><td class="l">a rising edge has happened (pending)</td><td class="l">hardware sets it</td></tr>
+          <tr><td class="l">FPR1</td><td class="l">a falling edge has happened (pending)</td><td class="l">hardware sets it</td></tr>
+          <tr><td class="l">IMR1</td><td class="l">pass this line on to the NVIC (unmask)</td><td class="l">set</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="calc">EXTI-&gt;RTSR1 |= 1u &lt;&lt; 1;    /* rising edge                           */
+EXTI-&gt;FTSR1 |= 1u &lt;&lt; 1;    /* falling edge                          */
+EXTI-&gt;RPR1   = 1u &lt;&lt; 1;    /* clear anything already pending        */
+EXTI-&gt;FPR1   = 1u &lt;&lt; 1;
+EXTI-&gt;IMR1  |= 1u &lt;&lt; 1;    /* unmask LAST, once everything is ready */</pre>
+    <ul>
+      <li>How this flag clears: the pending registers are write 1 to clear. Writing 0x2 clears bit 1 and leaves every other line alone, because writing 0 does nothing.</li>
+      <li>So the code assigns with <code>=</code>. A <code>|=</code> would read the other lines' pending bits and write their 1s back, "clearing edges nobody has handled yet".</li>
+      <li>Unmask last, once the edges are set and any stale pending bit is cleared.</li>
+      <li>C0-specific: rising and falling edges latch into separate registers, RPR1 and FPR1. Older STM32 families have a single PR.</li>
+      <li>The NVIC is ARM's, identical on every Cortex-M0+. EXTI lines 0 and 1 arrive together as IRQ 5 (<code>EXTI0_1_IRQn</code>).</li>
+      <li>Enable: <code>NVIC_EnableIRQ(EXTI0_1_IRQn)</code> writes 1 &lt;&lt; 5 = 0x00000020 to ISER. Writing 0s to ISER does nothing, "the same zeros mean leave alone idea as BSRR".</li>
+      <li>Priority: this core has 4 levels, 0 (most urgent) to 3, stored in the top two bits of an 8-bit field (<code>__NVIC_PRIO_BITS = 2</code>). IRQ k uses IPR[k / 4], byte k mod 4, value prio &lt;&lt; 6.</li>
+    </ul>
+    <pre class="calc">NVIC_SetPriority(EXTI0_1_IRQn, 2);
+IRQ 5 → IPR[5 / 4] = IPR[1], byte 5 mod 4 = 1 (bits 15:8)
+2 &lt;&lt; 6 = 0x80 in that byte → IPR[1] = 0x00008000</pre>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">On a Cortex-M0+</th><th class="l"></th></tr></thead>
+        <tbody>
+          <tr><td class="l">external IRQs</td><td class="l">up to 32; the C031 uses 0–28</td></tr>
+          <tr><td class="l">priority levels</td><td class="l">4, and 0 is the most urgent</td></tr>
+          <tr><td class="l">enable / disable</td><td class="l">ISER / ICER</td></tr>
+          <tr><td class="l">set / clear pending</td><td class="l">ISPR / ICPR</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>"Vectors are shared." IRQ 5 serves EXTI lines 0 and 1, IRQ 6 lines 2–3, IRQ 7 lines 4–15. "So a handler must check the pending bits to find out which line fired."</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>15. The last hop: the vector table, and the handler (slides 27–28)</h4>
+    <p>When IRQ 5 fires, the CPU looks up the handler's address in the vector table at the start of flash. The first 16 entries belong to the core.</p>
+    <pre class="calc">vector number  = 16 + IRQ = 16 + 5 = 21
+vector address = 0x08000000 + 21 × 4 = 0x08000000 + 0x54 = 0x08000054
+bytes there    = 3d 02 00 08   →  0x0800023D   (little-endian)
+nm Main.elf    : 0800023c T EXTI0_1_IRQHandler</pre>
+    <ul>
+      <li>The word 0x0800023D is the handler's address 0x0800023C plus 1, the Thumb bit (lesson 01).</li>
+      <li>Calling the handler "is nothing magic". The hardware loads a word from a fixed address and jumps there. Your only job is to make sure the right function's address is in that word.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 11</span><h4>The three EXTI IRQs in the NVIC and the vector table</h4></div>
+      <p class="fig-lede">Pick an IRQ. Its enable bit in ISER, its priority byte in IPR[1] (priority 2, so the top two bits are 10), and its slot in the vector table move together. Faded cells in IPR[1] do not exist and read as 0.</p>
+      <div data-viz="vec-steps"></div>
+      <p class="step-note" data-role="vec-note" aria-live="polite"></p>
+      <div data-viz="vec"></div>
+      <pre class="calc" data-role="vec-calc"></pre>
+    </figure>
+    <pre class="calc">void EXTI0_1_IRQHandler(void)
+{
+    uint32_t mask = 1u &lt;&lt; BTN_B_PIN;
+    if ((EXTI-&gt;RPR1 | EXTI-&gt;FPR1) &amp; mask) {
+        EXTI-&gt;RPR1 = mask;
+        EXTI-&gt;FPR1 = mask;
+        b_edges++;
+    }
+}</pre>
+    <ul>
+      <li>"The handler is an ordinary function." It compiles to fourteen instructions, with "no special prologue, no special return".</li>
+      <li>It uses only r1–r3, which the hardware already saved on entry (lesson 03). It returns with an ordinary <code>bx lr</code>. The hardware loaded <code>lr</code> with a special EXC_RETURN value that tells the core to restore the interrupted program.</li>
+      <li>With the hardware's own saving on the way in and out, the whole visit is on the order of a microsecond at 48 MHz.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>16. Clear the pending bit, and spell the name exactly (slides 29–30)</h4>
+    <ul>
+      <li>"The pending bit is EXTI's memory that an edge happened." The NVIC sees the line as long as the bit is set.</li>
+      <li>Forget to clear it and the handler returns with the line still pending, so the core goes straight back in (tail-chaining). <code>main()</code> never runs again.</li>
+      <li>The symptom is a board that works until the first press and then "freezes completely": the heartbeat stops and the serial port goes quiet. It has not crashed. The handler is running flat out, over and over (Lab Part 3).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 12</span><h4>Write 1 to clear, or the handler runs forever</h4></div>
+      <p class="fig-lede">Who has the CPU over time, and FPR1 bit 1 underneath. A press sets the bit. Compare the handler that clears it with one that does not.</p>
+      <div data-viz="pend-steps"></div>
+      <p class="step-note" data-role="pend-note" aria-live="polite"></p>
+      <div data-viz="pend"></div>
+    </figure>
+    <ul>
+      <li><code>startup.c</code> fills vector 21 with a weak placeholder that points at <code>Default_Handler</code>, an infinite loop. A function named exactly <code>EXTI0_1_IRQHandler</code> is a strong symbol, and it replaces the placeholder when the program is linked. "The name is the only thing connecting your function to the hardware."</li>
+      <li>Misspell it, <code>EXTI0_1_IRQhandler</code> with one lower-case letter, and the build still reports 0 warnings:</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l"></th><th class="l">Correct name</th><th class="l">Misspelt</th></tr></thead>
+        <tbody>
+          <tr><td class="l">warnings</td><td class="l">0</td><td class="l"><b>0</b></td></tr>
+          <tr><td class="l">FLASH</td><td class="l">7156 B</td><td class="l"><b>7120 B</b></td></tr>
+          <tr><td class="l">nm for EXTI0_1_IRQHandler</td><td class="l">T (yours)</td><td class="l"><b>W</b> (the placeholder)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>"The 36 missing bytes are your handler." Nothing calls a function with the wrong name, so the linker deleted it as dead code. The first press jumps to <code>Default_Handler</code> and the board hangs.</li>
+      <li>Two defences. Look: <code>arm-none-eabi-nm Main.elf | findstr IRQHandler</code>, and every handler you wrote must show <code>T</code>. Check at run time: the banner compares vector 21 with <code>Default_Handler</code> and prints <code>YOUR HANDLER IS NOT INSTALLED</code> if they match.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>17. Count in the handler, decide in main() (slides 31–32)</h4>
+    <pre class="calc">uint32_t edges = b_edges;                 /* one read of the counter      */
+if (edges != b_seen) {                    /* new edges: restart the clock */
+    b_seen = edges;  b_quiet_ms = 0;  b_armed = 1;
+} else if (b_armed &amp;&amp; ++b_quiet_ms &gt;= DEBOUNCE_MS) {
+    b_armed = 0;                          /* 20 ms of quiet: bounce over  */
+    uint8_t down = button_down(BTN_B_PIN);
+    ...                                   /* settled pressed, or released? */
+}</pre>
+    <ul>
+      <li>The handler does the least it can: clear, count, return. In <code>main()</code>, "every edge restarts a 20 ms stopwatch; when the stopwatch finishes without another edge, the bouncing is over". Then it looks at the pin once to see where it settled.</li>
+      <li><code>b_edges</code> is shared between the handler and <code>main()</code> without a lock. It is lesson 03's "one safe case": a single aligned 32-bit word, written by only one side. <code>main()</code> reads the old value or the new one, never half of each.</li>
+      <li>It is <code>volatile</code>, so the compiler reads it from memory every time instead of keeping a stale copy in a register.</li>
+      <li>Why not debounce in the handler? "A handler that waits 20 ms blocks everything of equal or lower priority for 20 ms." "Handlers record; main() decides." That rule survives into the RTOS of lesson 07.</li>
+    </ul>
+    <p>Slide 32 predicts what the serial monitor prints per press (predictions from Wokwi's documented behaviour, not yet watched):</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l"></th><th class="l">Button A, polled</th><th class="l">Button B, interrupt</th></tr></thead>
+        <tbody>
+          <tr><td class="l">bounce on (Wokwi default)</td><td class="l">1, occasionally 2–3</td><td class="l">many, tens per press</td></tr>
+          <tr><td class="l">bounce off ("bounce": "0")</td><td class="l">1</td><td class="l"><b>exactly 1</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>"The interrupt sees what actually happened; the poll sees a sampled summary of it." They answer different questions, and choosing between them is the engineering.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>18. Seven ways to get silence (slide 33)</h4>
+    <p>"Every one of these builds with zero warnings and gives a board that does nothing, or nearly nothing." The last column says why that symptom follows.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">#</th><th class="l">Forgot</th><th class="l">Symptom</th><th class="l">Why this symptom follows</th></tr></thead>
+        <tbody>
+          <tr><td class="l">1</td><td class="l">RCC-&gt;IOPENR for the port</td><td class="l">writes vanish; the pin never becomes anything</td><td class="l">The clock gate is off at reset. An unclocked port ignores writes and reads back 0, so MODER never changes, and the bus raises no fault.</td></tr>
+          <tr><td class="l">2</td><td class="l">MODER input mode</td><td class="l">pin stays analog, reads 0: "pressed" forever</td><td class="l">MODER resets to 11, analog, and an analog pin reads 0 in IDR. The button is active low, so 0 means pressed.</td></tr>
+          <tr><td class="l">3</td><td class="l">PUPDR pull-up</td><td class="l">released button floats; phantom presses</td><td class="l">PUPDR resets to 00 for PA0 and PA1. A released button connects the pin to nothing, so it drifts, and every random 0 reads as a press.</td></tr>
+          <tr><td class="l">4</td><td class="l">EXTICR port select</td><td class="l">works on port A by luck, dead elsewhere</td><td class="l">EXTICR resets to code 0 = port A. Line n keeps watching PAn, so a PC13 button goes unheard while line 13 watches PA13.</td></tr>
+          <tr><td class="l">5</td><td class="l">IMR1 unmask</td><td class="l">edges latch in FPR1, never reach the NVIC</td><td class="l">Edge detection and the pending latch come before the mask. IMR1 = 0 blocks only the request to the NVIC.</td></tr>
+          <tr><td class="l">6</td><td class="l">NVIC_EnableIRQ</td><td class="l">NVIC holds it pending; handler never runs</td><td class="l">EXTI raises IRQ 5, but ISER bit 5 is 0, so the core never takes it. FPR1 stays 1 because only the handler clears it.</td></tr>
+          <tr><td class="l">7</td><td class="l">handler name, exactly</td><td class="l">vector 21 → Default_Handler; hangs on first press</td><td class="l">Vector 21 keeps the weak placeholder. The misspelt function is never called, so the linker drops it. The first IRQ enters Default_Handler, an infinite loop.</td></tr>
+          <tr><td class="l">—</td><td class="l">clearing the pending bit</td><td class="l">the opposite: handler runs forever</td><td class="l">The bit is still 1 when the handler returns, so the NVIC still sees the line and tail-chains straight back in. main() never runs.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>This is "the debugging checklist for every interrupt in the rest of the course": walk the path of Figure 9 hop by hop and read each register back. The banner does exactly that.</li>
+      <li>A quick split: if FPR1 bit 1 never becomes 1, EXTI never saw the edge (clock, MODER, EXTICR, FTSR1). If it becomes 1 and stays 1 with no handler run, the request stops after the latch (IMR1, ISER, or PRIMASK).</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>19. The debugger, and what carries forward (slides 33b–34)</h4>
+    <p>Under F5, clicking a button rarely lands where you wanted:</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Why</th><th class="l">What you see</th></tr></thead>
+        <tbody>
+          <tr><td class="l">a click is a press and a release; a halted chip means frozen simulated time</td><td class="l">the press is over before the program samples the pin</td></tr>
+          <tr><td class="l">breakpoint on b_edges++</td><td class="l">one stop per bounce edge, tens per press</td></tr>
+          <tr><td class="l">breakpoint on debounce_step()'s first line</td><td class="l">1000 stops a second; the accept is never reached</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Latch the input. Ctrl-click a Wokwi pushbutton and it stays pressed until the next click, or hold the A or B key.</li>
+      <li>"Break where the event is decided, not where the signal arrives." <code>d-&gt;stable = raw;</code> and <code>b_count++</code> each run once per press.</li>
+      <li>Inject the event from the register, with no button at all, from the Debug Console:</li>
+    </ul>
+    <pre class="calc">-exec set *(unsigned int *)0x40021808 = 2    EXTI-&gt;SWIER1: one rising edge on line 1
+-exec set *(unsigned int *)0xE000E200 = 32   NVIC-&gt;ISPR:   pend IRQ 5 with no EXTI event</pre>
+    <ul>
+      <li>The first enters the handler with RPR1 bit 1 set and counts one clean edge. The second enters it with nothing pending, so the <code>if</code> is false and nothing is counted. "Never trust the vector, read the pending bit." (Predicted from RM0490, not yet watched.)</li>
+      <li>What carries forward: slide 4's table works for every pin of every port, so bit positions are calculated, never looked up.</li>
+      <li>"Read-modify-write versus a single store" is the most common concurrency bug in embedded code, and you can now see it in a disassembly.</li>
+      <li>Poll or interrupt is a choice made on evidence. Both were measured on the same button.</li>
+      <li>"The interrupt path is the same shape everywhere." A timer, a UART, an ADC each end in a pending bit, an NVIC line and a vector with an exact name (lessons 06, 08, 09).</li>
+      <li>"The polled millisecond is lying a little." <code>tick_wait()</code> polls SysTick's COUNTFLAG, which remembers only one wrap. While a <code>printf</code> blocks for 5 ms, four ticks are lost and <code>ms_now</code> runs slow. Lesson 06 turns SysTick into an interrupt.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>General idea vs this chip</h4>
+    <div data-viz="contrast"></div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Pin n: 1-bit registers bit n; MODER, OSPEEDR, PUPDR bits 2n+1 : 2n; AFR[n / 8] bits 4(n mod 8)+3 : 4(n mod 8); BSRR set bit n, reset bit n + 16. Pin 13: MODER 27:26, AFR[1] 23:20, BSRR 13 and 29.</li>
+      <li>Codes: MODER 00 in, 01 out, 10 AF, 11 analog; PUPDR 00 none, 01 up, 10 down. MODER resets to 0xEBFFFFFF: all analog except PA13, PA14 (SWD) at 10.</li>
+      <li>Clear, then set: <code>pin_mode(GPIOA, 4, OUTPUT)</code> on 0xEBFFF7A0 → &amp; ~0x300 = 0xEBFFF4A0 → | 0x100 = 0xEBFFF5A0. A pull-down on PA6 from 0x24000000 → bits 13:12 = 10 → 0x24002000.</li>
+      <li><code>MODER |= 1u &lt;&lt; 10</code> leaves 11 as 11 (still analog). <code>MODER = 1u &lt;&lt; 10</code> makes the other 15 pins inputs, SWD included.</li>
+      <li>BSRR: PA0 high and PA5 low in one write = (1 &lt;&lt; 0) | (1 &lt;&lt; 21) = 0x00200001. LED bar with leds = 0x81 → 0x007E0081.</li>
+      <li><code>ODR |=</code> is ldr, orrs, str: an ISR between the load and the store is overwritten by the stale copy. BSRR is one str, atomic.</li>
+      <li>EXTICR: line n → EXTICR[n / 4], bits 8(n mod 4)+7 : 8(n mod 4), codes A 0, B 1, C 2, D 3, F 5. PB7 → EXTICR[1] = 0x01000000. Port A is code 0, the reset value.</li>
+      <li>IRQs: lines 0–1 → IRQ 5, 2–3 → IRQ 6, 4–15 → IRQ 7. Vector 16 + n at 0x08000000 + 4(16 + n): IRQ 5 → 21 at 0x08000054, IRQ 7 → 23 at 0x0800005C. The word holds the handler address + 1 (Thumb bit).</li>
+      <li>NVIC: ISER bit n enables IRQ n. Priority IRQ k → IPR[k / 4], byte k mod 4, prio &lt;&lt; 6, and 0 is the most urgent: IRQ 5 prio 2 → 0x00008000; IRQ 7 prio 1 → 0x40000000.</li>
+      <li>The EXTI flag clears by writing 1 to RPR1 / FPR1 with <code>=</code>, never <code>|=</code>. Forget it and the handler runs forever: a frozen board, not a crash.</li>
+      <li>Slide 33 silences: clock gate, MODER, PUPDR, EXTICR, IMR1, NVIC enable, handler name. FPR1 stuck at 1 means the path stops after the latch.</li>
+      <li>Debounce with DEBOUNCE_MS = 3, samples 0 0 1 0 1 1 1 1: the press is reported at ms 8 and changes = 3. A 1 kHz poll filters bounce; EXTI sees every edge.</li>
+      <li>Handlers record, <code>main()</code> decides. <code>b_edges</code> is one aligned word with one writer: volatile, no lock needed.</li>
+    </ul>
+    <p class="source">Slides: L05 slides 1–34 and 33b · Notes: 06_Week4_L05_GPIO_Interrupts.md · Guide: §3 Lesson 05, §2 key contrasts, §7 How to prepare</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lesson</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

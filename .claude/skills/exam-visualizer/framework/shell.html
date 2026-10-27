@@ -280,6 +280,8 @@ svg .dim { opacity: 0.2; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+/* JetBrains Mono draws -> == |= as ligatures; last in the sheet so the font shorthands above can't reset it */
+body, body * { font-variant-ligatures: none !important; font-feature-settings: "calt" 0, "liga" 0 !important; }
 </style>
 
 <header class="masthead pad">

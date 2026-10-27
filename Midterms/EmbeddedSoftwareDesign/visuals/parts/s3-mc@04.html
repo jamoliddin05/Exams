@@ -1,0 +1,179 @@
+<article class="q" id="s3-mc15" data-part="mc" data-num="15" data-topic="Stack top" data-ref="topic4">
+  <div class="q-head">
+    <p class="eyebrow">Question 15 · L04, Stack top</p>
+    <h3 class="q-title">A student edits the <code>MEMORY</code> block of <code>link.ld</code> to <code>RAM (rw) : ORIGIN = 0x20000000, LENGTH = 6K</code> and rebuilds. The line <code>_estack = ORIGIN(RAM) + LENGTH(RAM);</code> is unchanged. Which value does the core load into SP at reset?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span><code>0x20001800</code></span>
+      <span class="why">Correct. 6K = 6 × 1024 = 6144 = <code>0x1800</code>, and <code>0x20000000 + 0x1800 = 0x20001800</code>.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>0x20003000</code></span>
+      <span class="why">No. That is the 12 KB top. <code>_estack</code> is computed from <code>LENGTH</code>, so it moves.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0x20000000</code></span>
+      <span class="why">No. That is the bottom of RAM. The stack grows down from the top.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>0x20001770</code></span>
+      <span class="why">No. <code>0x1770</code> is 6000. In <code>link.ld</code>, K means 1024 bytes.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> <code>6K</code> is 6 × 1024 = 6144 bytes, which is <code>0x1800</code> (6 × <code>0x400</code>). The linker computes <code>_estack = 0x20000000 + 0x1800 = 0x20001800</code>.</p>
+    <p>No C code is involved in getting that value into SP. <code>vectors[0]</code> holds <code>&amp;_estack</code>, the table sits at <code>0x08000000</code>, the hex file now starts <code>00 18 00 20</code>, and the hardware loads word 0 into SP before the first instruction. <code>_estack</code> is computed, not typed, so it is the one value that follows the new <code>LENGTH</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The stack top follows <code>LENGTH</code></h4>
+    </div>
+    <p class="fig-lede">The bar is the chip's 12 KB of SRAM. <code>LENGTH</code> decides how much of it <code>link.ld</code> declares, and <code>_estack</code> sits at the end of the declared part. <code>.data</code> and <code>.bss</code> are placed from the bottom, so they do not move. Drag <code>LENGTH</code>.</p>
+    <div data-viz="slider"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">LENGTH</span><span class="v" data-role="len">6144</span><span class="sub">bytes, K × 1024</span></div>
+      <div class="stat"><span class="label">_estack</span><span class="v pri" data-role="top">0x20001800</span><span class="sub">ORIGIN + LENGTH</span></div>
+      <div class="stat"><span class="label">Word 0 in the hex</span><span class="v" data-role="bytes">00 18 00 20</span><span class="sub">little-endian</span></div>
+    </div>
+    <div data-viz="ram"></div>
+    <pre class="calc" data-role="calc"></pre>
+    <p class="fig-lede">From the linker script to SP, with no instruction executed on the way.</p>
+    <div data-viz="chain"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>_estack = ORIGIN(RAM) + LENGTH(RAM)</code> is computed, so changing <code>LENGTH</code> moves the stack top. 6K = 6 × 1024 = <code>0x1800</code>, so SP starts at <code>0x20001800</code>.</p>
+    <p class="source">Source: L04 slides 5, 13 · Notes: L04 › 14. link.ld part 1, MEMORY and the computed stack top</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc16" data-part="mc" data-num="16" data-topic="Vector placement" data-ref="topic4">
+  <div class="q-head">
+    <p class="eyebrow">Question 16 · L04, Vector placement</p>
+    <h3 class="q-title">In <code>link.ld</code> a student moves the <code>.isr_vector</code> output section so that it comes after <code>.text</code> in FLASH, and changes nothing else. What happens?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>The linker stops with an error, because <code>.isr_vector</code> must be the first section in FLASH</span>
+      <span class="why">No. The linker only checks that everything fits. Zero errors, zero warnings, identical sizes.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>It builds with no error and no warning and gives a valid hex file, but a real chip cannot start, because the first two words of FLASH are now instruction bytes</span>
+      <span class="why">Correct. The core takes SP and PC from those two words.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>It builds and runs normally, because the core finds the section named <code>.isr_vector</code> at reset</span>
+      <span class="why">No. Section names do not exist on the chip. The core reads fixed addresses.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>It builds and runs normally until the first interrupt, which hangs the board</span>
+      <span class="why">No. Words 0 and 1 of the table are the stack pointer and the reset vector, so it fails at reset.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> At reset the core reads the first two words of FLASH itself: word 0 into SP and word 1 into PC. It does not know where the linker put the table. After the move, <code>.text</code> starts at <code>0x08000000</code>, so those two words are machine code, and SP and PC get meaningless values. A real chip cannot start.</p>
+    <p>Nothing on the way complains. The compiler checks the language, the linker checks the arithmetic, and <code>objcopy</code> writes a hex file with correct checksums. Slide 20 calls this the failure mode the course cares about more than any other.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>What the core reads at <code>0x08000000</code>, before and after the move</h4>
+    </div>
+    <p class="fig-lede">The FLASH bar is to scale with this lesson's section sizes. Below it, the first eight bytes, read as the core reads them at reset. The bytes are from the lesson's own builds (slide 7 and the lab).</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="flash"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Every check passes, and the chip still cannot start</h4>
+    </div>
+    <p class="fig-lede">Each tool checks something real. None of them checks that word 0 is a stack pointer and word 1 an odd FLASH address.</p>
+    <div data-viz="checks"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Moving <code>.isr_vector</code> after <code>.text</code> builds with no error and no warning and produces a valid hex file. A real chip can't start, because the first two words of FLASH are now instruction bytes.</p>
+    <p class="source">Source: L04 slides 5, 20 · Notes: L04 › Lab takeaways</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc17" data-part="mc" data-num="17" data-topic="CMSIS" data-ref="topic4">
+  <div class="q-head">
+    <p class="eyebrow">Question 17 · L04, CMSIS</p>
+    <h3 class="q-title"><code>GPIOA-&gt;ODR ^= (1u &lt;&lt; 5);</code> toggles LD4 on PA5. The names <code>GPIOA</code> and <code>ODR</code> come from CMSIS, here ST's device header <code>stm32c031xx.h</code>. What does CMSIS do to make this line reach the pin?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>It links ST's HAL library, and <code>GPIOA-&gt;ODR</code> calls a library function that writes the register</span>
+      <span class="why">No. CMSIS is not ST's HAL. Nothing is linked and no function is called.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>It supplies a special I/O instruction for the GPIO port, because GPIO sits outside the peripheral region at <code>0x50000000</code></span>
+      <span class="why">No. There is no I/O instruction and no I/O address space. <code>0x50000000</code> is an ordinary address.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>startup.c</code> fills a table of register addresses in RAM at reset, and <code>-&gt;</code> looks the address up at run time</span>
+      <span class="why">No. The address is a constant, known at compile time. Nothing is looked up.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span>Nothing is linked or called: <code>GPIOA</code> is a pointer to a struct at a fixed address, so <code>GPIOA-&gt;ODR</code> is base + offset, <code>0x50000000 + 0x14 = 0x50000014</code>, worked out at compile time</span>
+      <span class="why">Correct. CMSIS is headers, not a library.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> CMSIS, the Common Microcontroller Software Interface Standard, is headers, not a library. It is <code>#define</code>s and struct declarations that put names on the addresses ST published in the reference manual. <code>GPIOA</code> is a pointer to a <code>GPIO_TypeDef</code> at <code>0x50000000</code>, and <code>ODR</code> is the struct member at offset <code>0x14</code>.</p>
+    <p>The compiler turns <code>GPIOA-&gt;ODR</code> into an ordinary load and store at <code>0x50000014</code>. Peripherals are reached by ordinary loads and stores, even GPIO, which on the STM32C0 sits at <code>0x50000000</code>, outside the <code>0x40000000</code> peripheral region.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4><code>GPIO_TypeDef</code> laid over memory: <code>-&gt;</code> is base + offset</h4>
+    </div>
+    <p class="fig-lede">The struct is eleven words. CMSIS pins one copy at each port's base address, GPIOA at <code>0x50000000</code> and GPIOB at <code>0x50000400</code>. Pick a name and follow the arithmetic.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="struct"></div>
+    <p class="fig-lede">What the compiler makes of the line at <code>-Os</code> (slide 4). The base goes into a register once, and <code>ODR</code> is reached by the constant offset 20 = <code>0x14</code>.</p>
+    <pre class="calc">movs r2, #0xA0          0xA0 = 160
+movs r3, #32            r3 = 1 &lt;&lt; 5, the PA5 bit
+lsls r2, r2, #23        r2 = 0xA0 &lt;&lt; 23 = 0x50000000, GPIOA, the base
+ldr  r1, [r2, #20]      load from 0x50000000 + 20 = 0x50000014, ODR
+eors r3, r1             flip bit 5
+str  r3, [r2, #20]      store to 0x50000014
+bx   lr</pre>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>CMSIS is headers, not a library. <code>GPIOA-&gt;ODR</code> is base + offset, <code>0x50000000 + 0x14</code>, computed at compile time and reached by an ordinary load and store.</p>
+    <p class="source">Source: L04 slides 4, 4b · Notes: L04 › 4. The IO map, CMSIS, and base plus offset</p>
+  </div>
+</article>

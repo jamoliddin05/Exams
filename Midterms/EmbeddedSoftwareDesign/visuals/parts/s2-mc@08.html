@@ -1,0 +1,189 @@
+<article class="q" id="s2-mc31" data-part="mc" data-num="31" data-topic="BRR wrong clock" data-ref="topic8">
+  <div class="q-head">
+    <p class="eyebrow">Question 31 · L08, BRR for the wrong clock</p>
+    <h3 class="q-title">A firmware sets <code>USART2-&gt;BRR = 417</code>, computed for 48 MHz and 115 200 baud, but it never raises the clock: the core and USART2 still run at the reset 12 MHz. The PC terminal is set to 115 200 baud, 8N1. What does the terminal show when the board prints its banner?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Nothing at all: USART2 cannot run from a 12 MHz clock</span>
+      <span class="why">No. USART2 runs from whatever clock it gets; only the bit rate changes. "Nothing sent" is the symptom of a missing <code>USART2EN</code>.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>Garbage characters</span>
+      <span class="why">Correct. 12 000 000 / 417 ≈ 28 800 baud, a quarter of 115 200, so the terminal samples the wrong bits.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The banner, arriving four times more slowly</span>
+      <span class="why">No. A UART sends no clock. The terminal keeps its own 115 200 baud and cannot follow a slower sender.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The banner: the receiver resynchronises on every start bit, so the rate error does not matter</span>
+      <span class="why">No. Resynchronising on each start bit absorbs a few percent. This error is 75 %.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> <code>BRR</code> counts clocks per bit. 417 clocks of a 12 MHz clock last four times as long as 417 clocks of 48 MHz, so the board sends at 12 000 000 / 417 ≈ 28 800 baud while the terminal expects 115 200.</p>
+    <p>The terminal times every bit by its own clock. It sees the falling edge of the start bit, then samples eight data bits and the stop bit 8.7 µs apart, all inside the board's first three 34.75 µs bits. The bytes it builds are wrong, often with a framing error. Slide 14 calls <code>BRR</code> for the wrong clock "the most recognisable UART fault". At 12 MHz the right value is 12 000 000 / 115 200 = 104.17 → 104.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>What a 115 200-baud terminal reads from the board</h4>
+    </div>
+    <p class="fig-lede">The top trace is what the board sends, the start of its banner <code>=== </code> (<code>'='</code> = <code>0x3D</code>), over 360 µs. The terminal waits for a falling edge (dashed line), then samples every 8.68 µs in the middle of its own bit times (dots). The boxes show the byte each group of samples gives. At 28 777 baud only the first <code>'='</code> fits in the window. Switch to the correct clock, or to the correct <code>BRR</code>, and all four characters fit.</p>
+    <div data-viz="clk-steps"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">Board sends</span><span class="v" data-role="board">28 777</span><span class="sub">baud, clock / BRR</span></div>
+      <div class="stat"><span class="label">Terminal expects</span><span class="v pri">115 200</span><span class="sub">baud</span></div>
+      <div class="stat"><span class="label">Terminal reads</span><span class="v" data-role="read">78 80</span><span class="sub">bytes, in hex</span></div>
+    </div>
+    <p class="verdict" data-role="verdict"></p>
+    <div data-viz="wave"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>data sample</span>
+      <span><i class="sw-ok"></i>stop bit read as 1</span>
+      <span><i class="sw-bad"></i>stop bit read as 0: framing error</span>
+    </div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>A few percent is tolerated; a factor of four is not</h4>
+    </div>
+    <p class="fig-lede">The baud rates on one line, to scale. The green band around 115 200 stands for the few percent a UART tolerates (drawn at ±3 %). The same 417 at 12 MHz lands far outside it, which is why option D fails. The lower line enlarges the band: 417 at 48 MHz and 104 at 12 MHz both land close to 115 200.</p>
+    <div data-viz="rates"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>BRR</code> = clock / baud, so it is only right for the clock it was computed for. 417 at the reset 12 MHz gives about 28 800 baud, and the terminal shows garbage characters, the most recognisable UART fault.</p>
+    <p class="source">Source: L08 slide 1b, slide 14 · Notes: L08 › 2. Clock gate, pins and baud rate · L08 › 16. The silent-failure checklist, UART edition</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc32" data-part="mc" data-num="32" data-topic="What XOR misses" data-ref="topic8">
+  <div class="q-head">
+    <p class="eyebrow">Question 32 · L08, What XOR can and cannot detect</p>
+    <h3 class="q-title">The board receives four damaged copies of the frame <code>$LED,85*6C</code>. In ASCII, <code>4</code> = <code>0x34</code>, <code>5</code> = <code>0x35</code>, <code>6</code> = <code>0x36</code>, <code>8</code> = <code>0x38</code>, <code>9</code> = <code>0x39</code>. Which one passes the board's checksum check?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>$LED,84*6C</code></span>
+      <span class="why">No. <code>5</code> → <code>4</code> flips one bit. XOR catches every single flipped bit: the body gives <code>6D</code>.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>$LED,86*6C</code></span>
+      <span class="why">No. <code>5</code> → <code>6</code> flips bits 0 and 1 of the same byte (<code>35 ^ 36 = 03</code>). Two different columns change: <code>6F</code>.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span><code>$LED,94*6C</code></span>
+      <span class="why">Correct. <code>8</code> → <code>9</code> and <code>5</code> → <code>4</code> both flip bit 0. The two flips cancel and the body still gives <code>6C</code>.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>$LED,8*6C</code></span>
+      <span class="why">No. The lost <code>5</code> takes <code>0x35</code> out of the XOR: <code>6C ^ 35 = 59</code>.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> Each bit of the checksum is the parity of one bit column of the body: 1 when the column holds an odd number of 1s. A change shows only if it changes some column's parity.</p>
+    <p>In <code>$LED,94</code> two bytes are damaged, and each damage flips bit 0. Column b0 changes twice, so its parity is back where it started and the checksum still matches. The board accepts the frame and sets the bar to 94 instead of 85. Slide 10: XOR does not catch "two errors in the same bit position of different bytes"; a CRC would.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The checksum is one parity bit per column</h4>
+    </div>
+    <p class="fig-lede">The body's bytes in binary, bit 7 on the left. Damaged bits are outlined, and the count above a column is how many of its bits changed. The bottom rows compare the XOR of the received body with the <code>6C</code> the frame carries; a red outline marks a column where they differ. Step through the four copies.</p>
+    <div data-viz="col-steps"></div>
+    <p class="step-note" data-role="col-note" aria-live="polite"></p>
+    <div data-viz="cols"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>bit = 1</span>
+      <span><i class="sw-sec"></i>outline: damaged bit</span>
+      <span><i class="sw-ok"></i>XOR of the received body</span>
+      <span><i class="sw-ter"></i>checksum the frame carries</span>
+    </div>
+    <pre class="calc" data-role="col-calc"></pre>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>XOR catches any single flipped bit and any change inside one byte. It misses two errors in the same bit position of different bytes, because they cancel: <code>$LED,94*6C</code> passes as if it were <code>$LED,85*6C</code>.</p>
+    <p class="source">Source: L08 slide 10 · Notes: L08 › 14. What XOR catches and what it misses</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc33" data-part="mc" data-num="33" data-topic="Clearing a flag" data-ref="topic8">
+  <div class="q-head">
+    <p class="eyebrow">Question 33 · L08, How a flag clears</p>
+    <h3 class="q-title">Each line below is meant to clear the interrupt flag named after it, on the STM32C031. Which line does clear it?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span><code>uint8_t c = (uint8_t)USART2-&gt;RDR;</code> for USART2 <code>RXNE</code></span>
+      <span class="why">Correct. Reading <code>RDR</code> takes the byte and clears <code>RXNE</code>.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>USART2-&gt;ISR &amp;= ~USART_ISR_TXE;</code> for USART2 <code>TXE</code></span>
+      <span class="why">No. <code>ISR</code> is read only, so the write is ignored. <code>TXE</code> clears when a byte is written to <code>TDR</code>.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>TIM3-&gt;SR = TIM_SR_UIF;</code> for TIM3 <code>UIF</code></span>
+      <span class="why">No. <code>UIF</code> clears by writing 0. This writes 1 to <code>UIF</code>, which leaves it set, and 0 to every other flag, which clears them.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>EXTI-&gt;FPR1 &amp;= ~(1u &lt;&lt; 1);</code> for EXTI line 1</span>
+      <span class="why">No. <code>FPR1</code> clears by writing 1. This writes 0 to bit 1, which does nothing, and writes back the other pending 1s, which clears them.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> Slide 4 counts five ways a flag clears on this one chip: EXTI write 1, TIM <code>UIF</code> write 0, <code>CC1IF</code> read <code>CCR1</code>, <code>RXNE</code> / <code>TXE</code> read <code>RDR</code> / write <code>TDR</code>, and <code>ORE</code> write 1 to <code>ICR</code>. Only line A matches its flag.</p>
+    <p>B, C and D each use another flag's habit, and each leaves its own flag set. C and D also clear flags nobody handled. The right lines are <code>USART2-&gt;TDR = byte</code>, <code>TIM3-&gt;SR = ~TIM_SR_UIF</code> and <code>EXTI-&gt;FPR1 = 1u &lt;&lt; 1</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Each line, bit by bit: before, what it writes, after</h4>
+    </div>
+    <p class="fig-lede">The low byte of the register before the line runs, the value the line writes, and the register afterwards. The flag the line is meant to clear is outlined in the bottom row. The table lists the five conventions, with the row for the step's flag highlighted.</p>
+    <div data-viz="flag-steps"></div>
+    <p class="step-note" data-role="flag-note" aria-live="polite"></p>
+    <div data-viz="flag"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>flag = 1</span>
+      <span><i class="sw-ter"></i>1 written by the line</span>
+      <span><i class="sw-ok"></i>outline: target flag cleared</span>
+      <span><i class="sw-sec"></i>outline: target flag still set</span>
+      <span><i class="sw-bad"></i>outline: another flag cleared by accident</span>
+    </div>
+    <div data-viz="flag-table"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Five conventions on one chip: EXTI write 1, <code>UIF</code> write 0, <code>CC1IF</code> read <code>CCR1</code>, <code>RXNE</code> / <code>TXE</code> read <code>RDR</code> / write <code>TDR</code>, <code>ORE</code> write 1 to <code>ICR</code>. For every flag, look up how it clears.</p>
+    <p class="source">Source: L08 slide 4, slide 1 · Notes: L08 › 6. Five ways a flag clears</p>
+  </div>
+</article>

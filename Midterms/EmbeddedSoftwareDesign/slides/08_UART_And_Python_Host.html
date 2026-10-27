@@ -1,0 +1,1270 @@
+<title>UART and a Python Host: Talking to the Board, Properly</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1c1f; --muted: #5b6270; --rule: #dfe3ea;
+    --accent: #1f5fa8; --code-bg: #f5f7fa; --code-fg: #22262b;
+    --th-bg: #eef2f7; --mark: #0a7a4a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171c; --fg: #e6e9ee; --muted: #9aa3b2; --rule: #2b313b;
+      --accent: #78b4f0; --code-bg: #1b1f26; --code-fg: #dfe4ec;
+      --th-bg: #1f242c; --mark: #56d39a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171c; --fg: #e6e9ee; --muted: #9aa3b2; --rule: #2b313b;
+    --accent: #78b4f0; --code-bg: #1b1f26; --code-fg: #dfe4ec;
+    --th-bg: #1f242c; --mark: #56d39a;
+  }
+
+  body {
+    background: var(--bg); color: var(--fg); margin: 0;
+    font: 16px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .slide {
+    display: none; box-sizing: border-box; min-height: 100vh;
+    padding: 4.6rem 4rem 5rem; max-width: 1180px; margin: 0 auto;
+  }
+  .slide.active { display: block; }
+  h1 { font-size: 2.3rem; line-height: 1.15; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  h2 { font-size: 1.65rem; margin: 0 0 1rem; color: var(--accent); letter-spacing: -.01em; }
+  h3 { font-size: 1.12rem; margin: 1.5rem 0 .5rem; }
+  p  { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .9rem; padding-left: 1.4rem; }
+  li { margin: .28rem 0; }
+  a { color: var(--accent); }
+  code {
+    background: var(--code-bg); color: var(--code-fg); padding: .1em .35em;
+    border-radius: 4px; font-size: .89em;
+    font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule); border-radius: 8px;
+    padding: .85rem 1rem; overflow-x: auto; line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; font-size: .85rem; }
+  table { border-collapse: collapse; margin: .8rem 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--rule); padding: .38rem .7rem; text-align: left; }
+  th { background: var(--th-bg); }
+  strong { font-weight: 650; }
+
+  .topbar {
+    position: fixed; left: 0; right: 0; top: 0; height: 2.2rem; z-index: 5;
+    display: flex; align-items: center; gap: 1rem; padding: 0 1.2rem;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    font-size: .8rem; color: var(--muted);
+  }
+  .topbar .spacer { flex: 1; }
+  .topbar .deck-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* ---- diagrams -------------------------------------------------------
+     A ```svg block lands here.  Shapes inherit the page colour through
+     currentColor, so one diagram works in both themes.  The helper classes
+     save every deck from restating the same fills and strokes. */
+  .diagram { margin: 1.1rem 0; text-align: center; color: var(--fg); }
+  .diagram svg { max-width: 100%; height: auto; overflow: visible; }
+  .diagram text {
+    fill: currentColor; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px; dominant-baseline: middle;
+  }
+  .diagram .mono   { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  .diagram .lbl    { fill: var(--muted); font-size: 11px; }
+  .diagram .box    { fill: var(--code-bg); stroke: currentColor; stroke-width: 1.5; }
+  .diagram .reg    { fill: none; stroke: currentColor; stroke-width: 1.2; }
+  .diagram .hi     { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .diagram .hifill { fill: var(--accent); fill-opacity: .14; stroke: var(--accent); stroke-width: 1.5; }
+  .diagram .ok     { fill: none; stroke: var(--mark); stroke-width: 2; }
+  .diagram .wire   { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  .diagram text.hi { fill: var(--accent); stroke: none; font-weight: 600; }
+  .diagram .halo   { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+  .diagram .dash   { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 4 3; }
+  .diagram figcaption { color: var(--muted); font-size: .8rem; margin-top: .4rem; }
+
+  .topbar a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .topbar a:hover { text-decoration: underline; }
+
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 2.6rem;
+    display: flex; align-items: center; gap: 1rem; padding: 0 1.2rem;
+    background: var(--bg); border-top: 1px solid var(--rule);
+    font-size: .8rem; color: var(--muted);
+  }
+  .bar .spacer { flex: 1; }
+  .bar button {
+    font: inherit; color: var(--muted); background: none;
+    border: 1px solid var(--rule); border-radius: 5px; padding: .1rem .55rem;
+    cursor: pointer;
+  }
+  .bar button:hover { color: var(--fg); }
+
+  /* overview grid */
+  body.grid .slide {
+    display: block; min-height: 0; padding: 1rem; margin: 0;
+    border: 1px solid var(--rule); border-radius: 8px;
+    zoom: .42; cursor: pointer; overflow: hidden; height: 44rem;
+  }
+  body.grid #deck {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: .8rem; padding: 3rem 1rem 4rem;
+  }
+
+  @media print {
+    .bar, .topbar { display: none; }
+    .slide { display: block !important; page-break-after: always; min-height: 0; padding: 1.2cm; }
+    pre, table { page-break-inside: avoid; }
+  }
+</style>
+
+<div class="topbar">
+  <span><a href="https://www.st.com/resource/en/reference_manual/rm0490-stm32c0x1-advanced-armbased-32bit-mcus-stmicroelectronics.pdf" target="_blank" rel="noopener">STM32 Reference Manual (PDF)</a></span>
+  <span><a href="UM2953_Nucleo64_MB1717.pdf" target="_blank" rel="noopener">Board manual (PDF)</a></span>
+  <span><a href="https://docs.wokwi.com/parts/board-st-nucleo-c031c6" target="_blank" rel="noopener">Nucleo-C031C6 board</a></span>
+  <span><a href="board-pins.html" target="_blank" rel="noopener">Board pins</a></span>
+  <span><a href="https://colab.research.google.com/github/gnoejh/soc3050code/blob/main/projects2026_arm/_notebooks/SOC3050_ARM.ipynb" target="_blank" rel="noopener">Open in Colab</a></span>
+  <span class="spacer"></span>
+  <span class="deck-name">UART and a Python Host: Talking to the Board, Properly</span>
+</div>
+
+<div id="deck">
+<section class="slide">
+<h1>UART and a Python Host: Talking to the Board, Properly</h1>
+<h2>SOC3050 ARM Edition — Part 1, Instances</h2>
+<p><strong>Reference</strong>: <a href="https://www.st.com/resource/en/reference_manual/rm0490-stm32c0x1-advanced-armbased-32bit-mcus-stmicroelectronics.pdf" target="_blank" rel="noopener">STM32 Reference Manual</a> ·<br><strong>Board manual</strong>: <a href="https://www.st.com/resource/en/user_manual/um2953-stm32c0-nucleo64-board-mb1717-stmicroelectronics.pdf" target="_blank" rel="noopener">UM2953, STM32 Nucleo-64 boards (MB1717)</a></p>
+<p><strong>The serial port you have printed to since lesson 04 — now in both<br>directions, driven by interrupts, and spoken to by a program.</strong></p>
+<p>Until now <code>printf</code> stopped the CPU for every character, and nothing ever went<br><em>into</em> the board. This week the UART gets an interrupt each way, a protocol a<br>program can trust, and a partner on the PC: <code>host.py</code>, the first Python in the<br>course. From here on, the board is half of a system.</p>
+<p>Figures marked <strong>measured</strong> come from running this lesson&#x27;s firmware in<br>Renode (the harness of lesson 07, slide 20) and feeding its output to<br><code>host.py</code>. Not yet watched in Wokwi.</p>
+</section>
+<section class="slide">
+<h2>The Board: This Lesson&#x27;s Pins</h2>
+<p>Before any register, find the pins. Every highlighted dot is a header pin that<br>this lesson&#x27;s <code>diagram.json</code> wires something to — the same circuit you paste<br>into Wokwi — at its position on the Nucleo-C031C6, to scale. A label reads<br><em>MCU pin (header name, if different)</em> and what the pin does here.</p>
+<p>The two outer double rows are ST&#x27;s <strong>morpho</strong> headers, which reach every pin<br>of the chip; the two inner single rows are the <strong>Arduino</strong>-compatible header<br>(A0–A5 on the left, D0–D15 on the right). Some MCU pins appear on both — PA5 is<br>also <code>D13</code> — so the highlighted position is the one this lesson&#x27;s wire uses.<br>The real board&#x27;s headers are drawn in its manual, UM2953 (top bar).</p>
+<figure class="diagram"><!-- pinmap:board - generated by _build/pinmap.py; edit the lesson's diagram.json or pinmap.py, not this -->
+<svg viewBox="0 0 1020 609" role="img" aria-label="Nucleo-C031C6 headers to scale, with this lesson's pins highlighted">
+  <text x="510" y="18" text-anchor="middle" class="lbl">Nucleo-C031C6 headers, to scale, as Wokwi lays them out - this lesson's wires highlighted</text>
+  <rect class="box" x="300" y="46" width="420" height="502" rx="10"/>
+  <text x="510" y="80" text-anchor="middle" class="lbl">Nucleo-C031C6 (MB1717)</text>
+  <text x="510" y="98" text-anchor="middle" class="lbl">headers only - components not drawn</text>
+  <circle cx="316.8" cy="242.8" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="258.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="273.3" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="288.5" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="334.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="364.7" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="380.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="410.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="425.7" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="456.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="471.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="501.9" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="316.8" cy="517.1" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="242.8" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="258.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="273.3" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="288.5" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="319.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="334.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="349.5" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="364.7" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="380.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="395.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="410.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="440.9" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="456.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="471.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="486.6" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="501.9" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="332.0" cy="517.1" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="319.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="334.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="349.5" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="364.7" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="380.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="395.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="410.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="440.9" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="456.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="471.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="486.6" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="501.9" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="361.8" cy="517.1" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="288.5" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="303.8" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="319.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="334.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="349.5" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="364.7" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="380.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="395.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="410.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="425.7" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="440.9" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="456.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="471.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="702.0" cy="486.6" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="242.8" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="258.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="273.3" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="288.5" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="303.8" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="319.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="334.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="349.5" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="364.7" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="380.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="395.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="410.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="425.7" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="440.9" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="456.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="471.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="486.6" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="501.9" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="686.8" cy="517.1" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="242.8" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="258.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="273.3" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="288.5" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="303.8" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="319.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="334.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="349.5" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="364.7" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="380.0" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="410.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="425.7" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="440.9" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="456.2" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="471.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="486.6" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="655.8" cy="501.4" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <circle cx="656.1" cy="517.1" r="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+  <text x="324" y="566" text-anchor="middle" class="lbl">ST morpho</text>
+  <text x="362" y="582" text-anchor="middle" class="lbl">Arduino</text>
+  <text x="656" y="582" text-anchor="middle" class="lbl">Arduino</text>
+  <text x="694" y="566" text-anchor="middle" class="lbl">ST morpho</text>
+  <circle cx="316.8" cy="380.0" r="4" fill="currentColor" fill-opacity="0.45"/>
+  <circle cx="332.0" cy="288.5" r="4" fill="currentColor" fill-opacity="0.45"/>
+  <path class="dash" d="M332.0 440.9 L292.0 440.9"/>
+  <circle class="hifill" cx="332.0" cy="440.9" r="5"/>
+  <circle class="hi" cx="332.0" cy="440.9" r="5" fill="none"/>
+  <text x="286.0" y="444.9" text-anchor="end" class="mono" font-size="13">PA0  button A - counted, pull-up</text>
+  <path class="dash" d="M332.0 456.2 L292.0 456.2"/>
+  <circle class="hifill" cx="332.0" cy="456.2" r="5"/>
+  <circle class="hi" cx="332.0" cy="456.2" r="5" fill="none"/>
+  <text x="286.0" y="460.2" text-anchor="end" class="mono" font-size="13">PA1  button B - counted, pull-up</text>
+  <path class="dash" d="M332.0 486.6 L292.0 486.6"/>
+  <circle class="hifill" cx="332.0" cy="486.6" r="5"/>
+  <circle class="hi" cx="332.0" cy="486.6" r="5" fill="none"/>
+  <text x="286.0" y="490.6" text-anchor="end" class="mono" font-size="13">PB1  LED bar bit 1</text>
+  <path class="dash" d="M316.8 517.1 L292.0 517.1"/>
+  <circle class="hifill" cx="316.8" cy="517.1" r="5"/>
+  <circle class="hi" cx="316.8" cy="517.1" r="5" fill="none"/>
+  <text x="286.0" y="521.1" text-anchor="end" class="mono" font-size="13">PA2  USART2 TX - interrupt driven</text>
+  <path class="dash" d="M702.0 303.8 L728.0 303.8"/>
+  <circle class="hifill" cx="702.0" cy="303.8" r="5"/>
+  <circle class="hi" cx="702.0" cy="303.8" r="5" fill="none"/>
+  <text x="734.0" y="307.8" text-anchor="start" class="mono" font-size="13">PA3  USART2 RX - interrupt driven</text>
+  <path class="dash" d="M702.0 364.7 L728.0 364.7"/>
+  <circle class="hifill" cx="702.0" cy="364.7" r="5"/>
+  <circle class="hi" cx="702.0" cy="364.7" r="5" fill="none"/>
+  <text x="734.0" y="368.7" text-anchor="start" class="mono" font-size="13">PB2  LED bar bit 2</text>
+  <path class="dash" d="M686.8 425.7 L728.0 425.7"/>
+  <circle class="hifill" cx="686.8" cy="425.7" r="5"/>
+  <circle class="hi" cx="686.8" cy="425.7" r="5" fill="none"/>
+  <text x="734.0" y="429.7" text-anchor="start" class="mono" font-size="13">PB5  LED bar bit 5</text>
+  <path class="dash" d="M686.8 440.9 L728.0 440.9"/>
+  <circle class="hifill" cx="686.8" cy="440.9" r="5"/>
+  <circle class="hi" cx="686.8" cy="440.9" r="5" fill="none"/>
+  <text x="734.0" y="444.9" text-anchor="start" class="mono" font-size="13">PB4  LED bar bit 4</text>
+  <path class="dash" d="M686.8 471.4 L728.0 471.4"/>
+  <circle class="hifill" cx="686.8" cy="471.4" r="5"/>
+  <circle class="hi" cx="686.8" cy="471.4" r="5" fill="none"/>
+  <text x="734.0" y="475.4" text-anchor="start" class="mono" font-size="13">PB3  LED bar bit 3</text>
+  <path class="dash" d="M702.0 486.6 L728.0 486.6"/>
+  <circle class="hifill" cx="702.0" cy="486.6" r="5"/>
+  <circle class="hi" cx="702.0" cy="486.6" r="5" fill="none"/>
+  <text x="734.0" y="490.6" text-anchor="start" class="mono" font-size="13">PB0 (PB0.1)  LED bar bit 0</text>
+  <path class="dash" d="M686.8 501.9 L728.0 501.9"/>
+  <circle class="hifill" cx="686.8" cy="501.9" r="5"/>
+  <circle class="hi" cx="686.8" cy="501.9" r="5" fill="none"/>
+  <text x="734.0" y="505.9" text-anchor="start" class="mono" font-size="13">PB6  LED bar bit 6</text>
+  <path class="dash" d="M686.8 517.1 L728.0 517.1"/>
+  <circle class="hifill" cx="686.8" cy="517.1" r="5"/>
+  <circle class="hi" cx="686.8" cy="517.1" r="5" fill="none"/>
+  <text x="734.0" y="521.1" text-anchor="start" class="mono" font-size="13">PB7  LED bar bit 7</text>
+  <text x="510" y="604" text-anchor="middle" class="lbl">grey dots: power and ground wires (GND)</text>
+</svg></figure>
+</section>
+<section class="slide">
+<h2>The Chip: The Same Pins, as Port Bits</h2>
+<p>Inside the chip the header positions disappear: every pin is <strong>one bit<br>position in its port&#x27;s registers</strong>. Pin <em>n</em> of GPIOA is bit <em>n</em> of<br><code>GPIOA-&gt;IDR</code>, bits 2*n*+1 : 2*n* of <code>GPIOA-&gt;MODER</code>, and so on (lesson 05,<br>slide 4). Each cell below is one pin, drawn in register order, marked with how<br>this lesson configures it.</p>
+<figure class="diagram"><!-- pinmap:chip - generated by _build/pinmap.py; edit pinmap.py's LESSONS table, not this -->
+<svg viewBox="0 0 620 275" role="img" aria-label="Ports as register bits, with this lesson's pins marked">
+  <text x="310" y="18" text-anchor="middle" class="lbl">Inside the chip: each port is 16 pins, drawn in register order - pin 15 left, pin 0 right</text>
+  <text x="76" y="62" text-anchor="end" class="mono">GPIOA</text>
+  <rect class="reg" x="88" y="40" width="29" height="34" rx="3"/>
+  <text x="102.5" y="54" text-anchor="middle" class="mono lbl">15</text>
+  <rect class="reg" x="120" y="40" width="29" height="34" rx="3"/>
+  <text x="134.5" y="54" text-anchor="middle" class="mono lbl">14</text>
+  <text x="134.5" y="68" text-anchor="middle" class="lbl">SWD</text>
+  <rect class="reg" x="152" y="40" width="29" height="34" rx="3"/>
+  <text x="166.5" y="54" text-anchor="middle" class="mono lbl">13</text>
+  <text x="166.5" y="68" text-anchor="middle" class="lbl">SWD</text>
+  <rect class="reg" x="184" y="40" width="29" height="34" rx="3"/>
+  <text x="198.5" y="54" text-anchor="middle" class="mono lbl">12</text>
+  <rect class="reg" x="216" y="40" width="29" height="34" rx="3"/>
+  <text x="230.5" y="54" text-anchor="middle" class="mono lbl">11</text>
+  <rect class="reg" x="248" y="40" width="29" height="34" rx="3"/>
+  <text x="262.5" y="54" text-anchor="middle" class="mono lbl">10</text>
+  <rect class="reg" x="280" y="40" width="29" height="34" rx="3"/>
+  <text x="294.5" y="54" text-anchor="middle" class="mono lbl">9</text>
+  <rect class="reg" x="312" y="40" width="29" height="34" rx="3"/>
+  <text x="326.5" y="54" text-anchor="middle" class="mono lbl">8</text>
+  <rect class="reg" x="344" y="40" width="29" height="34" rx="3"/>
+  <text x="358.5" y="54" text-anchor="middle" class="mono lbl">7</text>
+  <rect class="reg" x="376" y="40" width="29" height="34" rx="3"/>
+  <text x="390.5" y="54" text-anchor="middle" class="mono lbl">6</text>
+  <rect class="reg" x="408" y="40" width="29" height="34" rx="3"/>
+  <text x="422.5" y="54" text-anchor="middle" class="mono lbl">5</text>
+  <rect class="reg" x="440" y="40" width="29" height="34" rx="3"/>
+  <text x="454.5" y="54" text-anchor="middle" class="mono lbl">4</text>
+  <rect class="hifill" x="472" y="40" width="29" height="34" rx="3"/>
+  <text x="486.5" y="54" text-anchor="middle" class="mono lbl">3</text>
+  <text x="486.5" y="68" text-anchor="middle" class="mono">af1</text>
+  <rect class="hifill" x="504" y="40" width="29" height="34" rx="3"/>
+  <text x="518.5" y="54" text-anchor="middle" class="mono lbl">2</text>
+  <text x="518.5" y="68" text-anchor="middle" class="mono">af1</text>
+  <rect class="hifill" x="536" y="40" width="29" height="34" rx="3"/>
+  <text x="550.5" y="54" text-anchor="middle" class="mono lbl">1</text>
+  <text x="550.5" y="68" text-anchor="middle" class="mono">in</text>
+  <rect class="hifill" x="568" y="40" width="29" height="34" rx="3"/>
+  <text x="582.5" y="54" text-anchor="middle" class="mono lbl">0</text>
+  <text x="582.5" y="68" text-anchor="middle" class="mono">in</text>
+  <text x="88" y="94" class="mono lbl" xml:space="preserve">PA3   af1  USART2 RX - interrupt driven</text>
+  <text x="88" y="109" class="mono lbl" xml:space="preserve">PA2   af1  USART2 TX - interrupt driven</text>
+  <text x="88" y="124" class="mono lbl" xml:space="preserve">PA1   in   button B - counted, pull-up</text>
+  <text x="88" y="139" class="mono lbl" xml:space="preserve">PA0   in   button A - counted, pull-up</text>
+  <text x="76" y="190" text-anchor="end" class="mono">GPIOB</text>
+  <rect class="reg" x="88" y="168" width="29" height="34" rx="3"/>
+  <text x="102.5" y="182" text-anchor="middle" class="mono lbl">15</text>
+  <rect class="reg" x="120" y="168" width="29" height="34" rx="3"/>
+  <text x="134.5" y="182" text-anchor="middle" class="mono lbl">14</text>
+  <rect class="reg" x="152" y="168" width="29" height="34" rx="3"/>
+  <text x="166.5" y="182" text-anchor="middle" class="mono lbl">13</text>
+  <rect class="reg" x="184" y="168" width="29" height="34" rx="3"/>
+  <text x="198.5" y="182" text-anchor="middle" class="mono lbl">12</text>
+  <rect class="reg" x="216" y="168" width="29" height="34" rx="3"/>
+  <text x="230.5" y="182" text-anchor="middle" class="mono lbl">11</text>
+  <rect class="reg" x="248" y="168" width="29" height="34" rx="3"/>
+  <text x="262.5" y="182" text-anchor="middle" class="mono lbl">10</text>
+  <rect class="reg" x="280" y="168" width="29" height="34" rx="3"/>
+  <text x="294.5" y="182" text-anchor="middle" class="mono lbl">9</text>
+  <rect class="reg" x="312" y="168" width="29" height="34" rx="3"/>
+  <text x="326.5" y="182" text-anchor="middle" class="mono lbl">8</text>
+  <rect class="hifill" x="344" y="168" width="29" height="34" rx="3"/>
+  <text x="358.5" y="182" text-anchor="middle" class="mono lbl">7</text>
+  <text x="358.5" y="196" text-anchor="middle" class="mono">out</text>
+  <rect class="hifill" x="376" y="168" width="29" height="34" rx="3"/>
+  <text x="390.5" y="182" text-anchor="middle" class="mono lbl">6</text>
+  <text x="390.5" y="196" text-anchor="middle" class="mono">out</text>
+  <rect class="hifill" x="408" y="168" width="29" height="34" rx="3"/>
+  <text x="422.5" y="182" text-anchor="middle" class="mono lbl">5</text>
+  <text x="422.5" y="196" text-anchor="middle" class="mono">out</text>
+  <rect class="hifill" x="440" y="168" width="29" height="34" rx="3"/>
+  <text x="454.5" y="182" text-anchor="middle" class="mono lbl">4</text>
+  <text x="454.5" y="196" text-anchor="middle" class="mono">out</text>
+  <rect class="hifill" x="472" y="168" width="29" height="34" rx="3"/>
+  <text x="486.5" y="182" text-anchor="middle" class="mono lbl">3</text>
+  <text x="486.5" y="196" text-anchor="middle" class="mono">out</text>
+  <rect class="hifill" x="504" y="168" width="29" height="34" rx="3"/>
+  <text x="518.5" y="182" text-anchor="middle" class="mono lbl">2</text>
+  <text x="518.5" y="196" text-anchor="middle" class="mono">out</text>
+  <rect class="hifill" x="536" y="168" width="29" height="34" rx="3"/>
+  <text x="550.5" y="182" text-anchor="middle" class="mono lbl">1</text>
+  <text x="550.5" y="196" text-anchor="middle" class="mono">out</text>
+  <rect class="hifill" x="568" y="168" width="29" height="34" rx="3"/>
+  <text x="582.5" y="182" text-anchor="middle" class="mono lbl">0</text>
+  <text x="582.5" y="196" text-anchor="middle" class="mono">out</text>
+  <text x="88" y="222" class="mono lbl" xml:space="preserve">PB7..PB0  out  LED bar, one bit per LED</text>
+  <text x="310" y="267" text-anchor="middle" class="lbl">in = MODER 00 · out = 01 · afN = 10 with AFR = N · an = 11 - lesson 05, slides 4-5</text>
+</svg></figure>
+</section>
+<section class="slide">
+<h2>Slide 1: The Model, Fourth Instance</h2>
+<table><thead><tr><th>Model slot</th><th>USART2</th></tr></thead><tbody><tr><td><strong>clock gate</strong></td><td><code>RCC-&gt;APBENR1</code> <code>USART2EN</code></td></tr><tr><td><strong>pins</strong></td><td>PA2 (TX), PA3 (RX), alternate function 1</td></tr><tr><td><strong>control</strong></td><td><code>CR1</code>: <code>UE</code>, <code>TE</code>, <code>RE</code>, and the two interrupt enables <code>RXNEIE</code>, <code>TXEIE</code></td></tr><tr><td><strong>status</strong></td><td><code>ISR</code>: <code>RXNE</code> (a byte arrived), <code>TXE</code> (room to send), <code>ORE</code> (overrun)</td></tr><tr><td><strong>data</strong></td><td><code>RDR</code> in, <code>TDR</code> out</td></tr><tr><td><strong>event</strong></td><td><code>USART2_IRQn</code> = 28, one vector for everything</td></tr><tr><td><strong>rate</strong></td><td><code>BRR</code> = 48 000 000 / 115 200 = 416.67 → <strong>417</strong></td></tr></tbody></table>
+<p>Every row is a slot you already know. That is the whole point of Part 0&#x27;s<br>model: the fourth peripheral is not a fourth new thing.</p>
+<p><strong>Every USART register, on one page.</strong> USART1 and USART2 share one register<br>set (<code>USART_TypeDef</code> in <code>stm32c031xx.h</code>); USART2 sits at <strong>0x40004400</strong>.</p>
+<table><thead><tr><th>Offset</th><th>Register</th><th>Its job</th><th>USART2 here</th><th>Slide</th></tr></thead><tbody><tr><td>0x00</td><td><strong><code>CR1</code></strong></td><td>control: enable, directions, interrupt enables, frame format</td><td><code>UE</code>, <code>RE</code>, <code>TE</code>, <code>RXNEIE</code>; <code>TXEIE</code> on and off</td><td>1b, 6</td></tr><tr><td>0x04</td><td><code>CR2</code></td><td>stop bits, address match, pin swap, inversion</td><td>reset value: 1 stop bit</td><td></td></tr><tr><td>0x08</td><td><code>CR3</code></td><td>DMA, flow control, error interrupt, FIFO thresholds</td><td>—</td><td></td></tr><tr><td>0x0C</td><td><strong><code>BRR</code></strong></td><td>baud rate: clocks per bit</td><td>417</td><td>1b</td></tr><tr><td>0x10</td><td><code>GTPR</code></td><td>smartcard guard time, IrDA prescaler</td><td>—</td><td></td></tr><tr><td>0x14</td><td><code>RTOR</code></td><td>receiver timeout</td><td>—</td><td></td></tr><tr><td>0x18</td><td><code>RQR</code></td><td>requests by software: flush, send break</td><td>—</td><td></td></tr><tr><td>0x1C</td><td><strong><code>ISR</code></strong></td><td>status flags, read only</td><td><code>RXNE</code>, <code>TXE</code>, <code>ORE</code></td><td>4, 6</td></tr><tr><td>0x20</td><td><strong><code>ICR</code></strong></td><td>write 1 to clear a flag of <code>ISR</code></td><td><code>ORECF</code></td><td>4</td></tr><tr><td>0x24</td><td><strong><code>RDR</code></strong></td><td>the received byte; reading clears <code>RXNE</code></td><td>read in the ISR</td><td>3, 4</td></tr><tr><td>0x28</td><td><strong><code>TDR</code></strong></td><td>the byte to send; writing clears <code>TXE</code></td><td>written in the ISR</td><td>6</td></tr><tr><td>0x2C</td><td><code>PRESC</code></td><td>kernel clock prescaler</td><td>reset value: ÷1</td><td></td></tr></tbody></table>
+<p><strong>Six registers out of twelve</strong> do all of this lesson&#x27;s work:</p>
+<figure class="diagram"><svg width="798" viewBox="0 0 798 597" role="img" aria-label="The six, drawn to scale.  Shaded = a field this lesson writes or reads.; (The header names RXNEIE, TXEIE, RXNE and TXE as *_RXFNEIE, *_TXFNFIE, *_RXFNE and *_TXFNF: their FIFO-mode meanings.); CR1, 32 bits; BRR, 32 bits; ISR, 32 bits; ICR, 32 bits; RDR, 32 bits; TDR, 32 bits">
+<text x="399" y="16" text-anchor="middle" class="lbl">The six, drawn to scale.  Shaded = a field this lesson writes or reads.</text>
+<text x="399" y="34" text-anchor="middle" class="lbl">(The header names RXNEIE, TXEIE, RXNE and TXE as *_RXFNEIE, *_TXFNFIE, *_RXFNE and *_TXFNF: their FIFO-mode meanings.)</text>
+<text x="16" y="77" class="mono">CR1</text>
+<text x="16" y="92" class="lbl">control</text>
+<text x="143.4" y="62" text-anchor="start" class="mono lbl">31</text>
+<text x="781.4" y="62" text-anchor="end" class="mono lbl">0</text>
+<rect class="reg" x="142.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="162.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="182.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="202.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="222.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="242.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="262.4" y="70" width="100.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M342.4 70 V74 M342.4 92 V96"/>
+<path class="reg" stroke-width="0.6" d="M322.4 70 V74 M322.4 92 V96"/>
+<path class="reg" stroke-width="0.6" d="M302.4 70 V74 M302.4 92 V96"/>
+<path class="reg" stroke-width="0.6" d="M282.4 70 V74 M282.4 92 V96"/>
+<text x="312.4" y="83" text-anchor="middle" class="mono">DEAT</text>
+<rect class="reg" x="362.4" y="70" width="100.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M442.4 70 V74 M442.4 92 V96"/>
+<path class="reg" stroke-width="0.6" d="M422.4 70 V74 M422.4 92 V96"/>
+<path class="reg" stroke-width="0.6" d="M402.4 70 V74 M402.4 92 V96"/>
+<path class="reg" stroke-width="0.6" d="M382.4 70 V74 M382.4 92 V96"/>
+<text x="412.4" y="83" text-anchor="middle" class="mono">DEDT</text>
+<rect class="reg" x="462.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="482.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="502.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="522.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="542.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="562.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="582.4" y="70" width="20.0" height="26"/>
+<rect class="reg" x="602.4" y="70" width="20.0" height="26"/>
+<rect class="hifill" x="622.4" y="70" width="20.0" height="26"/>
+<text x="632.4" y="62" text-anchor="middle" class="mono lbl">7</text>
+<rect class="reg" x="642.4" y="70" width="20.0" height="26"/>
+<rect class="hifill" x="662.4" y="70" width="20.0" height="26"/>
+<text x="672.4" y="62" text-anchor="middle" class="mono lbl">5</text>
+<rect class="reg" x="682.4" y="70" width="20.0" height="26"/>
+<rect class="hifill" x="702.4" y="70" width="20.0" height="26"/>
+<text x="712.4" y="62" text-anchor="middle" class="mono lbl">3</text>
+<rect class="hifill" x="722.4" y="70" width="20.0" height="26"/>
+<text x="732.4" y="62" text-anchor="middle" class="mono lbl">2</text>
+<rect class="reg" x="742.4" y="70" width="20.0" height="26"/>
+<rect class="hifill" x="762.4" y="70" width="20.0" height="26"/>
+<path class="dash" d="M152.4 96 L166.1 102"/>
+<path class="dash" d="M172.4 96 L172.4 118"/>
+<path class="dash" d="M192.4 96 L192.4 134"/>
+<path class="dash" d="M592.4 96 L592.4 118"/>
+<path class="dash" d="M652.4 96 L652.4 118"/>
+<path class="dash" d="M672.4 96 L672.4 134"/>
+<path class="dash" d="M712.4 96 L712.4 118"/>
+<path class="dash" d="M752.4 96 L752.4 118"/>
+<text x="166.1" y="109" text-anchor="middle" class="mono halo lbl">RXFFIE</text>
+<text x="172.4" y="125" text-anchor="middle" class="mono halo lbl">TXFEIE</text>
+<text x="192.4" y="141" text-anchor="middle" class="mono halo lbl">FIFOEN</text>
+<text x="212.4" y="109" text-anchor="middle" class="mono halo lbl">M1</text>
+<text x="472.4" y="109" text-anchor="middle" class="mono halo lbl">OVER8</text>
+<text x="532.4" y="109" text-anchor="middle" class="mono halo lbl">M0</text>
+<text x="572.4" y="109" text-anchor="middle" class="mono halo lbl">PCE</text>
+<text x="592.4" y="125" text-anchor="middle" class="mono halo lbl">PS</text>
+<text x="632.4" y="109" text-anchor="middle" class="mono halo">TXEIE</text>
+<text x="652.4" y="125" text-anchor="middle" class="mono halo lbl">TCIE</text>
+<text x="672.4" y="141" text-anchor="middle" class="mono halo">RXNEIE</text>
+<text x="692.4" y="109" text-anchor="middle" class="mono halo lbl">IDLEIE</text>
+<text x="712.4" y="125" text-anchor="middle" class="mono halo">TE</text>
+<text x="732.4" y="109" text-anchor="middle" class="mono halo">RE</text>
+<text x="752.4" y="125" text-anchor="middle" class="mono halo lbl">UESM</text>
+<text x="772.4" y="109" text-anchor="middle" class="mono halo">UE</text>
+<text x="16" y="195" class="mono">BRR</text>
+<text x="16" y="210" class="lbl">clocks per bit</text>
+<text x="143.4" y="180" text-anchor="start" class="mono lbl">31</text>
+<text x="781.4" y="180" text-anchor="end" class="mono lbl">0</text>
+<rect class="dash" x="142.4" y="188" width="320.0" height="26"/>
+<text x="302.4" y="201" text-anchor="middle" class="lbl">reserved</text>
+<rect class="hifill" x="462.4" y="188" width="320.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M762.4 188 V192 M762.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M742.4 188 V192 M742.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M722.4 188 V192 M722.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M702.4 188 V192 M702.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M682.4 188 V192 M682.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M662.4 188 V192 M662.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M642.4 188 V192 M642.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M622.4 188 V192 M622.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M602.4 188 V192 M602.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M582.4 188 V192 M582.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M562.4 188 V192 M562.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M542.4 188 V192 M542.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M522.4 188 V192 M522.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M502.4 188 V192 M502.4 210 V214"/>
+<path class="reg" stroke-width="0.6" d="M482.4 188 V192 M482.4 210 V214"/>
+<text x="463.4" y="180" text-anchor="start" class="mono lbl">15</text>
+<text x="622.4" y="201" text-anchor="middle" class="mono">BRR</text>
+<text x="16" y="264" class="mono">ISR</text>
+<text x="16" y="279" class="lbl">status, read</text>
+<text x="143.4" y="249" text-anchor="start" class="mono lbl">31</text>
+<text x="781.4" y="249" text-anchor="end" class="mono lbl">0</text>
+<rect class="dash" x="142.4" y="257" width="80.0" height="26"/>
+<text x="182.4" y="270" text-anchor="middle" class="lbl">reserved</text>
+<rect class="reg" x="222.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="242.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="262.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="282.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="302.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="322.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="342.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="362.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="382.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="402.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="422.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="442.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="462.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="482.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="502.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="522.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="542.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="562.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="582.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="602.4" y="257" width="20.0" height="26"/>
+<rect class="hifill" x="622.4" y="257" width="20.0" height="26"/>
+<text x="632.4" y="249" text-anchor="middle" class="mono lbl">7</text>
+<rect class="reg" x="642.4" y="257" width="20.0" height="26"/>
+<rect class="hifill" x="662.4" y="257" width="20.0" height="26"/>
+<text x="672.4" y="249" text-anchor="middle" class="mono lbl">5</text>
+<rect class="reg" x="682.4" y="257" width="20.0" height="26"/>
+<rect class="hifill" x="702.4" y="257" width="20.0" height="26"/>
+<text x="712.4" y="249" text-anchor="middle" class="mono lbl">3</text>
+<rect class="reg" x="722.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="742.4" y="257" width="20.0" height="26"/>
+<rect class="reg" x="762.4" y="257" width="20.0" height="26"/>
+<path class="dash" d="M652.4 283 L652.4 305"/>
+<path class="dash" d="M692.4 283 L692.4 305"/>
+<path class="dash" d="M732.4 283 L732.4 305"/>
+<text x="452.4" y="296" text-anchor="middle" class="mono halo lbl">BUSY</text>
+<text x="632.4" y="296" text-anchor="middle" class="mono halo">TXE</text>
+<text x="652.4" y="312" text-anchor="middle" class="mono halo lbl">TC</text>
+<text x="672.4" y="296" text-anchor="middle" class="mono halo">RXNE</text>
+<text x="692.4" y="312" text-anchor="middle" class="mono halo lbl">IDLE</text>
+<text x="712.4" y="296" text-anchor="middle" class="mono halo">ORE</text>
+<text x="732.4" y="312" text-anchor="middle" class="mono halo lbl">NE</text>
+<text x="752.4" y="296" text-anchor="middle" class="mono halo lbl">FE</text>
+<text x="772.4" y="296" text-anchor="middle" class="mono halo lbl">PE</text>
+<text x="16" y="366" class="mono">ICR</text>
+<text x="16" y="381" class="lbl">write 1 to clear</text>
+<text x="143.4" y="351" text-anchor="start" class="mono lbl">31</text>
+<text x="781.4" y="351" text-anchor="end" class="mono lbl">0</text>
+<rect class="dash" x="562.4" y="359" width="20.0" height="26"/>
+<rect class="dash" x="442.4" y="359" width="60.0" height="26"/>
+<text x="472.4" y="372" text-anchor="middle" class="lbl">reserved</text>
+<rect class="dash" x="382.4" y="359" width="40.0" height="26"/>
+<rect class="dash" x="142.4" y="359" width="220.0" height="26"/>
+<text x="252.4" y="372" text-anchor="middle" class="lbl">reserved</text>
+<rect class="reg" x="362.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="422.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="502.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="522.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="542.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="582.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="602.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="622.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="642.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="662.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="682.4" y="359" width="20.0" height="26"/>
+<rect class="hifill" x="702.4" y="359" width="20.0" height="26"/>
+<text x="712.4" y="351" text-anchor="middle" class="mono lbl">3</text>
+<rect class="reg" x="722.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="742.4" y="359" width="20.0" height="26"/>
+<rect class="reg" x="762.4" y="359" width="20.0" height="26"/>
+<path class="dash" d="M692.4 385 L692.4 407"/>
+<path class="dash" d="M732.4 385 L732.4 423"/>
+<path class="dash" d="M772.4 385 L772.4 407"/>
+<text x="652.4" y="398" text-anchor="middle" class="mono halo lbl">TCCF</text>
+<text x="692.4" y="414" text-anchor="middle" class="mono halo lbl">IDLECF</text>
+<text x="712.4" y="398" text-anchor="middle" class="mono halo">ORECF</text>
+<text x="732.4" y="430" text-anchor="middle" class="mono halo lbl">NECF</text>
+<text x="752.4" y="398" text-anchor="middle" class="mono halo lbl">FECF</text>
+<text x="772.4" y="414" text-anchor="middle" class="mono halo lbl">PECF</text>
+<text x="16" y="484" class="mono">RDR</text>
+<text x="16" y="499" class="lbl">byte in</text>
+<text x="143.4" y="469" text-anchor="start" class="mono lbl">31</text>
+<text x="781.4" y="469" text-anchor="end" class="mono lbl">0</text>
+<rect class="dash" x="142.4" y="477" width="460.0" height="26"/>
+<text x="372.4" y="490" text-anchor="middle" class="lbl">reserved</text>
+<rect class="hifill" x="602.4" y="477" width="180.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M762.4 477 V481 M762.4 499 V503"/>
+<path class="reg" stroke-width="0.6" d="M742.4 477 V481 M742.4 499 V503"/>
+<path class="reg" stroke-width="0.6" d="M722.4 477 V481 M722.4 499 V503"/>
+<path class="reg" stroke-width="0.6" d="M702.4 477 V481 M702.4 499 V503"/>
+<path class="reg" stroke-width="0.6" d="M682.4 477 V481 M682.4 499 V503"/>
+<path class="reg" stroke-width="0.6" d="M662.4 477 V481 M662.4 499 V503"/>
+<path class="reg" stroke-width="0.6" d="M642.4 477 V481 M642.4 499 V503"/>
+<path class="reg" stroke-width="0.6" d="M622.4 477 V481 M622.4 499 V503"/>
+<text x="603.4" y="469" text-anchor="start" class="mono lbl">8</text>
+<text x="692.4" y="490" text-anchor="middle" class="mono">RDR</text>
+<text x="16" y="553" class="mono">TDR</text>
+<text x="16" y="568" class="lbl">byte out</text>
+<text x="143.4" y="538" text-anchor="start" class="mono lbl">31</text>
+<text x="781.4" y="538" text-anchor="end" class="mono lbl">0</text>
+<rect class="dash" x="142.4" y="546" width="460.0" height="26"/>
+<text x="372.4" y="559" text-anchor="middle" class="lbl">reserved</text>
+<rect class="hifill" x="602.4" y="546" width="180.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M762.4 546 V550 M762.4 568 V572"/>
+<path class="reg" stroke-width="0.6" d="M742.4 546 V550 M742.4 568 V572"/>
+<path class="reg" stroke-width="0.6" d="M722.4 546 V550 M722.4 568 V572"/>
+<path class="reg" stroke-width="0.6" d="M702.4 546 V550 M702.4 568 V572"/>
+<path class="reg" stroke-width="0.6" d="M682.4 546 V550 M682.4 568 V572"/>
+<path class="reg" stroke-width="0.6" d="M662.4 546 V550 M662.4 568 V572"/>
+<path class="reg" stroke-width="0.6" d="M642.4 546 V550 M642.4 568 V572"/>
+<path class="reg" stroke-width="0.6" d="M622.4 546 V550 M622.4 568 V572"/>
+<text x="603.4" y="538" text-anchor="start" class="mono lbl">8</text>
+<text x="692.4" y="559" text-anchor="middle" class="mono">TDR</text>
+</svg></figure>
+<ul><li><strong>Set up once</strong> — <code>BRR</code>, <code>CR1</code>: how fast, which directions, which interrupts (slide 1b).</li><li><strong>Status</strong> — <code>ISR</code>, <code>ICR</code>: what happened, and how each flag is cleared (slide 4).</li><li><strong>Data</strong> — <code>RDR</code>, <code>TDR</code>: one byte each way. <code>RDR</code> and <code>TDR</code> are 9 bits wide for 9-bit frames; this lesson uses 8 (slides 3–6).</li><li><strong>The rest</strong> — <code>CR2</code>, <code>CR3</code>, <code>PRESC</code> keep their reset values (8 data bits, 1 stop bit, no parity, no flow control, no prescaler); <code>GTPR</code>, <code>RTOR</code>, <code>RQR</code> are never touched.</li></ul>
+</section>
+<section class="slide">
+<h2>Slide 1b: Clock Gate, Pins, Baud Rate</h2>
+<p>Three of slide 1&#x27;s slots, drawn to scale (this lesson&#x27;s bits shaded):</p>
+<figure class="diagram"><svg width="824" viewBox="0 0 824 268" role="img" aria-label="RCC-&gt;APBENR1, 32 bits; GPIOA-&gt;AFR[0], 32 bits; USART2-&gt;BRR, 32 bits">
+<text x="16" y="35" class="mono">RCC-&gt;APBENR1</text>
+<text x="16" y="50" class="lbl">clock gate</text>
+<text x="169.0" y="20" text-anchor="start" class="mono lbl">31</text>
+<text x="807.0" y="20" text-anchor="end" class="mono lbl">0</text>
+<rect class="dash" x="788.0" y="28" width="20.0" height="26"/>
+<rect class="dash" x="608.0" y="28" width="160.0" height="26"/>
+<text x="688.0" y="41" text-anchor="middle" class="lbl">reserved</text>
+<rect class="dash" x="468.0" y="28" width="100.0" height="26"/>
+<text x="518.0" y="41" text-anchor="middle" class="lbl">reserved</text>
+<rect class="dash" x="388.0" y="28" width="60.0" height="26"/>
+<text x="418.0" y="41" text-anchor="middle" class="lbl">reserved</text>
+<rect class="dash" x="268.0" y="28" width="100.0" height="26"/>
+<text x="318.0" y="41" text-anchor="middle" class="lbl">reserved</text>
+<rect class="dash" x="168.0" y="28" width="60.0" height="26"/>
+<text x="198.0" y="41" text-anchor="middle" class="lbl">reserved</text>
+<rect class="reg" x="768.0" y="28" width="20.0" height="26"/>
+<text x="778.0" y="20" text-anchor="middle" class="mono lbl">1</text>
+<rect class="reg" x="588.0" y="28" width="20.0" height="26"/>
+<text x="598.0" y="20" text-anchor="middle" class="mono lbl">10</text>
+<rect class="reg" x="568.0" y="28" width="20.0" height="26"/>
+<text x="578.0" y="20" text-anchor="middle" class="mono lbl">11</text>
+<rect class="hifill" x="448.0" y="28" width="20.0" height="26"/>
+<text x="458.0" y="20" text-anchor="middle" class="mono lbl">17</text>
+<rect class="reg" x="368.0" y="28" width="20.0" height="26"/>
+<text x="378.0" y="20" text-anchor="middle" class="mono lbl">21</text>
+<rect class="reg" x="248.0" y="28" width="20.0" height="26"/>
+<text x="258.0" y="20" text-anchor="middle" class="mono lbl">27</text>
+<rect class="reg" x="228.0" y="28" width="20.0" height="26"/>
+<text x="238.0" y="20" text-anchor="middle" class="mono lbl">28</text>
+<text x="458.0" y="67" text-anchor="middle" class="mono halo">USART2EN</text>
+<text x="16" y="121" class="mono">GPIOA-&gt;AFR[0]</text>
+<text x="16" y="136" class="lbl">AFRL: PA2, PA3 = AF1</text>
+<text x="16" y="151" class="mono lbl">= 0x00001100</text>
+<text x="169.0" y="106" text-anchor="start" class="mono lbl">31</text>
+<text x="807.0" y="106" text-anchor="end" class="mono lbl">0</text>
+<rect class="reg" x="168.0" y="114" width="80.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M228.0 114 V118 M228.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M208.0 114 V118 M208.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M188.0 114 V118 M188.0 136 V140"/>
+<text x="247.0" y="106" text-anchor="end" class="mono lbl">28</text>
+<rect class="reg" x="248.0" y="114" width="80.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M308.0 114 V118 M308.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M288.0 114 V118 M288.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M268.0 114 V118 M268.0 136 V140"/>
+<text x="327.0" y="106" text-anchor="end" class="mono lbl">24</text>
+<rect class="reg" x="328.0" y="114" width="80.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M388.0 114 V118 M388.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M368.0 114 V118 M368.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M348.0 114 V118 M348.0 136 V140"/>
+<text x="407.0" y="106" text-anchor="end" class="mono lbl">20</text>
+<rect class="reg" x="408.0" y="114" width="80.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M468.0 114 V118 M468.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M448.0 114 V118 M448.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M428.0 114 V118 M428.0 136 V140"/>
+<text x="487.0" y="106" text-anchor="end" class="mono lbl">16</text>
+<rect class="hifill" x="488.0" y="114" width="80.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M548.0 114 V118 M548.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M528.0 114 V118 M528.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M508.0 114 V118 M508.0 136 V140"/>
+<text x="567.0" y="106" text-anchor="end" class="mono lbl">12</text>
+<rect class="hifill" x="568.0" y="114" width="80.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M628.0 114 V118 M628.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M608.0 114 V118 M608.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M588.0 114 V118 M588.0 136 V140"/>
+<text x="647.0" y="106" text-anchor="end" class="mono lbl">8</text>
+<rect class="reg" x="648.0" y="114" width="80.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M708.0 114 V118 M708.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M688.0 114 V118 M688.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M668.0 114 V118 M668.0 136 V140"/>
+<text x="727.0" y="106" text-anchor="end" class="mono lbl">4</text>
+<rect class="reg" x="728.0" y="114" width="80.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M788.0 114 V118 M788.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M768.0 114 V118 M768.0 136 V140"/>
+<path class="reg" stroke-width="0.6" d="M748.0 114 V118 M748.0 136 V140"/>
+<text x="798.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="778.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="758.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="738.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="718.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="698.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="678.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="658.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="638.0" y="127" text-anchor="middle" class="mono">1</text>
+<text x="618.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="598.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="578.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="558.0" y="127" text-anchor="middle" class="mono">1</text>
+<text x="538.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="518.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="498.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="478.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="458.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="438.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="418.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="398.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="378.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="358.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="338.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="318.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="298.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="278.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="258.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="238.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="218.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="198.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="178.0" y="127" text-anchor="middle" class="mono lbl">0</text>
+<text x="208.0" y="153" text-anchor="middle" class="mono halo lbl">7</text>
+<text x="288.0" y="153" text-anchor="middle" class="mono halo lbl">6</text>
+<text x="368.0" y="153" text-anchor="middle" class="mono halo lbl">5</text>
+<text x="448.0" y="153" text-anchor="middle" class="mono halo lbl">4</text>
+<text x="528.0" y="153" text-anchor="middle" class="mono halo">3</text>
+<text x="608.0" y="153" text-anchor="middle" class="mono halo">2</text>
+<text x="688.0" y="153" text-anchor="middle" class="mono halo lbl">1</text>
+<text x="768.0" y="153" text-anchor="middle" class="mono halo lbl">0</text>
+<text x="16" y="207" class="mono">USART2-&gt;BRR</text>
+<text x="16" y="222" class="lbl">417</text>
+<text x="16" y="237" class="mono lbl">= 0x000001A1</text>
+<text x="169.0" y="192" text-anchor="start" class="mono lbl">31</text>
+<text x="807.0" y="192" text-anchor="end" class="mono lbl">0</text>
+<rect class="dash" x="168.0" y="200" width="320.0" height="26"/>
+<rect class="hifill" x="488.0" y="200" width="320.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M788.0 200 V204 M788.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M768.0 200 V204 M768.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M748.0 200 V204 M748.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M728.0 200 V204 M728.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M708.0 200 V204 M708.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M688.0 200 V204 M688.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M668.0 200 V204 M668.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M648.0 200 V204 M648.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M628.0 200 V204 M628.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M608.0 200 V204 M608.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M588.0 200 V204 M588.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M568.0 200 V204 M568.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M548.0 200 V204 M548.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M528.0 200 V204 M528.0 222 V226"/>
+<path class="reg" stroke-width="0.6" d="M508.0 200 V204 M508.0 222 V226"/>
+<text x="489.0" y="192" text-anchor="start" class="mono lbl">15</text>
+<text x="798.0" y="213" text-anchor="middle" class="mono">1</text>
+<text x="778.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="758.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="738.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="718.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="698.0" y="213" text-anchor="middle" class="mono">1</text>
+<text x="678.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="658.0" y="213" text-anchor="middle" class="mono">1</text>
+<text x="638.0" y="213" text-anchor="middle" class="mono">1</text>
+<text x="618.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="598.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="578.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="558.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="538.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="518.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="498.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="478.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="458.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="438.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="418.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="398.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="378.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="358.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="338.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="318.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="298.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="278.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="258.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="238.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="218.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="198.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="178.0" y="213" text-anchor="middle" class="mono lbl">0</text>
+<text x="648.0" y="239" text-anchor="middle" class="mono halo">BRR</text>
+</svg></figure>
+<p><code>BRR = 417</code> gives 115 108 baud, 0.08% slow — far inside the few percent a<br>UART tolerates, because the receiver resynchronises on every start bit. The<br>banner prints <code>BRR = 417</code> read back from the register (<strong>measured</strong>).</p>
+</section>
+<section class="slide">
+<h2>Slide 2: One Byte on the Wire</h2>
+<figure class="diagram"><svg viewBox="0 0 580 150" role="img" aria-label="UART frame: idle high, start bit low, eight data bits LSB first, stop bit high">
+  <path class="wire" d="M20 40 H70 V100 H120 V40 H170 V100 H220 V40 H270 V100 H320 V40 H370 V40 H420 V100 H470 V100 H520 V40 H570"/>
+  <text x="45" y="30" text-anchor="middle" class="lbl">idle</text>
+  <text x="95" y="125" text-anchor="middle" class="hi">start</text>
+  <text x="145" y="125" text-anchor="middle" class="mono lbl">b0</text>
+  <text x="195" y="125" text-anchor="middle" class="mono lbl">b1</text>
+  <text x="245" y="125" text-anchor="middle" class="mono lbl">b2</text>
+  <text x="295" y="125" text-anchor="middle" class="mono lbl">b3</text>
+  <text x="345" y="125" text-anchor="middle" class="mono lbl">b4</text>
+  <text x="395" y="125" text-anchor="middle" class="mono lbl">b5</text>
+  <text x="445" y="125" text-anchor="middle" class="mono lbl">b6</text>
+  <text x="495" y="125" text-anchor="middle" class="mono lbl">b7</text>
+  <text x="545" y="125" text-anchor="middle" class="hi">stop</text>
+  <text x="290" y="146" text-anchor="middle" class="lbl">10 bit-times per byte; least significant bit first</text>
+</svg></figure>
+<p>Ten bits per byte at 115 200 bits per second is <strong>11 520 bytes a second —<br>86.8 µs per byte</strong>. That one number drives both halves of this lesson:</p>
+<ul><li><strong>Sending:</strong> a 90-character line takes ~8 ms. A polled <code>printf</code> holds the CPU for all of it.</li><li><strong>Receiving:</strong> the UART holds <strong>one</strong> received byte. The next arrives 86.8 µs later and overwrites it unless software has read it — the <strong>overrun</strong>, <code>ORE</code>.</li></ul>
+</section>
+<section class="slide">
+<h2>Slide 3: Why Receive Must Be an Interrupt</h2>
+<p>Polling would work only if every path through the program came back to the<br>UART within 86.8 µs. In lesson 07&#x27;s system one <code>printf</code> holds a task for 8 ms,<br>and the hog never comes back at all.</p>
+<p>So receive becomes a producer and a consumer:</p>
+<figure class="diagram"><svg viewBox="0 0 580 150" role="img" aria-label="RX path: UART RXNE interrupt puts each byte in a kernel queue; the protocol task blocks on the queue">
+  <defs><marker id="u3" markerWidth="8" markerHeight="8" refX="7" refY="3.4" orient="auto" markerUnits="userSpaceOnUse">
+    <path d="M0.5 0.8 L7 3.4 L0.5 6 z" fill="currentColor"/></marker></defs>
+  <rect class="box" x="10" y="45" width="90" height="44" rx="5"/>
+  <text x="55" y="65" text-anchor="middle" class="mono">RDR</text>
+  <text x="55" y="81" text-anchor="middle" class="lbl">1 byte</text>
+  <path class="wire" d="M100 67 H130" marker-end="url(#u3)"/>
+  <rect class="hifill" x="134" y="40" width="150" height="54" rx="5"/>
+  <text x="209" y="60" text-anchor="middle" class="mono">USART2_IRQHandler</text>
+  <text x="209" y="78" text-anchor="middle" class="lbl">priority 1, every 86.8 us</text>
+  <path class="wire" d="M284 67 H314" marker-end="url(#u3)"/>
+  <rect class="reg" x="318" y="45" width="110" height="44" rx="5"/>
+  <text x="373" y="65" text-anchor="middle" class="mono">os_queue</text>
+  <text x="373" y="81" text-anchor="middle" class="lbl">64 bytes</text>
+  <path class="wire" d="M428 67 H458" marker-end="url(#u3)"/>
+  <rect class="box" x="462" y="45" width="110" height="44" rx="5"/>
+  <text x="517" y="65" text-anchor="middle" class="mono">task_proto</text>
+  <text x="517" y="81" text-anchor="middle" class="lbl">blocked: 0% CPU</text>
+  <text x="290" y="130" text-anchor="middle" class="lbl">The deadline moves from 87 us to "before 64 bytes pile up" — 5.5 ms.</text>
+</svg></figure>
+<p>The ISR meets the hard 86.8 µs deadline with a few dozen instructions. The<br>queue turns it into a soft one: the task only has to catch up before 64 bytes<br>accumulate. And while nothing arrives, the protocol task costs <strong>nothing</strong> —<br>it is blocked in <code>os_queue_get()</code> (lesson 07, slide 15).</p>
+<p><strong>Measured:</strong> 77 bytes typed back to back — <code>rx overruns 0, rx dropped 0</code>.</p>
+</section>
+<section class="slide">
+<h2>Slide 4: One Interrupt, Three Jobs</h2>
+<pre class="lang-c"><code>void USART2_IRQHandler(void)
+{
+    uint32_t isr = USART2-&gt;ISR;
+    if (isr &amp; USART_ISR_ORE) {                /* overrun             */
+        USART2-&gt;ICR = USART_ICR_ORECF;        /* clear: write 1, ICR */
+        stats.rx_overruns++;
+    }
+    if (isr &amp; USART_ISR_RXNE_RXFNE) {         /* a byte arrived      */
+        uint8_t c = (uint8_t)USART2-&gt;RDR;     /* reading clears RXNE */
+        if (!os_queue_put_from_isr(&amp;rx_queue, &amp;c)) stats.rx_dropped++;
+    }
+    if ((USART2-&gt;CR1 &amp; TXEIE) &amp;&amp; (isr &amp; USART_ISR_TXE_TXFNF)) { ... }
+}</code></pre>
+<p>The flags it tests, and the separate register that clears <code>ORE</code> — same bit, 3:</p>
+<figure class="diagram"><svg width="798" viewBox="0 0 798 182" role="img" aria-label="USART2-&gt;ISR, 32 bits; USART2-&gt;ICR, 32 bits">
+<text x="16" y="35" class="mono">USART2-&gt;ISR</text>
+<text x="16" y="50" class="lbl">status, read</text>
+<text x="143.4" y="20" text-anchor="start" class="mono lbl">31</text>
+<text x="781.4" y="20" text-anchor="end" class="mono lbl">0</text>
+<rect class="dash" x="142.4" y="28" width="80.0" height="26"/>
+<text x="182.4" y="41" text-anchor="middle" class="lbl">reserved</text>
+<rect class="reg" x="762.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="742.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="722.4" y="28" width="20.0" height="26"/>
+<rect class="hifill" x="702.4" y="28" width="20.0" height="26"/>
+<text x="712.4" y="20" text-anchor="middle" class="mono lbl">3</text>
+<rect class="reg" x="682.4" y="28" width="20.0" height="26"/>
+<rect class="hifill" x="662.4" y="28" width="20.0" height="26"/>
+<text x="672.4" y="20" text-anchor="middle" class="mono lbl">5</text>
+<rect class="reg" x="642.4" y="28" width="20.0" height="26"/>
+<rect class="hifill" x="622.4" y="28" width="20.0" height="26"/>
+<text x="632.4" y="20" text-anchor="middle" class="mono lbl">7</text>
+<rect class="reg" x="602.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="582.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="562.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="542.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="522.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="502.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="482.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="462.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="442.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="422.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="402.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="382.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="362.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="342.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="322.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="302.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="282.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="262.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="242.4" y="28" width="20.0" height="26"/>
+<rect class="reg" x="222.4" y="28" width="20.0" height="26"/>
+<text x="712.4" y="67" text-anchor="middle" class="mono halo">ORE</text>
+<text x="672.4" y="67" text-anchor="middle" class="mono halo">RXNE</text>
+<text x="632.4" y="67" text-anchor="middle" class="mono halo">TXE</text>
+<text x="16" y="121" class="mono">USART2-&gt;ICR</text>
+<text x="16" y="136" class="lbl">write 1 to clear</text>
+<text x="143.4" y="106" text-anchor="start" class="mono lbl">31</text>
+<text x="781.4" y="106" text-anchor="end" class="mono lbl">0</text>
+<rect class="dash" x="562.4" y="114" width="20.0" height="26"/>
+<rect class="dash" x="442.4" y="114" width="60.0" height="26"/>
+<text x="472.4" y="127" text-anchor="middle" class="lbl">reserved</text>
+<rect class="dash" x="382.4" y="114" width="40.0" height="26"/>
+<rect class="dash" x="142.4" y="114" width="220.0" height="26"/>
+<text x="252.4" y="127" text-anchor="middle" class="lbl">reserved</text>
+<rect class="reg" x="762.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="742.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="722.4" y="114" width="20.0" height="26"/>
+<rect class="hifill" x="702.4" y="114" width="20.0" height="26"/>
+<text x="712.4" y="106" text-anchor="middle" class="mono lbl">3</text>
+<rect class="reg" x="682.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="662.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="642.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="622.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="602.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="582.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="542.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="522.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="502.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="422.4" y="114" width="20.0" height="26"/>
+<rect class="reg" x="362.4" y="114" width="20.0" height="26"/>
+<text x="712.4" y="153" text-anchor="middle" class="mono halo">ORECF</text>
+</svg></figure>
+<p>Count the ways a flag is cleared in this course so far:</p>
+<table><thead><tr><th>Flag</th><th>How</th><th>Lesson</th></tr></thead><tbody><tr><td>EXTI <code>FPR1</code></td><td>write 1 to it</td><td>05</td></tr><tr><td>TIM <code>UIF</code></td><td>write <strong>0</strong> to it</td><td>06</td></tr><tr><td>TIM <code>CC1IF</code></td><td>read <code>CCR1</code></td><td>06</td></tr><tr><td>USART <code>RXNE</code> / <code>TXE</code></td><td>read <code>RDR</code> / write <code>TDR</code></td><td>08</td></tr><tr><td>USART <code>ORE</code></td><td>write 1 to a <strong>different</strong> register, <code>ICR</code></td><td>08</td></tr></tbody></table>
+<p>Five conventions on one chip. There is no rule to memorise — only the habit:<br><strong>for every flag, look up how it clears.</strong> The penalty for guessing is an<br>interrupt that never stops.</p>
+</section>
+<section class="slide">
+<h2>Slide 5: Transmit — a Lock-Free Ring</h2>
+<p>Sending goes the other way: tasks produce, the interrupt consumes.</p>
+<pre class="lang-c"><code>static uint8_t           tx_ring[256];
+static volatile uint16_t tx_head;   /* written ONLY by tasks (producer) */
+static volatile uint16_t tx_tail;   /* written ONLY by the ISR (consumer) */
+
+static void tx_put(uint8_t c)
+{
+    uint16_t next = (tx_head + 1) % 256;
+    while (next == tx_tail) { os_delay(1); }    /* full: let the ISR drain */
+    tx_ring[tx_head] = c;                        /* 1. the data            */
+    tx_head = next;                              /* 2. THEN publish it     */
+}</code></pre>
+<p>No mutex, no masked interrupts — because <strong>each index has exactly one<br>writer</strong>. That is lesson 03 slide 7&#x27;s safe case, applied twice: tasks read<br><code>tail</code> and write <code>head</code>; the ISR reads <code>head</code> and writes <code>tail</code>. Neither can<br>catch the other half-way.</p>
+<p>Two details carry the correctness:</p>
+<ul><li><strong>Data before index.</strong> If <code>head</code> moved first, the ISR could send a slot that has not been filled yet.</li><li><strong>One slot always empty.</strong> <code>head == tail</code> means <em>empty</em>; if the ring could fill completely, <em>full</em> would look identical.</li></ul>
+<p>The RX side uses a kernel queue <em>with</em> locking, and the TX side a ring<br><em>without</em> — on purpose, so you have seen both.</p>
+</section>
+<section class="slide">
+<h2>Slide 6: <code>TXEIE</code> — On Only While There Is Work</h2>
+<p><code>TXE</code> means &quot;the transmit register is empty&quot;. When the UART is idle it is<br>empty <strong>all the time</strong>. So a permanently enabled <code>TXEIE</code> would interrupt<br>continuously:</p>
+<pre class="lang-c"><code>if (tx_tail != tx_head) {
+    USART2-&gt;TDR = tx_ring[tx_tail];           /* send one, clears TXE   */
+    tx_tail = (tx_tail + 1) % 256;
+} else {
+    USART2-&gt;CR1 &amp;= ~USART_CR1_TXEIE_TXFNFIE;  /* nothing left: stop     */
+}</code></pre>
+<p>and <code>_write()</code> switches it back on after filling the ring. <code>CR1</code> in its two<br>states, as <code>uart_init()</code> and <code>_write()</code> leave it:</p>
+<figure class="diagram"><svg width="786" viewBox="0 0 786 214" role="img" aria-label="USART2-&gt;CR1, 32 bits; USART2-&gt;CR1, 32 bits">
+<text x="16" y="35" class="mono">USART2-&gt;CR1</text>
+<text x="16" y="50" class="lbl">idle</text>
+<text x="16" y="65" class="mono lbl">= 0x0000002D</text>
+<text x="131.0" y="20" text-anchor="start" class="mono lbl">31</text>
+<text x="769.0" y="20" text-anchor="end" class="mono lbl">0</text>
+<rect class="reg" x="130.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="150.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="170.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="190.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="210.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="230.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="250.0" y="28" width="100.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M330.0 28 V32 M330.0 50 V54"/>
+<path class="reg" stroke-width="0.6" d="M310.0 28 V32 M310.0 50 V54"/>
+<path class="reg" stroke-width="0.6" d="M290.0 28 V32 M290.0 50 V54"/>
+<path class="reg" stroke-width="0.6" d="M270.0 28 V32 M270.0 50 V54"/>
+<rect class="reg" x="350.0" y="28" width="100.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M430.0 28 V32 M430.0 50 V54"/>
+<path class="reg" stroke-width="0.6" d="M410.0 28 V32 M410.0 50 V54"/>
+<path class="reg" stroke-width="0.6" d="M390.0 28 V32 M390.0 50 V54"/>
+<path class="reg" stroke-width="0.6" d="M370.0 28 V32 M370.0 50 V54"/>
+<rect class="reg" x="450.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="470.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="490.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="510.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="530.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="550.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="570.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="590.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="610.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="630.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="650.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="670.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="690.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="710.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="730.0" y="28" width="20.0" height="26"/>
+<rect class="reg" x="750.0" y="28" width="20.0" height="26"/>
+<text x="760.0" y="41" text-anchor="middle" class="mono">1</text>
+<text x="740.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="720.0" y="41" text-anchor="middle" class="mono">1</text>
+<text x="700.0" y="41" text-anchor="middle" class="mono">1</text>
+<text x="680.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="660.0" y="41" text-anchor="middle" class="mono">1</text>
+<text x="640.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="620.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="600.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="580.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="560.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="540.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="520.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="500.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="480.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="460.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="440.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="420.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="400.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="380.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="360.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="340.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="320.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="300.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="280.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="260.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="240.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="220.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="200.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="180.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="160.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<text x="140.0" y="41" text-anchor="middle" class="mono lbl">0</text>
+<path class="dash" d="M660.0 54 L660.0 76"/>
+<text x="620.0" y="67" text-anchor="middle" class="mono halo lbl">TXEIE</text>
+<text x="660.0" y="83" text-anchor="middle" class="mono halo lbl">RXNEIE</text>
+<text x="700.0" y="67" text-anchor="middle" class="mono halo lbl">TE</text>
+<text x="720.0" y="67" text-anchor="middle" class="mono halo lbl">RE</text>
+<text x="760.0" y="67" text-anchor="middle" class="mono halo lbl">UE</text>
+<text x="16" y="137" class="mono">USART2-&gt;CR1</text>
+<text x="16" y="152" class="lbl">sending</text>
+<text x="16" y="167" class="mono lbl">= 0x000000AD</text>
+<text x="131.0" y="122" text-anchor="start" class="mono lbl">31</text>
+<text x="769.0" y="122" text-anchor="end" class="mono lbl">0</text>
+<rect class="reg" x="130.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="150.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="170.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="190.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="210.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="230.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="250.0" y="130" width="100.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M330.0 130 V134 M330.0 152 V156"/>
+<path class="reg" stroke-width="0.6" d="M310.0 130 V134 M310.0 152 V156"/>
+<path class="reg" stroke-width="0.6" d="M290.0 130 V134 M290.0 152 V156"/>
+<path class="reg" stroke-width="0.6" d="M270.0 130 V134 M270.0 152 V156"/>
+<rect class="reg" x="350.0" y="130" width="100.0" height="26"/>
+<path class="reg" stroke-width="0.6" d="M430.0 130 V134 M430.0 152 V156"/>
+<path class="reg" stroke-width="0.6" d="M410.0 130 V134 M410.0 152 V156"/>
+<path class="reg" stroke-width="0.6" d="M390.0 130 V134 M390.0 152 V156"/>
+<path class="reg" stroke-width="0.6" d="M370.0 130 V134 M370.0 152 V156"/>
+<rect class="reg" x="450.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="470.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="490.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="510.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="530.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="550.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="570.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="590.0" y="130" width="20.0" height="26"/>
+<rect class="hifill" x="610.0" y="130" width="20.0" height="26"/>
+<text x="620.0" y="122" text-anchor="middle" class="mono lbl">7</text>
+<rect class="reg" x="630.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="650.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="670.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="690.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="710.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="730.0" y="130" width="20.0" height="26"/>
+<rect class="reg" x="750.0" y="130" width="20.0" height="26"/>
+<text x="760.0" y="143" text-anchor="middle" class="mono">1</text>
+<text x="740.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="720.0" y="143" text-anchor="middle" class="mono">1</text>
+<text x="700.0" y="143" text-anchor="middle" class="mono">1</text>
+<text x="680.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="660.0" y="143" text-anchor="middle" class="mono">1</text>
+<text x="640.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="620.0" y="143" text-anchor="middle" class="mono">1</text>
+<text x="600.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="580.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="560.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="540.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="520.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="500.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="480.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="460.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="440.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="420.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="400.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="380.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="360.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="340.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="320.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="300.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="280.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="260.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="240.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="220.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="200.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="180.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="160.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<text x="140.0" y="143" text-anchor="middle" class="mono lbl">0</text>
+<path class="dash" d="M660.0 156 L660.0 178"/>
+<text x="620.0" y="169" text-anchor="middle" class="mono halo">TXEIE</text>
+<text x="660.0" y="185" text-anchor="middle" class="mono halo lbl">RXNEIE</text>
+<text x="700.0" y="169" text-anchor="middle" class="mono halo lbl">TE</text>
+<text x="720.0" y="169" text-anchor="middle" class="mono halo lbl">RE</text>
+<text x="760.0" y="169" text-anchor="middle" class="mono halo lbl">UE</text>
+</svg></figure>
+<p><strong>Measured</strong>, with the <code>else</code> line removed: <strong>nothing is printed at all — not<br>even the banner.</strong> The first <code>_write()</code> enabled <code>TXEIE</code>; the ISR sent the<br>first character, found the ring empty, and was called again, and again, at<br>priority 1, above everything that could ever put more data in. Lesson 05&#x27;s<br>endless interrupt, in a new costume.</p>
+<p><code>_write()</code> enables <code>TXEIE</code> with a read-modify-write of <code>CR1</code> — which the ISR<br>also writes. So that one line is a <strong>critical section</strong>, two instructions long.</p>
+</section>
+<section class="slide">
+<h2>Slide 7: Replacing <code>printf</code>&#x27;s Back End — Weak Again</h2>
+<p><code>printf</code> has called <code>_write()</code> since lesson 04, and <code>_lib/retarget.c</code>&#x27;s<br>version polls. This lesson&#x27;s <code>uart.c</code> defines its own. How do both link?</p>
+<pre class="lang-c"><code>/* _lib/retarget.c */
+__attribute__((weak)) int _write(int fd, const char *buf, int len) { ...polled... }
+
+/* 08_UART_And_Python_Host/uart.c */
+int _write(int fd, const char *buf, int len) { ...ring buffer... }</code></pre>
+<p><strong>The same mechanism as the vector table</strong> (lesson 05, slide 30): a strong<br>definition beats a weak one at link time. The lesson keeps <code>retarget.c</code>&#x27;s<br>syscall stubs and replaces exactly one function. <code>printf</code> does not know<br>anything changed — it now returns as soon as the text is in the ring, not<br>when the last bit has left the pin.</p>
+</section>
+<section class="slide">
+<h2>Slide 8: Two Tasks, One Serial Port</h2>
+<p>The telemetry task and the protocol task both print. Without coordination,<br>two lines can interleave character by character — and a line that is half<br>one frame and half another fails its checksum on the PC.</p>
+<p>Lesson 07&#x27;s mutex makes each line atomic:</p>
+<pre class="lang-c"><code>static void say(const char *fmt, ...)
+{
+    va_list ap;  va_start(ap, fmt);
+    os_mutex_lock(&amp;print_lock);
+    vprintf(fmt, ap);
+    os_mutex_unlock(&amp;print_lock);
+    va_end(ap);
+}</code></pre>
+<p>There is a second reason: newlib-nano&#x27;s <code>printf</code> keeps state in one shared<br>structure and is <strong>not re-entrant</strong>. Two tasks inside it at once can corrupt<br>each other&#x27;s output even when the timing looks harmless.</p>
+<p>The lesson makes no measured claim here: in Renode the UART sends<br>instantly, so the window never opened. Lab Part 5 asks you to reason out when<br>it would.</p>
+</section>
+<section class="slide">
+<h2>Slide 9: Lines — for People and for Programs</h2>
+<p>The protocol task collects bytes until <code>\r</code> or <code>\n</code>, then looks at the first<br>character:</p>
+<table><thead><tr><th>Line starts with</th><th>It is</th><th>Example</th><th>Reply</th></tr></thead><tbody><tr><td>anything else</td><td>a <strong>shell command</strong> from a person</td><td><code>led 170</code></td><td><code>bar = 0xAA</code></td></tr><tr><td><code>$</code></td><td>a <strong>frame</strong> from a program</td><td><code>$LED,85*6C</code></td><td><code>$ACK,LED,85*09</code></td></tr></tbody></table>
+<p>One UART, two audiences, and the difference is deliberate. A person wants<br>words and forgiveness. A program wants a format it can parse and <strong>proof the<br>line arrived intact</strong> — because a serial line picks up noise, drops bytes when<br>a buffer overflows, and gets cut in half when a cable is pulled.</p>
+<p>A line longer than 63 characters is thrown away whole, rather than acted on in<br>part.</p>
+</section>
+<section class="slide">
+<h2>Slide 9b: Keys — a Third Kind of Frame</h2>
+<p>On a raw terminal (the VS Code extension, miniterm) each key is sent when you<br>press it. A letter is one byte. <strong>An arrow key is three:</strong></p>
+<table><thead><tr><th>Key</th><th>Bytes</th><th>Board does</th></tr></thead><tbody><tr><td>Up / Down</td><td><code>ESC [ A</code> / <code>ESC [ B</code></td><td>halve / double the telemetry period</td></tr><tr><td>Right / Left</td><td><code>ESC [ C</code> / <code>ESC [ D</code></td><td>move the lit LED along the bar</td></tr><tr><td>Esc</td><td><code>ESC</code> alone</td><td>cancel the half-typed line</td></tr><tr><td>F1, Home, Delete, …</td><td><code>ESC O P</code>, <code>ESC [ H</code>, <code>ESC [ 3 ~</code></td><td>spell the bytes out</td></tr></tbody></table>
+<p><code>ESC</code> is <code>0x1B</code>. <code>keys.c</code> is a state machine with the same structure as a<br><code>$...*CS</code> frame: a start byte, a body, and a byte that ends it.</p>
+<pre><code>          not ESC
+ idle ───────────────────────────────────────────────►  KEY_CHAR: a letter
+   │ ESC
+   ▼
+ ESC seen ── &#x27;[&#x27; ──► CSI: 0x20-0x3F, wait ── 0x40-0x7E ──►  key done
+   │      └─ &#x27;O&#x27; ──► SS3: the next byte ───────────────────►  key done
+   └── 50 ms of silence ───────────────────────────────────►  KEY_ESC</code></pre>
+<table><thead><tr><th>Term</th><th>Meaning</th></tr></thead><tbody><tr><td><strong>escape sequence</strong></td><td>several bytes that mean one key; standardised as ECMA-48, the VT100&#x27;s descendants</td></tr><tr><td><strong>final byte</strong></td><td><code>0x40</code>–<code>0x7E</code>: ends a CSI sequence. It plays the part of the <code>*</code> in a frame</td></tr><tr><td><strong>lone Esc</strong></td><td>the same <code>0x1B</code> that starts every sequence. Only <strong>time</strong> tells them apart: 50 ms of silence</td></tr><tr><td><strong>echo</strong></td><td>the terminal does not draw what you type. The board sends each byte back, and <code>\b \b</code> for Backspace</td></tr></tbody></table>
+<p>Two rules come from sharing one line:</p>
+<ul><li><strong>A <code>$</code> line is never echoed.</strong> If <code>$RATE,100*..</code> came back, <code>host.py</code> would read it as a frame from the board.</li><li><strong>Telemetry waits while a line is half typed.</strong> Otherwise the board would send <code>sta$TEL,...</code>, which <code>host.py</code> skips because the line does not start with <code>$</code>.</li></ul>
+<p><strong>Seen working in Wokwi on 2026-10-19:</strong> VS Code&#x27;s Wokwi serial terminal sends<br>each key as it is pressed, and the arrows were decoded on the board. The<br>browser&#x27;s input box cannot do this, because it sends whole lines (Lab Part 7).</p>
+</section>
+<section class="slide">
+<h2>Slide 10: The Frame — Borrowed From GPS</h2>
+<pre><code>$LED,170*57
+ \_____/ \/
+  body   checksum: XOR of every byte of the body, two hex digits</code></pre>
+<p>This is <strong>NMEA 0183</strong>, the sentence format GPS receivers have printed since<br>the 1980s. Worked by hand:</p>
+<pre><code>L  E  D  ,  1  7  0
+4C 45 44 2C 31 37 30    XOR all seven  -&gt;  0x57</code></pre>
+<p><code>host.py --selftest</code> checks its own arithmetic against a real GPS sentence<br>(<code>$GPGGA,...*47</code>) — so the checksum is <em>the</em> NMEA checksum, not merely one<br>that agrees with itself.</p>
+<p>What XOR catches, and what it does not:</p>
+<ul><li><strong>Any single flipped bit</strong> — <code>$LED,171*57</code> (<code>0</code> → <code>1</code>, one bit) is rejected: the checksum comes out <code>56</code>.</li><li><strong>Not</strong> two errors in the same bit position of different bytes — they cancel. A CRC catches those; MAVLink, the drone protocol of lessons 13–14, uses one.</li></ul>
+</section>
+<section class="slide">
+<h2>Slide 11: Measured — a Session</h2>
+<p>Typed into the running firmware (Renode), one line at a time, and what came<br>back:</p>
+<pre><code>help            -&gt; commands: led &lt;0-255&gt;   rate &lt;20-5000 ms&gt;   quiet   stats   help
+led 170         -&gt; bar = 0xAA
+$LED,85*6C      -&gt; $ACK,LED,85*09
+$LED,85*00      -&gt; $NAK,CHECKSUM*65          (damaged on purpose)
+$LED,85         -&gt; $NAK,NOSTAR*7D            (no checksum at all)
+bogus           -&gt; unknown command &#x27;bogus&#x27; - try help
+$RATE,250*19    -&gt; $ACK,RATE,250*7C
+$STAT*12        -&gt; $STAT,71,3,2,0,0,0*25     (71 bytes in, 3 frames ok, 2 bad)</code></pre>
+<p>and, interleaved with all of it, telemetry — first once a second, then every<br>250 ms after the <code>RATE</code> frame:</p>
+<pre><code>$TEL,1000,0,500,0,0*75
+$TEL,2000,1,1000,0,0*43
+$TEL,2250,2,875,0,0*7C</code></pre>
+</section>
+<section class="slide">
+<h2>Slide 12: <code>host.py</code> — the Other End</h2>
+<p>A 230-line Python program with no dependencies beyond pyserial:</p>
+<table><thead><tr><th>Command</th><th>Does</th></tr></thead><tbody><tr><td><code>host.py --selftest</code></td><td>checks the checksum against the GPS sentence</td></tr><tr><td><code>host.py --frame &quot;LED,170&quot;</code></td><td>prints <code>$LED,170*57</code> — to paste into Wokwi</td></tr><tr><td><code>host.py --file capture.txt</code></td><td>checks and charts a saved log</td></tr><tr><td><code>host.py --port rfc2217://localhost:4000</code></td><td>live, through the Wokwi VS Code extension</td></tr><tr><td><code>host.py --port COM5 --send &quot;RATE,100&quot;</code></td><td>live, on a real Nucleo</td></tr><tr><td><code>host.py --demo</code></td><td>no board at all: fake telemetry, with a damaged and a lost line</td></tr></tbody></table>
+<p><strong>Why three routes?</strong> Wokwi in a browser keeps its serial port inside the<br>browser; nothing on your PC can open it. So the browser route is <strong>copy the<br>serial monitor&#x27;s text into a file</strong>. The VS Code extension can forward the port<br>as a TCP server (<code>rfc2217ServerPort = 4000</code> in this lesson&#x27;s <code>wokwi.toml</code>), and<br>pyserial speaks that protocol natively — the live route. A real board is just<br><code>COM5</code>.</p>
+<p>The protocol being printable is what makes the copy-and-paste route possible<br>at all. A binary protocol could not survive a text box.</p>
+</section>
+<section class="slide">
+<h2>Slide 13: Measured — <code>host.py</code> Reads the Board</h2>
+<p>The session on slide 11, saved to a file and given to <code>host.py --file</code>:</p>
+<pre><code>t=   1.00s seq=0     tri= 500  A=0 B=0  |####################
+FRAME ACK,LED,85
+FRAME NAK,CHECKSUM
+FRAME NAK,NOSTAR
+FRAME ACK,RATE,250
+t=   2.00s seq=1     tri=1000  A=0 B=0  |########################################
+t=   2.25s seq=2     tri= 875  A=0 B=0  |###################################
+FRAME STAT,71,3,2,0,0,0
+t=   2.50s seq=3     tri= 750  A=0 B=0  |##############################
+
+frames good 9, bad 0, lost (sequence gaps) 0, other lines 11</code></pre>
+<p><strong>Every frame the C code built passed the Python check</strong>, and every frame the<br>Python code built (<code>LED</code>, <code>RATE</code>, <code>STAT</code>) was accepted by the C check. Two<br>implementations, two languages, one arithmetic — each testing the other.</p>
+<p><code>--demo</code> shows the failures: a line altered in transit is counted <strong>bad</strong>, and<br>the sequence number it carried never arrives intact, so it is <strong>also</strong> a gap.</p>
+</section>
+<section class="slide">
+<h2>Slide 14: The Silent-Failure Checklist, UART Edition</h2>
+<table><thead><tr><th>Forgot</th><th>Symptom</th></tr></thead><tbody><tr><td><code>USART2EN</code> in <code>APBENR1</code></td><td>nothing sent, nothing received</td></tr><tr><td>AF1 on PA2/PA3</td><td>UART works internally; the pins carry nothing</td></tr><tr><td><code>BRR</code> for the wrong clock</td><td>garbage characters — the most recognisable UART fault</td></tr><tr><td>clearing <code>ORE</code></td><td>reception stops after the first overrun</td></tr><tr><td>turning <code>TXEIE</code> off when empty</td><td>interrupt storm; <strong>measured: not even the banner</strong></td></tr><tr><td>blocking in the ISR</td><td>impossible to do right: the ISR version of <code>put</code> never blocks</td></tr><tr><td>a lock around printing</td><td>lines interleave; checksums fail on the PC</td></tr></tbody></table>
+<p>The last two are design, not configuration: which context may wait, and which<br>data is shared. Lessons 03 and 07 are why you can reason about them.</p>
+</section>
+<section class="slide">
+<h2>Slide 15: What Carries Forward</h2>
+<ul><li><strong>Every later peripheral that moves a stream of data looks like this:</strong> an interrupt that feeds or drains a buffer, and a task that blocks. Lesson 10 replaces the per-byte interrupt with <strong>DMA</strong> — one interrupt per block.</li><li><strong>The board now has a partner.</strong> Lesson 09 sends real sensor readings in <code>$TEL</code> frames and <code>host.py</code> plots them. Part 3 swaps this protocol for <strong>MAVLink</strong>, and <code>host.py</code> for mission software that flies a drone.</li><li><strong>Checked data, not trusted data.</strong> A frame that fails its checksum is thrown away and counted — never half-used. That rule scales from a text line to a flight controller.</li></ul>
+</section>
+</div>
+
+<div class="bar">
+  <span><a href="index.html">&larr; all decks</a></span>
+  <span class="spacer"></span>
+  <button onclick="go(-1)">&larr;</button>
+  <span id="pos"></span>
+  <button onclick="go(1)">&rarr;</button>
+  <span class="spacer"></span>
+  <button onclick="toggleGrid()">overview (o)</button>
+  <button onclick="window.print()">print (p)</button>
+</div>
+
+<script>
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var at = 0;
+
+  function show(n) {
+    at = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function (s, i) { s.classList.toggle('active', i === at); });
+    document.getElementById('pos').textContent = (at + 1) + ' / ' + slides.length;
+    try { localStorage.setItem('slide:08_UART_And_Python_Host', at); } catch (e) {}
+    if (!document.body.classList.contains('grid')) window.scrollTo(0, 0);
+  }
+  function go(d) { show(at + d); }
+
+  function toggleGrid() {
+    document.body.classList.toggle('grid');
+    if (!document.body.classList.contains('grid')) show(at);
+  }
+
+  slides.forEach(function (s, i) {
+    s.addEventListener('click', function () {
+      if (document.body.classList.contains('grid')) { toggleGrid(); show(i); }
+    });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { go(1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { go(-1); e.preventDefault(); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key === 'o') toggleGrid();
+    else if (e.key === 'p') window.print();
+  });
+
+  var saved = 0;
+  try { saved = parseInt(localStorage.getItem('slide:08_UART_And_Python_Host') || '0', 10) || 0; } catch (e) {}
+  show(saved);
+</script>

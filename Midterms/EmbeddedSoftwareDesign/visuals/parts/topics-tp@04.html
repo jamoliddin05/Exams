@@ -1,0 +1,537 @@
+<article class="q" id="topic4" data-part="tp" data-num="4" data-topic="Startup and linker script">
+  <div class="q-head">
+    <p class="eyebrow">Lesson 04 · Week 3 · 3 of 33 exam questions</p>
+    <h3 class="q-title">Startup and the Linker Script: Building the Ground You Stand On</h3>
+    <p class="fig-lede">The code that runs before main(): the vector table, Reset_Handler, the .data copy, the .bss zero and the 12 → 48 MHz clock, plus the link.ld that decides where every byte lives. It is the first lesson with code you build and run. It builds on lesson 00's memory map, lesson 01's Thumb bit and addressing modes, and lesson 02's rule that something must build the C environment before main().</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. The board and its pins (pin map slides)</h4>
+    <p>The deck opens with the pins of the Nucleo-C031C6: STM32C031C6, Cortex-M0+, 48 MHz, 32 KB flash, 12 KB RAM. The outer double rows are ST's <b>morpho</b> headers, which reach every pin of the chip. The inner single rows are the <b>Arduino</b> header (A0–A5, D0–D15). Inside the chip a pin is one bit position in its port's registers.</p>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th class="l">Pin</th><th class="l">MODER</th><th class="l">Wired to</th><th class="l">Used by</th></tr></thead>
+      <tbody>
+        <tr><td class="l">PB0–PB7</td><td class="l">01 out</td><td class="l">eight LEDs from diagram.json, anode to pin (1 = lit)</td><td class="l">ledbar_init(), one byte to GPIOB-&gt;ODR per frame</td></tr>
+        <tr><td class="l">PA5</td><td class="l">01 out</td><td class="l">the on-board user LED, LD4 (also header D13)</td><td class="l">led_init(), the heartbeat, toggled once per frame</td></tr>
+        <tr><td class="l">PA2</td><td class="l">10, AF1</td><td class="l">USART2 TX</td><td class="l">printf to the serial monitor</td></tr>
+        <tr><td class="l">PA3</td><td class="l">10, AF1</td><td class="l">USART2 RX</td><td class="l">not used this week</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li>Pin <i>n</i> is bit <i>n</i> of IDR and ODR, and bits 2<i>n</i>+1:2<i>n</i> of MODER. MODER codes: 00 in, 01 out, 10 alternate function (with AFR = N), 11 analog.</li>
+      <li>PA13 and PA14 are SWD, the debug pins. PB0–PB7 are the only pins this lesson chose. The board fixed the other three.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. main() is not where your program starts (slides 1–2)</h4>
+    <p>On a laptop the operating system quietly does four jobs on the way in, and "you never see any of it". On this chip nobody does them, "unless you write it". The lesson asks: "what are those four jobs, who does them here, and what exactly breaks when one of them is missing?"</p>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th class="l">On a laptop the OS…</th><th class="l">On this chip</th><th class="l">Where</th></tr></thead>
+      <tbody>
+        <tr><td class="l">finds RAM for you</td><td class="l">link.ld's MEMORY block declares it</td><td class="l">slide 13</td></tr>
+        <tr><td class="l">gives you a stack</td><td class="l">the core loads SP from vector table word 0</td><td class="l">slides 5–7</td></tr>
+        <tr><td class="l">zeroes your globals</td><td class="l">Reset_Handler copies .data and zeroes .bss</td><td class="l">slide 11</td></tr>
+        <tr><td class="l">opens stdout, calls main()</td><td class="l">retarget.c's _write(); Reset_Handler calls main()</td><td class="l">slides 11, 17</td></tr>
+      </tbody>
+    </table></div>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th class="l">File</th><th class="l">Answers</th></tr></thead>
+      <tbody>
+        <tr><td class="l">link.ld</td><td class="l"><b>Where</b> does everything go? Which addresses are FLASH, which are RAM, and which piece of the program lands in each. It decides the <i>layout</i>.</td></tr>
+        <tr><td class="l">startup.c</td><td class="l"><b>What runs first?</b> The vector table, and the code that makes RAM match what C promises before main() is called. It makes the <i>hardware match that layout</i>.</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li>"Neither one is optional, and neither one is magic." startup.c's four jobs: the vector table, copy .data, zero .bss, and the clock from 12 to 48 MHz.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. The memory map with this chip's numbers (slide 3)</h4>
+    <ul>
+      <li>"You have 32 KB and 12 KB inside a 4 GB space." Almost all of it is nothing. "Addressability is not memory": reading an unmapped address is a <b>fault, not a zero</b>.</li>
+      <li>"link.ld's MEMORY block is two rows of this picture", and nothing else: FLASH at 0x08000000 (32 KB, to 0x08007FFF) and SRAM at 0x20000000 (12 KB, to 0x20002FFF).</li>
+      <li><b>GPIO is at 0x50000000, not 0x40000000.</b> On the STM32C0 the I/O ports sit on their own port (IOPORT), outside the peripheral region. Code copied from an F1 or F4 tutorial has the wrong address, "and the chip will not tell you".</li>
+      <li>FLASH is aliased at 0x00000000 on reset. The core region (SysTick 0xE000E010, NVIC 0xE000E100, SCB 0xE000ED00) is ARM's, identical on every Cortex-M. Every number was checked against ST's CMSIS header.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>The STM32C031C6 memory map, and the two rows link.ld declares</h4></div>
+      <p class="fig-lede">High addresses at the top, not to scale. The two blue rows are the MEMORY block of link.ld, transcribed. GPIO (plum) sits at 0x50000000, apart from the other peripherals at 0x40000000.</p>
+      <div data-viz="map"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. The I/O map: GPIOA-&gt;MODER is an address (slide 4)</h4>
+    <p>"A register is an address with a side effect." There is no I/O instruction on this machine and no I/O address space: <b>peripherals are reached by ordinary loads and stores</b>.</p>
+    <ul>
+      <li><b>CMSIS</b>, the Common Microcontroller Software Interface Standard, is ARM's vendor-neutral header set for Cortex-M. The course uses ARM's core header core_cm0plus.h (NVIC, SysTick, SCB) and ST's device header stm32c031xx.h (every peripheral of this part).</li>
+      <li>"<b>CMSIS is headers, not a library.</b>" Nothing is linked and no function is called. It is #defines and struct declarations that put names on the addresses in the reference manual. It is not ST's HAL, which is a real library (lesson 11 compares the two).</li>
+      <li>GPIOA is a pointer to a struct pinned at a fixed address, so -&gt; is nothing but <b>base + offset, computed at compile time</b>.</li>
+    </ul>
+    <pre class="calc">GPIOA-&gt;ODR ^= (1u&lt;&lt;5);          *(volatile uint32_t *)0x50000014UL ^= (1u&lt;&lt;5);
+
+movs r2, #160                   movs r3, #32
+movs r3, #32                    ldr  r2, [pc, #8]   &lt;- literal pool
+lsls r2, r2, #23   = 0x50000000 ldr  r1, [r2, #0]
+ldr  r1, [r2, #20]              eors r3, r1
+eors r3, r1                     str  r3, [r2, #0]
+str  r3, [r2, #20]              bx   lr
+bx   lr                         .word 0x50000014    &lt;- 4 bytes of data
+
+14 bytes, no literal pool       12 bytes + 4 = 16 bytes</pre>
+    <p>The named version is <b>smaller</b>. It keeps the peripheral base in a register and reaches each register by a constant offset, lesson 01's addressing mode. One base serves MODER, ODR, BSRR and the rest. The raw-address version needs a fresh literal for every register.</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>A register name is a base plus an offset</h4></div>
+      <p class="fig-lede">Pick a register. The block's base comes from a #define, the offset from the register's place in the block's struct (right). Their sum is the address an ldr or str uses. Ports share one struct, 0x400 apart.</p>
+      <div data-viz="addr-steps"></div>
+      <p class="step-note" data-role="addr-note" aria-live="polite"></p>
+      <div data-viz="addr"></div>
+    </figure>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th class="l">Block</th><th class="l">Base</th><th class="l">Its job here</th><th class="l">Slide</th></tr></thead>
+      <tbody>
+        <tr><td class="l">RCC</td><td class="l">0x40021000</td><td class="l">clock gates, and the 48 MHz switch</td><td class="l">4a</td></tr>
+        <tr><td class="l">GPIOA, GPIOB</td><td class="l">0x50000000, 0x50000400</td><td class="l">the LEDs, and PA2/PA3 handed to the UART</td><td class="l">4b</td></tr>
+        <tr><td class="l">USART2</td><td class="l">0x40004400</td><td class="l">where printf ends up</td><td class="l">4c</td></tr>
+        <tr><td class="l">FLASH</td><td class="l">0x40022000</td><td class="l">one register, ACR: the wait state</td><td class="l">16</td></tr>
+        <tr><td class="l">SysTick</td><td class="l">0xE000E010</td><td class="l">the frame delay in Main.c</td><td class="l">lesson 06</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li>Two habits. When a peripheral does not respond, ask <i>which address did that actually write to</i>. And "a peripheral with no clock reads back zero and ignores writes, silently."</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Every register on one page: RCC, GPIO, USART2 (slides 4a–4c)</h4>
+    <ul>
+      <li><b>RCC</b>, Reset and Clock Control, at 0x40021000. The <b>gates</b> IOPENR, AHBENR, APBENR1 and APBENR2 have one bit per peripheral, and 0 means "unclocked and silently deaf". IOPENR: GPIOAEN bit 0, GPIOBEN bit 1. APBENR1: USART2EN bit 17 (also TIM3, I2C1, PWR). APBENR2: TIM1, SPI1, USART1, ADC. The <b>sources</b> CR and CFGR set the chip clock. Enable the gate first, always: led_init() sets its gate before anything else.</li>
+      <li><b>GPIO</b>: every port is the same eleven words, GPIOA at 0x50000000 and GPIOB at 0x50000400. <b>Configuration</b> registers (MODER, OTYPER, OSPEEDR, PUPDR, AFR[], LCKR) say what a pin <i>is</i>, written once at start-up. <b>Data</b> registers (IDR, ODR, BSRR, BRR) say what it <i>does</i>, in the main loop.</li>
+      <li>The UART pins: MODER = 10 says <i>a peripheral drives this pin</i>, and AFR[0] = 1 says <i>which</i> one, AF1 = USART2 on PA2 and PA3. "Neither alone is enough."</li>
+      <li><b>USART2</b> at 0x40004400: retarget.c uses four of its twelve registers. CR1 (UE, TE, RE), BRR (417), ISR (poll TXE_TXFNF) and TDR (the byte to send).</li>
+      <li>Every address on these slides was verified by compiling _Static_assert((uintptr_t)&amp;RCC-&gt;IOPENR == 0x40021034UL, ...) against ST's header.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>The bits this lesson writes, register by register</h4></div>
+      <p class="fig-lede">Bit 31 on the left, bit 0 on the right, in nibbles of four. Blue cells are the bits the code writes, ochre cells the bits it polls. Grey cells are other named fields, faded cells have no name. The hex row reads the written bits four at a time, with every other bit taken as 0.</p>
+      <div data-viz="regs-steps"></div>
+      <p class="step-note" data-role="regs-note" aria-live="polite"></p>
+      <div data-viz="regs"></div>
+      <div class="legend">
+        <span><i class="sw-pri"></i>written by this lesson</span>
+        <span><i class="sw-ter"></i>polled (read)</span>
+        <span><i class="sw-seg"></i>other named field</span>
+      </div>
+      <div data-viz="regs-table"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. Reset and the vector table (slides 5–7)</h4>
+    <p>On AVR, reset jumps to address 0 and the bootstrap must be assembly, because the stack pointer is not set up yet and C cannot run without a stack. Cortex-M "does it differently, and better". <b>The core itself reads the first two words of memory</b> before fetching a single instruction: word 0 into SP, word 1 into PC. So the very first instruction runs with a valid stack, which is why Reset_Handler can be written in C.</p>
+    <p>The table the hardware reads is, in C, an array of function pointers that the linker places at the very start of FLASH:</p>
+    <pre class="calc">__attribute__((section(".isr_vector"), used))
+void (* const vectors[])(void) = {
+    (void (*)(void))&amp;_estack,       /*  0  initial stack pointer  */
+    Reset_Handler,                  /*  1  reset                  */
+    NMI_Handler,                    /*  2                         */
+    HardFault_Handler,              /*  3                         */
+    0, 0, 0, 0, 0, 0, 0,            /*  4-10 reserved             */
+    SVC_Handler,                    /* 11                         */
+    0, 0,
+    PendSV_Handler,                 /* 14                         */
+    SysTick_Handler,                /* 15                         */
+    /* then the peripheral interrupts, IRQ0 upward ... */</pre>
+    <ul>
+      <li><b>section(".isr_vector")</b> puts the array in a section of its own, so link.ld can pin it to 0x08000000 instead of letting it land wherever.</li>
+      <li><b>used</b> stops the compiler deleting an array that no C code ever reads. Nothing in your program mentions vectors. Only the hardware does.</li>
+      <li><b>const</b> puts it in FLASH. Drop it and the table spends 180 bytes of the 12 KB RAM on data that never changes.</li>
+      <li>Entry 0 is <b>not a function pointer</b>. It is the initial stack pointer, "wearing a cast so the whole table can be one array".</li>
+      <li>Entries 0–15 belong to the core: 0 initial SP, 1 Reset, 2 NMI, 3 HardFault, 11 SVCall, 14 PendSV, 15 SysTick. <b>Peripheral IRQ <i>n</i> is vector 16 + <i>n</i></b>, at 0x08000000 + (16 + <i>n</i>) × 4. Here 16 + 29 IRQs = 45 words = 180 bytes, the size of .isr_vector.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>The vector table as 45 words at 0x08000000</h4></div>
+      <p class="fig-lede">Eight words per row, as in a memory dump: the row address plus the column offset is the entry's address, 4 bytes per entry. Drag n to find a peripheral IRQ's slot. Names are given for the IRQs the course uses.</p>
+      <div data-viz="vec-slider"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">Vector number</span><span class="v pri" data-role="vec-num">32</span><span class="sub">16 + n</span></div>
+        <div class="stat"><span class="label">Vector address</span><span class="v ok" data-role="vec-addr">0x08000080</span><span class="sub">0x08000000 + 4 × (16 + n)</span></div>
+      </div>
+      <pre class="calc" data-role="vec-calc"></pre>
+      <div data-viz="vectors"></div>
+      <div class="legend">
+        <span><i class="sw-ter-soft"></i>entry 0: initial SP, a value</span>
+        <span><i class="sw-sec-soft"></i>core exceptions 1–15</span>
+        <span><i class="sw-seg"></i>reserved, 0</span>
+        <span><i class="sw-pri-soft"></i>peripheral IRQs</span>
+        <span><i class="sw-pri"></i>the chosen IRQ</span>
+      </div>
+    </figure>
+    <p>Slide 7 reads that table back out of this lesson's own Main.hex. Record 2 is <code>:10000000 00300020C50600087906000879060008 BF</code>. ARM is <b>little-endian</b>, so each group of four bytes reads right to left.</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>The first eight bytes of your firmware become SP and PC</h4></div>
+      <p class="fig-lede">The 16 data bytes of the record, at 0x08000000 upward. The crossing lines turn each group of four bytes into one 32-bit word, low byte first. Step through what the core does with them on reset.</p>
+      <div data-viz="dec-steps"></div>
+      <p class="step-note" data-role="dec-note" aria-live="polite"></p>
+      <div data-viz="decode"></div>
+    </figure>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th class="l">Bytes</th><th class="l">Value</th><th class="l">Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="l">00 30 00 20</td><td class="l">0x20003000</td><td class="l">initial SP, the top of RAM</td></tr>
+        <tr><td class="l">C5 06 00 08</td><td class="l">0x080006C5</td><td class="l">Reset_Handler</td></tr>
+        <tr><td class="l">79 06 00 08</td><td class="l">0x08000679</td><td class="l">NMI_Handler</td></tr>
+        <tr><td class="l">79 06 00 08</td><td class="l">0x08000679</td><td class="l">HardFault_Handler</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li><b>0x20003000 is not a number someone typed.</b> RAM starts at 0x20000000 and has 12 KB, and 0x20000000 + 0x3000 is exactly the top. The linker computed it, and the stack grows downward from it.</li>
+      <li><b>Every handler address is odd.</b> nm reports Reset_Handler at 0x080006C4. The low bit is the <b>Thumb bit</b> from lesson 01, "this target is Thumb code", not part of the address. An even entry faults on the first instruction.</li>
+      <li><b>Words 2 and 3 are identical</b> because NMI_Handler and HardFault_Handler are both weak aliases of one Default_Handler (at 0x08000678).</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Weak aliases, and the trap that costs an afternoon (slide 8)</h4>
+    <pre class="calc">#define WEAK_ALIAS __attribute__((weak, alias("Default_Handler")))
+
+void TIM3_IRQHandler(void)     WEAK_ALIAS;     /* startup.c: the default       */
+void USART2_IRQHandler(void)   WEAK_ALIAS;
+
+void TIM3_IRQHandler(void) { /* ... */ }       /* strong: wins at link time    */
+void Default_Handler(void) { for (;;) { } }    /* parks the core               */</pre>
+    <ul>
+      <li>A <b>weak</b> symbol is "a default that any ordinary definition overrides". A lesson that wants the timer interrupt writes a plain C function with exactly that name. No ISR() macro, no vector number, nothing to register: "<b>The name is the registration.</b>"</li>
+      <li>Default_Handler is an infinite loop. It parks the core instead of returning, so a debugger can attach and read IPSR.</li>
+      <li><b>The trap</b>: TIM3_IRQhandler, one letter wrong. It "compiles. links. runs." You have defined a function nobody calls, and the weak default still sits in the vector table. The first TIM3 interrupt parks the board in Default_Handler. No error, no warning, "no symptom except silence". The linker even deletes the misspelled function as dead code.</li>
+      <li>"The single most expensive typo on this architecture." When an interrupt "does not fire", check the spelling <i>first</i>: nm Main.elf should list your handler as T (yours), not W (weak).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Which function lands in vector 32 (TIM3, IRQ16)</h4></div>
+      <p class="fig-lede">The linker resolves the name TIM3_IRQHandler. A strong definition with the exact name replaces the weak alias. Anything else leaves Default_Handler in the slot.</p>
+      <div data-viz="weak-steps"></div>
+      <p class="step-note" data-role="weak-note" aria-live="polite"></p>
+      <div data-viz="weak"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. Four kinds of bytes, and why .data has two addresses (slides 9–10)</h4>
+    <p>The compiler sorts every byte of the program into a <b>section</b>. Four of them account for almost everything.</p>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th class="l">Section</th><th class="l">Holds</th><th class="l">Lives in</th><th class="l">At reset</th><th class="l">This lesson's witness</th></tr></thead>
+      <tbody>
+        <tr><td class="l">.text</td><td class="l">your code</td><td class="l">FLASH only</td><td class="l">runs in place</td><td class="l">Reset_Handler, main()</td></tr>
+        <tr><td class="l">.rodata</td><td class="l">const data</td><td class="l">FLASH only</td><td class="l">read in place</td><td class="l">const uint32_t rodata_witness = 0x5AFEu;</td></tr>
+        <tr><td class="l">.data</td><td class="l">initialised globals</td><td class="l"><b>FLASH and RAM</b></td><td class="l"><b>must be copied</b></td><td class="l">volatile uint32_t data_witness = 0x00C0FFEEu;</td></tr>
+        <tr><td class="l">.bss</td><td class="l">zeroed globals</td><td class="l"><b>RAM only</b></td><td class="l"><b>must be zeroed</b></td><td class="l">bss_witness = 0u; static uint32_t frame_count;</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li>"The two on the left are finished when the chip is programmed. <b>The two on the right are promises nothing has kept yet.</b>" C promises that int counter = 0; is zero and int magic = 0xC0FFEE; holds that value when main() begins. "On this chip you are the one who keeps them."</li>
+      <li>A .data value must survive power-off, so it is stored in FLASH. The variable must be writable, so it lives in RAM. It needs <b>two addresses</b>: the <b>load address (LMA)</b> where it is stored, _sidata = 0x08001D64, and the <b>virtual address (VMA)</b> where it runs, 0x20000000 to 0x20000064 (100 bytes). For .text the two are the same.</li>
+      <li>.bss has the opposite shape. Storing hundreds of identical zeros would waste FLASH, so .bss gets <b>no FLASH at all</b>, only a size (372 bytes here). Startup writes the zeros at run time.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Reset_Handler, in full (slide 11)</h4>
+    <pre class="calc">void Reset_Handler(void)
+{
+    uint32_t *src, *dst;
+
+    /* 1. copy .data from FLASH into RAM */
+    src = &amp;_sidata;
+    for (dst = &amp;_sdata; dst &lt; &amp;_edata; ) { *dst++ = *src++; }
+
+    /* 2. zero .bss */
+    for (dst = &amp;_sbss; dst &lt; &amp;_ebss; ) { *dst++ = 0; }
+
+    SystemInit();          /* 3. clock: 12 MHz -&gt; 48 MHz                 */
+    __libc_init_array();   /* 4. C++ ctors, __attribute__((constructor)) */
+
+    (void)main();
+    for (;;) { }           /* main() must not return — but if it does    */
+}</pre>
+    <ul>
+      <li>"<b>Two memcpy-shaped loops over addresses the linker chose.</b> That is the entire mystery of what happens before main."</li>
+      <li>The order is copy .data, zero .bss, SystemInit(), __libc_init_array(), main(). SystemCoreClock is an initialised global, so it sits in .data. The copy has to come before SystemInit(), or it would write 12000000 back over 48000000.</li>
+      <li>On a desktop a returning main() ends the process. Here there is nothing to exit <i>to</i>, and a bare return would run into whatever bytes follow in FLASH. "The infinite loop is a wall."</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>Reset_Handler keeps C's promises, one step at a time</h4></div>
+      <p class="fig-lede">FLASH on the left, RAM in the middle, both with high addresses at the top and not to scale. The arrow is the .data copy from its load address to its run address. Step back to Reset to see the RAM before startup runs; ???????? marks values nobody has written.</p>
+      <div data-viz="boot-steps"></div>
+      <p class="step-note" data-role="boot-note" aria-live="polite"></p>
+      <div data-viz="boot"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Linker symbols are addresses, not variables (slide 12)</h4>
+    <pre class="calc">extern uint32_t _sdata, _edata;
+
+for (dst = &amp;_sdata; dst &lt; &amp;_edata; ) { ... }   /* correct  */
+uint32_t n = _edata - _sdata;                  /* WRONG    */</pre>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th class="l">You write</th><th class="l">You get</th></tr></thead>
+      <tbody>
+        <tr><td class="l">&amp;_sdata</td><td class="l">the address the linker chose: what you want</td></tr>
+        <tr><td class="l">_sdata</td><td class="l">the four bytes that happen to live at that address</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li>The linker creates no storage for _sdata. It creates a <i>symbol</i> whose value <b>is</b> the address. extern uint32_t _sdata; is "a polite lie told to the compiler" so that &amp;_sdata has a type. Reading _sdata itself compiles cleanly and returns garbage.</li>
+      <li><b>Rule:</b> "a linker symbol is only ever used with &amp;. If you see one without an ampersand, it is a bug." Main.c uses eight of them, all with &amp;, and prints every one.</li>
+      <li>A size in bytes is a difference of addresses as integers: (uintptr_t)&amp;_edata − (uintptr_t)&amp;_sdata = 100. On uint32_t pointers, &amp;_edata − &amp;_sdata counts words: 25.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 8</span><h4>A linker symbol is a label on an address, with no box of its own</h4></div>
+      <p class="fig-lede">The first words of RAM. _sdata and _edata are flags on the address line; the words of .data belong to your variables. Pick an expression to see what it touches.</p>
+      <div data-viz="sym-steps"></div>
+      <p class="step-note" data-role="sym-note" aria-live="polite"></p>
+      <div data-viz="sym"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. link.ld: the map, the sections, and where the memory went (slides 13–15)</h4>
+    <p>The first half of the linker script says what memory exists. It is slide 3's picture, transcribed:</p>
+    <pre class="calc">MEMORY
+{
+  FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 32K
+  RAM   (rw)  : ORIGIN = 0x20000000, LENGTH = 12K
+}
+
+_estack = ORIGIN(RAM) + LENGTH(RAM);     /* 0x20000000 + 12 × 1024 = 0x20003000 */</pre>
+    <ul>
+      <li>FLASH is at 0x08000000, <b>not at 0</b>: the low addresses are the code-region alias. RAM at 0x20000000 is the same on every Cortex-M; "that address is architectural, not ST's choice".</li>
+      <li>32K and 12K belong to this exact part number, a C031<b>C6</b>. Change the part and this line changes with it.</li>
+      <li>_estack is <b>computed, not typed</b>. That is why 0x20003000 in the vector table is trustworthy: "nobody could have mistyped it."</li>
+    </ul>
+    <p>The second half assigns each section to a region. Three lines carry the whole idea:</p>
+    <pre class="calc">.text   : { *(.text*) }   &gt;FLASH
+
+.data   : {
+    _sdata = .;
+    *(.data*)
+    _edata = .;
+}  &gt;RAM AT&gt; FLASH          /*  &lt;-- lives in RAM, stored in FLASH  */
+
+_sidata = LOADADDR(.data); /*  &lt;-- where it was stored            */
+
+.bss    : {
+    _sbss = .;  *(.bss*) *(COMMON);  _ebss = .;
+}  &gt;RAM                    /*  no AT&gt; — nothing to store          */</pre>
+    <ul>
+      <li><b>&gt;RAM AT&gt; FLASH</b> is the syntax for the two addresses of .data, and <b>LOADADDR()</b> is how startup finds the FLASH copy. "These three lines are why .data works."</li>
+      <li><b>.</b> is the location counter, "the address I have reached so far". Assigning it to a symbol, as in _sdata = .;, is how every boundary marker is made. "The dot is the linker's entire working memory."</li>
+      <li>In the full file .isr_vector comes first, so it lands at 0x08000000. KEEP() protects it from --gc-sections, which deletes unreferenced sections; no C code references the table. The last section, ._user_heap_stack, reserves 0x200 + 0x400 = 1536 bytes and marks the heap start with PROVIDE(end = .).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 9</span><h4>The location counter walks through FLASH, then RAM</h4></div>
+      <p class="fig-lede">Each section is placed where the dot has reached, and the dot moves on by its size. Block widths are not to scale. Step through the sections; the matching link.ld line and size -A row are shown below.</p>
+      <div data-viz="ld-steps"></div>
+      <p class="step-note" data-role="ld-note" aria-live="polite"></p>
+      <div data-viz="ld"></div>
+      <pre class="calc" data-role="ld-line"></pre>
+      <div data-viz="ld-table"></div>
+    </figure>
+    <p>The linker's own summary, printed at every build: FLASH 7624 B of 32 KB (23.27%), RAM 2008 B of 12 KB (16.34%). Both sums teach something:</p>
+    <pre class="calc">RAM   = .data + .bss + heap/stack reservation
+      = 100 + 372 + 1536                     = 2008 B
+FLASH = .isr_vector + .text + .rodata + 4 + 4 + .data again
+      = 180 + 5684 + 1652 + 4 + 4 + 100      = 7624 B</pre>
+    <ul>
+      <li>The heap and stack reservation is three quarters of the RAM use, "and you have not written a real program yet".</li>
+      <li>The 100 in the FLASH sum is .data counted a second time, at its load address. "<b>.data costs you both.</b>" A large initialised array is the most expensive thing you can declare on a part this size.</li>
+      <li>Prefer const: .rodata costs FLASH only, and .bss costs no FLASH at all.</li>
+      <li>The slide's size -A table prints 0x20000218 for ._user_heap_stack. The sums above and the serial report (heap at 0x200001D8) place it at 0x200001D8, which the figure uses.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. The clock: 48 MHz in one register write (slide 16)</h4>
+    <p>The last of the four startup jobs. The STM32C0 wakes on its 48 MHz internal oscillator, HSI48, <b>divided by four</b>: 12 MHz.</p>
+    <pre class="calc">void SystemInit(void)
+{
+    FLASH-&gt;ACR = (FLASH-&gt;ACR &amp; ~FLASH_ACR_LATENCY) | FLASH_ACR_LATENCY_0;
+    while ((FLASH-&gt;ACR &amp; FLASH_ACR_LATENCY) != FLASH_ACR_LATENCY_0) { }
+
+    RCC-&gt;CR &amp;= ~RCC_CR_HSIDIV;          /* divide by 1 -&gt; 48 MHz */
+    while (!(RCC-&gt;CR &amp; RCC_CR_HSIRDY)) { }
+
+    SystemCoreClock = 48000000UL;
+}</pre>
+    <ul>
+      <li>FLASH-&gt;ACR (0x40022000) LATENCY, bits 2:0, is set to one wait state, and the code waits until it reads back. RCC-&gt;CR HSIDIV, bits 13:11 (mask 0x3800), is cleared to divide by 1; then the code polls HSIRDY, bit 10.</li>
+      <li>"<b>The order is not negotiable.</b>" Flash memory cannot be read as fast as the CPU runs at 48 MHz, so it needs one wait state. Raise the clock first and the CPU fetches an instruction that is not ready yet: the part hangs with no error, "somewhere that has nothing to do with your bug".</li>
+      <li><b>The rule for every clock change:</b> "wait states go up <i>before</i> the frequency, and come down <i>after</i> it."</li>
+      <li>"The gentlest clock setup in the STM32 family": no PLL, no lock bit to poll, no source switch. The F446RE later in the course needs all three.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 10</span><h4>Four clock states, and the one that hangs</h4></div>
+      <p class="fig-lede">Rows are flash wait states, columns are CPU clock speeds. SystemInit() must travel from the reset state (bottom left) to the target (top right). Only one path avoids the red corner.</p>
+      <div data-viz="clk-steps"></div>
+      <p class="step-note" data-role="clk-note" aria-live="polite"></p>
+      <div data-viz="clk"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. printf needs somewhere to print (slide 17)</h4>
+    <p>printf lives in the C library, and "the C library has never heard of a UART". It calls _write() and expects the system to provide one. On a laptop the OS does. Here retarget.c does, in nine lines:</p>
+    <pre class="calc">int _write(int fd, const char *buf, int len)
+{
+    (void)fd;
+    for (int i = 0; i &lt; len; i++) {
+        if (buf[i] == '\n') { uart2_putc('\r'); }
+        uart2_putc(buf[i]);
+    }
+    return len;
+}</pre>
+    <ul>
+      <li>That one function is the entire bridge between &lt;stdio.h&gt; and the hardware. Implement it and printf, puts, putchar and fprintf all work at once.</li>
+      <li>uart2_putc() waits while ISR's TXE_TXFNF says the transmit register is still full, then stores the byte in TDR.</li>
+      <li>The AVR edition hand-wrote fifteen formatters to fit a 4 KB part. Here newlib-nano's printf costs about 1.4 KB of 32 KB, so this edition uses the standard library.</li>
+      <li><b>_sbrk()</b>, in the same file, hands malloc the gap between .bss and the stack, starting at end = 0x200001D8. printf allocates its buffer there. "Get _sbrk wrong and printf prints <i>nothing</i>": a silent board running a perfectly good program.</li>
+    </ul>
+    <pre class="calc">BRR = (f + baud/2) / baud = (48 000 000 + 57 600) / 115 200 = 417 = 0x01A1   (rounded to nearest)
+BRR comes from SystemCoreClock: right only if the chip really runs at 48 MHz.
+Chip still at 12 MHz with BRR = 417:  12 000 000 / 417 ≈ 28 777 baud, not 115 200</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 11</span><h4>From printf to the pin: one function of yours in the middle</h4></div>
+      <p class="fig-lede">printf("n=%d\n", 5) through the layers. Only _write() and uart2_putc() are yours. _write sends a \r before each \n, so 4 characters become 5 bytes. The bottom strip is RAM: printf's buffer comes from the heap that _sbrk hands out.</p>
+      <div data-viz="printf"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>14. The board you are simulating, and what you should see (slides 18–19)</h4>
+    <ul>
+      <li>Everything to the end of the course runs on the ST Nucleo-C031C6, in the browser in Wokwi (part board-st-nucleo-c031c6). The real board's manual is UM2953.</li>
+      <li>ledbar_init() writes 01 (output) into the eight MODER fields of PB0–PB7. After that each frame of a pattern is one byte written to GPIOB-&gt;ODR, bit <i>n</i> = PB<i>n</i> (Figure 3).</li>
+      <li>A Wokwi wire names its pin by the string in Wokwi's board file, not the datasheet name. led0 is on nucleo:PB0.1, because PB0 reaches two header positions and plain PB0 does not exist. Check the Board pins page before adding a wire.</li>
+      <li>Wokwi does <b>not implement DMA, RTC, IWDG, PWR, SYSCFG and DBG</b>, and I²C and SPI are master-only. That is why the EXTI lesson works here: on an STM32F4 the interrupt pin is chosen in SYSCFG-&gt;EXTICR[], while the STM32C0 has it in EXTI-&gt;EXTICR[]. It is also why the low-power lesson moves to another simulator: PWR is not modelled.</li>
+      <li>"A simulator is an <i>instrument</i>, and every instrument has a stated range."</li>
+    </ul>
+    <pre class="calc">-- what the clock actually is --
+  SystemCoreClock : 48000000 Hz
+
+-- where link.ld put things --
+  vector table    : 0x08000000  (must be the base of FLASH)
+  .data in FLASH  : 0x08001D64  _sidata, the copy source
+  .data in RAM    : 0x20000000 .. 0x20000064  (100 bytes)
+  .bss  in RAM    : 0x20000064 .. 0x200001D8  (372 bytes)
+  heap starts at  : 0x200001D8  (first byte after .bss)
+  stack top       : 0x20003000  _estack, loaded into SP by
+                    the HARDWARE before any code runs
+
+-- did startup.c do its four jobs? --
+  .data copied    : 0x00C0FFEE  OK    (expect 0x00C0FFEE)
+  .bss  zeroed    : 0x00000000  OK    (expect 0x00000000)</pre>
+    <ul>
+      <li>"<b>Not one of those numbers is hardcoded.</b>" Every address is read back through &amp; from a linker symbol at run time. Edit link.ld and they move.</li>
+      <li>Then the LED bar plays the pattern tables in Main.c, and LD4 on PA5 toggles once per frame as a heartbeat. That half of Main.c is yours to change.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>15. The lab: break it on purpose, and what carries forward (slides 20–21)</h4>
+    <p>"Startup code is invisible when it works", so the lab makes it fail in four controlled ways. "<b>Write your prediction down before you build.</b>"</p>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th class="l">You change</th><th class="l">The build says</th><th class="l">The board does</th><th class="l">Why this symptom follows</th></tr></thead>
+      <tbody>
+        <tr><td class="l">Part 0: comment out GPIOAEN in led_init()</td><td class="l">nothing</td><td class="l">serial fine, LED bar fine, LD4 dead</td><td class="l">led_init() wrote MODER to an unclocked port and the write was dropped. uart2_init() turns the gate on later, but nothing goes back to PA5</td></tr>
+        <tr><td class="l">1: delete the .data copy loop</td><td class="l">builds, no warning</td><td class="l">.data copied: 0x00000000 WRONG</td><td class="l">RAM is never loaded from the FLASH copy. Wokwi hands out zeroed RAM; a real chip gives an indeterminate value</td></tr>
+        <tr><td class="l">2: delete the .bss zero loop</td><td class="l">builds, no warning</td><td class="l">most likely nothing changes in Wokwi</td><td class="l">RAM starts clean in the simulator. On hardware .bss holds garbage or the last program's data, and it depends on how you reset</td></tr>
+        <tr><td class="l">3: move .isr_vector after .text</td><td class="l">0 errors, 0 warnings, identical sizes, valid hex</td><td class="l">a real chip cannot start: the core locks up</td><td class="l">the hardware reads the first two words of FLASH, now instruction bytes: SP = 0x08432200, PC = 0xD374428B</td></tr>
+        <tr><td class="l">4: RAM 12K → 8K → 2K → 1K</td><td class="l">8K and 2K build; 1K fails, overflowed by 984 bytes</td><td class="l">8K: only the stack top moves, to 0x20002000</td><td class="l">2K builds at 98.05% but is unsafe: the sizes are a reservation, not a limit</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li>"<b>Exercise 3 is the one to take seriously.</b>" It compiles with no errors, links with no warnings, emits a hex file with correct checksums, and a real chip cannot start. "Every automated check in this repository would pass on that image."</li>
+      <li>From the lab notes: "The compiler checks your language. The linker checks your arithmetic. Neither checks your intent." A check that would catch exercise 3: assert that .isr_vector is at ORIGIN(FLASH) and that word 1 is in FLASH and odd.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 12</span><h4>Two lab breaks the linker cannot see</h4></div>
+      <p class="fig-lede">Top, exercise 3: what the core loads when .isr_vector no longer starts FLASH. Bottom, exercise 4: the RAM region drawn to scale against the 2008 bytes this program needs.</p>
+      <div data-viz="ex3-steps"></div>
+      <p class="step-note" data-role="ex3-note" aria-live="polite"></p>
+      <div data-viz="ex3"></div>
+      <div data-viz="ex4-steps"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">_estack</span><span class="v pri" data-role="ram-estack">0x20003000</span><span class="sub">ORIGIN(RAM) + LENGTH(RAM)</span></div>
+        <div class="stat"><span class="label">Hex starts</span><span class="v" data-role="ram-hex">00 30 00 20</span><span class="sub">word 0, little-endian</span></div>
+        <div class="stat"><span class="label">RAM used</span><span class="v" data-role="ram-pct">16.34%</span><span class="sub">2008 B of the region</span></div>
+      </div>
+      <p class="step-note" data-role="ex4-note" aria-live="polite"></p>
+      <div data-viz="ex4"></div>
+    </figure>
+    <p>Slide 21's checklist, for any board that stays silent from now on:</p>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th class="l">Check</th><th class="l">Symptom when it was missed</th><th class="l">Why this symptom follows</th></tr></thead>
+      <tbody>
+        <tr><td class="l">Did .data get copied?</td><td class="l">initialised globals hold 0 or garbage; nothing crashes</td><td class="l">the RAM copy was never loaded from its FLASH load address</td></tr>
+        <tr><td class="l">Is SystemCoreClock 48 MHz or still 12?</td><td class="l">everything runs at a quarter speed; a baud rate computed for the wrong clock is garbage</td><td class="l">SystemInit() did not switch HSIDIV; delays and BRR are computed from SystemCoreClock</td></tr>
+        <tr><td class="l">Is the handler name spelled exactly right?</td><td class="l">the interrupt "does not fire"; the board parks</td><td class="l">a misspelled function overrides nothing, so the weak Default_Handler stays in the vector table</td></tr>
+        <tr><td class="l">Is the peripheral clock even enabled?</td><td class="l">writes vanish, reads give 0, no error</td><td class="l">an unclocked peripheral is silently deaf; RCC-&gt;IOPENR must come before MODER</td></tr>
+        <tr><td class="l">Is _sbrk right? (slide 17)</td><td class="l">printf prints nothing</td><td class="l">printf's buffer comes from the heap that _sbrk hands out</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li>Every later lesson links this same startup.c shape. When lesson 06 defines TIM3_IRQHandler, you know why that name and no other works. size -A is now readable.</li>
+      <li>Next week: GPIO, behind its clock gate RCC-&gt;IOPENR, "the line in led_init() that must come first or the entire port reads back zero".</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>General idea vs this chip</h4>
+    <p>The guide's §2 pairs that this lesson makes concrete (address binding, I/O model, address spaces, dispatch), plus the deck's own contrasts.</p>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th class="l">Idea</th><th class="l">Alternatives</th><th class="l">This chip</th><th class="l">What follows</th></tr></thead>
+      <tbody>
+        <tr><td class="l">Who prepares the C environment (slide 1)</td><td class="l">an operating system and its loader</td><td class="l">startup.c, which you write; nobody else runs before main()</td><td class="l">main() is not the start. A missing step fails silently: garbage globals, a slow clock, no output</td></tr>
+        <tr><td class="l">Address binding (guide §2; slides 13–14)</td><td class="l">compile time, load time (a loader relocates), run time (an MMU maps)</td><td class="l">build time: link.ld fixes every address</td><td class="l">no loader and no MMU, so you write the linker script. .data has an LMA and a VMA, and startup copies between them</td></tr>
+        <tr><td class="l">How reset starts the CPU (slide 5)</td><td class="l">jump to a fixed address and run assembly (AVR)</td><td class="l">the core loads SP from word 0 and PC from word 1 of the vector table</td><td class="l">the first instruction has a valid stack, so Reset_Handler is C. The table must sit at 0x08000000</td></tr>
+        <tr><td class="l">Interrupt dispatch (guide §2; slides 6–8)</td><td class="l">non-vectored: one entry point that asks who interrupted</td><td class="l">vectored: a table of handler addresses</td><td class="l">IRQ n is vector 16 + n at 0x08000000 + 4(16 + n). The handler's name puts its address in the table</td></tr>
+        <tr><td class="l">Registering a handler (slide 8)</td><td class="l">an ISR() macro with a vector number, or a function pointer set at run time</td><td class="l">the name is the registration: a strong definition replaces the weak alias at link time</td><td class="l">a misspelled name compiles, links and runs, and the interrupt parks in Default_Handler</td></tr>
+        <tr><td class="l">I/O model (guide §2; slide 4)</td><td class="l">port-mapped: a separate I/O space with in/out instructions</td><td class="l">memory-mapped: ordinary ldr and str</td><td class="l">GPIOA-&gt;ODR is the address 0x50000014. With no MMU a stray pointer can write a peripheral</td></tr>
+        <tr><td class="l">Address spaces (guide §2; slides 9, 15)</td><td class="l">Harvard: separate code and data spaces (PROGMEM, LPM on AVR)</td><td class="l">one address space</td><td class="l">const data in FLASH (.rodata) is read by an ordinary ldr. const costs FLASH only and no RAM</td></tr>
+        <tr><td class="l">Naming registers (slide 4)</td><td class="l">raw address casts, or a vendor library (ST's HAL)</td><td class="l">CMSIS headers: #defines and structs, nothing linked</td><td class="l">base + offset is computed at compile time, and the named form is smaller: 14 bytes against 16</td></tr>
+        <tr><td class="l">Where GPIO sits (slide 3)</td><td class="l">on the peripheral bus at 0x4… (F1, F4)</td><td class="l">its own IOPORT at 0x50000000</td><td class="l">F4 tutorial code writes the wrong address, with no error</td></tr>
+        <tr><td class="l">Clock setup (slide 16)</td><td class="l">PLL, lock bit and source switch (F446RE)</td><td class="l">HSIDIV ÷4 → ÷1 plus one flash wait state</td><td class="l">12 MHz at reset, 48 MHz after SystemInit(). Wait states go up first and come down last</td></tr>
+        <tr><td class="l">Console output (slide 17)</td><td class="l">the OS implements write()</td><td class="l">you implement _write() over USART2</td><td class="l">printf, puts and putchar all work once _write exists. A wrong _sbrk prints nothing</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Bytes 00 30 00 20 C5 06 00 08 at 0x08000000: SP = 0x20003000, PC = 0x080006C5, and Reset_Handler is at 0x080006C4 (bit 0 is the Thumb bit). An even vector entry faults.</li>
+      <li>On reset the core loads SP from word 0 and PC from word 1 before any instruction, so Reset_Handler can be C (on AVR it could not).</li>
+      <li>IRQ n is vector 16 + n at 0x08000000 + 4(16 + n): TIM3 (IRQ16) → 0x08000080, IRQ7 → 0x0800005C, USART2 (IRQ28, the last) → 0x080000B0, then .text at 0x080000B4.</li>
+      <li>_estack = ORIGIN(RAM) + LENGTH(RAM): 12K → 0x20003000, 8K → 0x20002000.</li>
+      <li>const int t[4] = {1}; → .rodata, FLASH only. int t[4] = {1}; → .data, FLASH and RAM. int t[4]; → .bss, RAM only.</li>
+      <li>FLASH used = 180 + 5684 + 1652 + 4 + 4 + 100 = 7624 B, because .data counts twice. RAM used = 100 + 372 + 1536 = 2008 B.</li>
+      <li>Reset_Handler order: copy .data, zero .bss, SystemInit(), __libc_init_array(), main(), then for(;;).</li>
+      <li>void TIM3_IRQhandler(void) {…} compiles, links and runs; the weak Default_Handler stays in the table and the interrupt parks the board. nm shows T for yours, W for weak.</li>
+      <li>A linker symbol is used only with &amp;: _edata − _sdata reads memory (garbage); (uintptr_t)&amp;_edata − (uintptr_t)&amp;_sdata = 100.</li>
+      <li>&gt;RAM AT&gt; FLASH: lives in RAM, stored in FLASH; _sidata = LOADADDR(.data) = 0x08001D64. The dot is the location counter.</li>
+      <li>Clock: reset is HSI48 ÷ 4 = 12 MHz. Set LATENCY = 1 first, then clear HSIDIV (bits 13:11) and poll HSIRDY (bit 10). Wrong order: the part hangs with no error.</li>
+      <li>GPIOA-&gt;ODR = 0x50000000 + 0x14 = 0x50000014; GPIOB-&gt;ODR = 0x50000414. GPIO is at 0x5…, not 0x4…. CMSIS is headers, not a library.</li>
+      <li>Gates: IOPENR GPIOAEN bit 0, GPIOBEN bit 1 (0x3); APBENR1 USART2EN bit 17 = 0x00020000. A peripheral with no clock reads 0 and ignores writes.</li>
+      <li>BRR = (48 000 000 + 57 600) / 115 200 = 417 = 0x1A1. USART2 CR1 = UE | RE | TE = 0xD. printf needs _write(); a wrong _sbrk prints nothing.</li>
+      <li>Moving .isr_vector after .text: 0 errors, 0 warnings, same sizes, and the chip cannot start. 2K RAM builds at 98.05% but is unsafe; 1K fails, overflowed by 984 bytes.</li>
+    </ul>
+    <p class="source">Slides: L04 pin maps and slides 1–21 (with 4a–4c) · Notes: 04_Week3_L04_Startup_LinkerScript.md · Guide: §3 Lesson 04, §2 key contrasts</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lesson</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

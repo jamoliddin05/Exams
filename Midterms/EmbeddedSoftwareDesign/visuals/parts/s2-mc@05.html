@@ -1,0 +1,342 @@
+<article class="q" id="s2-mc18" data-part="mc" data-num="18" data-topic="AFR field" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 18 · L05, AFR[1] clear-then-set</p>
+    <h3 class="q-title">PA10 must carry alternate function 1 (AF1), and its <code>MODER</code> field already holds <code>10</code>. Which line writes AF1 into PA10's field and leaves every other pin's AF number as it was?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span><code>GPIOA-&gt;AFR[1] = (GPIOA-&gt;AFR[1] &amp; ~(0xFu &lt;&lt; 8)) | (1u &lt;&lt; 8);</code></span>
+      <span class="why">Correct. PA10 is in <code>AFR[10 / 8]</code> = <code>AFR[1]</code>, at bits 4 × 2 + 3 : 4 × 2 = 11:8.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>GPIOA-&gt;AFR[0] = (GPIOA-&gt;AFR[0] &amp; ~(0xFu &lt;&lt; 8)) | (1u &lt;&lt; 8);</code></span>
+      <span class="why">No. <code>AFR[0]</code> holds pins 0 to 7, and its bits 11:8 are PA2's field.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>GPIOA-&gt;AFR[1] = (GPIOA-&gt;AFR[1] &amp; ~(3u &lt;&lt; 20)) | (1u &lt;&lt; 20);</code></span>
+      <span class="why">No. That is the 2-bit rule, 2n = 20. Bits 21:20 of <code>AFR[1]</code> are inside PA13's field, a debug pin.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>GPIOA-&gt;AFR[1] = (GPIOA-&gt;AFR[1] &amp; ~(0xFu &lt;&lt; 10)) | (1u &lt;&lt; 10);</code></span>
+      <span class="why">No. It shifts by n. Bits 13:10 straddle PA11 and PA10, and the 1 at bit 10 makes AF4.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> <code>AFR</code> gives each pin 4 bits, so it takes two registers, <code>AFR[0]</code> for pins 0–7 and <code>AFR[1]</code> for pins 8–15. PA10 is in <code>AFR[10 / 8]</code> = <code>AFR[1]</code>, and its field starts at bit 4 × (10 mod 8) = 8, so it is bits 11:8.</p>
+    <p>The mask is <code>0xFu &lt;&lt; 8</code> = <code>0x00000F00</code> and AF1 is <code>1u &lt;&lt; 8</code> = <code>0x00000100</code>. B has the right bits in the wrong register, C uses the 2-bit <code>MODER</code> rule, and D shifts by the pin number as for <code>IDR</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Where each option's mask and its 1 land</h4>
+    </div>
+    <p class="fig-lede">Each row is the register one option writes, bit 31 on the left, cut into 4-bit fields with the pin above each. Shaded cells are the bits its mask clears, the dark cell is the 1 it sets. The green outline is PA10's real field, <code>AFR[1]</code> bits 11:8.</p>
+    <div data-viz="masks"></div>
+    <div class="legend">
+      <span><i class="sw-sec-soft"></i>cleared by the mask</span>
+      <span><i class="sw-pri"></i>the 1 that is set</span>
+      <span><i class="sw-ok"></i>PA10's field (outline)</span>
+    </div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Line A, value by value, changes only PA10's hex digit</h4>
+    </div>
+    <p class="fig-lede"><code>AFR[1]</code> bit by bit, starting from an example value, <code>0x00002300</code>, in which PA11 holds AF2 and PA10 an old AF3. The hex digit over each field is that pin's AF number. Step through the five values line A computes.</p>
+    <div data-viz="cts-steps"></div>
+    <p class="step-note" data-role="cts-note" aria-live="polite"></p>
+    <div data-viz="cts"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Pin n's AF number is in <code>AFR[n / 8]</code>, bits 4(n mod 8)+3 : 4(n mod 8), one hex digit per pin. PA10 is <code>AFR[1]</code> bits 11:8, so clear with <code>&amp; ~(0xFu &lt;&lt; 8)</code> and set AF1 with <code>| (1u &lt;&lt; 8)</code>.</p>
+    <p class="source">Source: L05 slides 4, 14 · Notes: L05 › 8. AFR, which peripheral gets the pin · L05 › 3. The one rule: pin n lives at n, 2n or 4n</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc19" data-part="mc" data-num="19" data-topic="BSRR value" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 19 · L05, The LED bar in one BSRR write</p>
+    <h3 class="q-title">The LED bar on PB7–PB0 is written with the line below. What value is written to <code>BSRR</code> when <code>leds</code> is <code>0x0C</code>?</h3>
+    <pre class="calc">GPIOB-&gt;BSRR = ((uint32_t)(uint8_t)~leds &lt;&lt; 16) | leds;</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>0x000C00F3</code></span>
+      <span class="why">No. The halves are swapped. It sets the six LEDs that should go off and resets PB3 and PB2.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>0xFFF3000C</code></span>
+      <span class="why">No. That is the value without the <code>(uint8_t)</code> cast. Its 1s in bits 31:24 also reset PB15–PB8.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0x0000000C</code></span>
+      <span class="why">No. That is <code>leds</code> alone. PB3 and PB2 go on, and the other six LEDs keep what they showed.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>0x00F3000C</code></span>
+      <span class="why">Correct. The set half <code>0x000C</code> lights PB3 and PB2, and the reset half <code>0x00F3</code> turns off the other six.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> The low half is <code>leds</code> = <code>0x000C</code>, bits 3 and 2, which sets PB3 and PB2. <code>~leds</code> cut to 8 bits by the cast is <code>0xF3</code> = <code>1111 0011</code>, and <code>&lt;&lt; 16</code> moves it into bits 23:16, the reset bits of PB7–PB4, PB1 and PB0.</p>
+    <p>Bits 31:24 stay 0, so PB15–PB8 are untouched, and the OR gives <code>0x00F3000C</code>. One store lights the LEDs that should be on and turns off the rest, so the bar shows exactly <code>leds</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Building 0x00F3000C bit by bit</h4>
+    </div>
+    <p class="fig-lede">BSRR bit by bit. Bits 15:0 set pins 15 to 0, bits 31:16 reset them; the pin number of each bit is printed above it. Step through the expression from <code>leds</code> to the value written.</p>
+    <div data-viz="build-steps"></div>
+    <p class="step-note" data-role="build-note" aria-live="polite"></p>
+    <div data-viz="build"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Port B after each option</h4>
+    </div>
+    <p class="fig-lede">Before the write the bar shows PB5 and PB4, and PB13 and PB10 are high for some other use (<code>ODR</code> = <code>0x2430</code>). Each row shows the 16 pins after one option. The target is the bar reading <code>0000 1100</code> with PB15–PB8 unchanged.</p>
+    <div data-viz="port"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>pin high</span>
+      <span><i class="sw-seg"></i>pin low</span>
+      <span><i class="sw-ok"></i>changed as asked</span>
+      <span><i class="sw-bad"></i>wrong level</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>In the bar line, the <code>(uint8_t)</code> cast keeps <code>~leds</code> to 8 bits. For <code>leds</code> = <code>0x0C</code> the set half is <code>0x000C</code>, the reset half <code>0x00F3</code>, and <code>BSRR</code> = <code>0x00F3000C</code>. PB15–PB8 see only 0s and are untouched.</p>
+    <p class="source">Source: L05 slides 4, 12 · Notes: L05 › 7. BSRR, the safe one</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc20" data-part="mc" data-num="20" data-topic="Vector address" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 20 · L05, IRQ to vector address</p>
+    <h3 class="q-title">TIM3's interrupt is IRQ 16, and the vector table starts at <code>0x08000000</code>. At which address does the CPU read TIM3's vector?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span><code>0x08000080</code></span>
+      <span class="why">Correct. Vector 16 + 16 = 32, and 32 × 4 = 128 = 0x80.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>0x08000040</code></span>
+      <span class="why">No. 16 × 4 = 0x40 forgets the 16 core vectors. That slot is vector 16, IRQ 0.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0x08000020</code></span>
+      <span class="why">No. 32 = 0x20 counts vectors as bytes. Each vector is 4 bytes.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>0x08000081</code></span>
+      <span class="why">No. Bit 0 is set in the word stored in the vector, the handler's address. The vector itself starts at a multiple of 4.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> The first 16 vectors belong to the core (initial SP, Reset, NMI, HardFault, … SysTick), so IRQ n is vector 16 + n, and IRQ 16 is vector 32. Each vector is a 4-byte word, so vector 32 starts 32 × 4 = 128 = <code>0x80</code> bytes into the table, at <code>0x08000080</code>.</p>
+    <p>By hand, × 4 is two left shifts, and <code>0010 0000</code> becomes <code>1000 0000</code>. The Thumb bit belongs to the word read from <code>0x08000080</code>, never to the address of the slot.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>From IRQ 16 to 0x08000080 by hand</h4>
+    </div>
+    <p class="fig-lede">The four steps of the calculation, with the binary of the × 4. Each wrong option skips a step or adds one, shown underneath next to the step it gets wrong.</p>
+    <div data-viz="calc-steps"></div>
+    <p class="step-note" data-role="calc-note" aria-live="polite"></p>
+    <div data-viz="calc"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>The vector table to scale, and slot 32's four bytes</h4>
+    </div>
+    <p class="fig-lede">The start of flash, one 4-byte slot per vector. B and C land on the starts of other slots. Slot 32 is enlarged below, and D points one byte into its word, at the byte that holds the Thumb bit.</p>
+    <div data-viz="table"></div>
+    <div class="legend">
+      <span><i class="sw-seg"></i>core vectors 0–15</span>
+      <span><i class="sw-pri-soft"></i>IRQ n at vector 16 + n</span>
+      <span><i class="sw-ok"></i>vector 32, TIM3</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Vector address = <code>0x08000000</code> + (16 + IRQ) × 4. IRQ 16 is vector 32 at <code>0x08000080</code>. The Thumb bit is in the word stored there, never in the slot's address.</p>
+    <p class="source">Source: L05 slide 27 · Notes: L05 › 17. The vector table and the handler</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc21" data-part="mc" data-num="21" data-topic="Handler name" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 21 · L05, Silent failure: the handler name</p>
+    <h3 class="q-title">Button B's handler is written as below. Everything else in button B's setup is right, and the build reports zero warnings. What happens at the first press of button B?</h3>
+    <pre class="calc">void EXTI0_1_IRQhandler(void)          /* lower-case h */
+{
+    uint32_t mask = 1u &lt;&lt; 1;
+    if ((EXTI-&gt;RPR1 | EXTI-&gt;FPR1) &amp; mask) {
+        EXTI-&gt;RPR1 = mask;
+        EXTI-&gt;FPR1 = mask;
+        b_edges++;
+    }
+}</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>The handler runs as usual, because the linker matches symbol names without regard to case</span>
+      <span class="why">No. C names are case-sensitive, so <code>IRQhandler</code> and <code>IRQHandler</code> are two symbols.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>The CPU jumps to <code>Default_Handler</code>, an infinite loop, and the board hangs</span>
+      <span class="why">Correct. Vector 21 still holds the weak placeholder, which points at <code>Default_Handler</code>.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>Nothing visible happens; the edge stays latched in <code>FPR1</code> and <code>main()</code> keeps running</span>
+      <span class="why">No. That is a masked line, <code>IMR1</code> not set or the NVIC not enabled. Here the IRQ is taken.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The handler is entered again and again, because its pending bit is never cleared</span>
+      <span class="why">No. That needs the handler to run, and the misspelt function never runs at all.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> <code>startup.c</code> fills vector 21 with a weak <code>EXTI0_1_IRQHandler</code> that points at <code>Default_Handler</code>, an infinite loop. Only a function with exactly that name is a strong symbol that replaces it at link time. <code>EXTI0_1_IRQhandler</code> is another name, nothing refers to it, and the linker deletes it as dead code with no warning.</p>
+    <p>At the first press the edge passes EXTI and the NVIC as usual. The CPU reads vector 21, jumps into <code>Default_Handler</code> and stays there, so the heartbeat stops and the serial port goes quiet.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The name is the only connection to vector 21</h4>
+    </div>
+    <p class="fig-lede">What the linker puts into vector 21 for each spelling, and what the build and <code>nm</code> report. Switch between the exact name and the misspelt one.</p>
+    <div data-viz="link-steps"></div>
+    <p class="step-note" data-role="link-note" aria-live="polite"></p>
+    <div data-viz="link"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>What the CPU runs after the first press, per option</h4>
+    </div>
+    <p class="fig-lede">One lane per option, from just before the press. Lane B is what this build does. A, C and D are what a correct name, a masked line and a missing pending clear would give.</p>
+    <div data-viz="lanes"></div>
+    <div class="legend">
+      <span><i class="sw-pri-soft"></i><span><code>main()</code></span></span>
+      <span><i class="sw-sec"></i>the button handler</span>
+      <span><i class="sw-bad"></i><code>Default_Handler</code></span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>The handler's name is the only connection to its vector. A misspelt name builds with zero warnings, the weak placeholder keeps vector 21 on <code>Default_Handler</code>, and the first press hangs the board. Check with <code>nm</code>: your handler must show <code>T</code>.</p>
+    <p class="source">Source: L05 slides 30, 33 · Notes: L05 › 18. Write 1 to clear, and the handler name · L05 › 20. Seven ways to get silence, and the debugger</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc22" data-part="mc" data-num="22" data-topic="Open-drain" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 22 · L05, Push-pull vs open-drain</p>
+    <h3 class="q-title">Two chips must share one wire, and either one may pull it low at any moment, as on I²C's data line. How should each chip's pin be set up?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Push-pull (<code>OTYPER</code> = 0) on both, so each chip drives the wire firmly high and low</span>
+      <span class="why">No. If one drives high while the other drives low, 3.3 V meets GND through two transistors, a short.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Push-pull with <code>OSPEEDR</code> = <code>11</code>, so the faster edges let the right chip win</span>
+      <span class="why">No. <code>OSPEEDR</code> sets the slope of each edge. The short is the same as in A.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>Open-drain (<code>OTYPER</code> = 1) on both, with a pull-up resistor on the wire</span>
+      <span class="why">Correct. Each pin pulls low or lets go, the resistor makes the high, and the wire is 1 only when both let go.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Open-drain (<code>OTYPER</code> = 1) on both, with no resistor, since each chip drives the high itself</span>
+      <span class="why">No. An open-drain pin cannot drive high. With both let go, the wire floats.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> Open-drain switches the P-MOS off for good, so the pin can only pull low through its N-MOS or let go, and the pull-up resistor makes the high. The worst case is both chips pulling low at once, which is harmless, and the wire reads 1 only when every chip lets go. That is a wired-AND, the way I²C shares its two wires.</p>
+    <p>With push-pull (A, B), one chip driving high while the other drives low joins 3.3 V to GND through two transistors. <code>OSPEEDR</code> changes only the slope of each edge. Without the resistor (D) nothing makes the high, and the released wire floats.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Two output stages on one wire</h4>
+    </div>
+    <p class="fig-lede">Each chip's output is a P-MOS to 3.3 V and an N-MOS to GND, driven by its <code>ODR</code> bit. Choose a wiring and what each chip writes, and see which transistors conduct and what the wire does.</p>
+    <div data-viz="mode-steps"></div>
+    <div data-viz="odr-steps"></div>
+    <p class="step-note" data-role="circuit-note" aria-live="polite"></p>
+    <div data-viz="circuit"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>The wire for every pair of outputs</h4>
+    </div>
+    <p class="fig-lede">Each grid is one wiring, each cell one pair of <code>ODR</code> bits. Only open-drain with a pull-up gives a defined level in all four cells, and it is the AND of the two bits.</p>
+    <div data-viz="truth"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>wire high</span>
+      <span><i class="sw-seg"></i>wire low</span>
+      <span><i class="sw-bad"></i>short</span>
+      <span><i class="sw-ter-soft"></i>floats</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Open-drain (<code>OTYPER</code> = 1) pulls low or lets go, and a pull-up makes the high, so chips can share a wire as a wired-AND, as on I²C. Two push-pull outputs driving opposite levels short 3.3 V to GND. <code>OSPEEDR</code> is only the edge slope.</p>
+    <p class="source">Source: L05 slides 7, 8 · Notes: L05 › 5. OTYPER, OSPEEDR and PUPDR in detail</p>
+  </div>
+</article>

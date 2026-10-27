@@ -1,0 +1,351 @@
+<article class="q" id="topic8" data-part="tp" data-num="8" data-topic="UART and Python host">
+  <div class="q-head">
+    <p class="eyebrow">Lesson 08 · Week 7 · 3 of 33 exam questions</p>
+    <h3 class="q-title">UART and a Python Host: Talking to the Board, Properly</h3>
+    <p class="fig-lede">The serial port that printf has used since lesson 04 now works in both directions, driven by interrupts, and a program on the PC talks to it. USART2 is the peripheral model's fourth instance. Receive reuses lesson 07's kernel queue, transmit uses a lock-free ring built on lesson 03's one-writer rule, and every line meant for a program carries an NMEA XOR checksum that host.py, the course's first Python, checks.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. USART2 in the peripheral model (pin maps, slide 1)</h4>
+    <p>"Every row is a slot you already know. That is the whole point of Part 0's model: the fourth peripheral is not a fourth new thing."</p>
+    <div data-viz="model"></div>
+    <ul>
+      <li><b>Pins this lesson wires:</b> PA2 = USART2 TX and PA3 = USART2 RX, both alternate function 1 (MODER 10, AFR 1). PA0 and PA1 are buttons A and B, inputs with pull-ups. PB0–PB7 drive the LED bar, one output bit per LED.</li>
+      <li>USART1 and USART2 share one register set (<code>USART_TypeDef</code>). USART2 sits at <code>0x40004400</code>.</li>
+      <li><b>Defaults left alone:</b> 8 data bits, no parity, 1 stop bit (<b>8N1</b>), no flow control, no prescaler. <code>CR2</code>, <code>CR3</code> and <code>PRESC</code> keep their reset values.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. Six registers out of twelve (slide 1)</h4>
+    <div data-viz="regs"></div>
+    <ul>
+      <li><b>Set up once:</b> <code>BRR</code> and <code>CR1</code> say how fast, which directions and which interrupts.</li>
+      <li><b>Status:</b> <code>ISR</code> says what happened. <code>ICR</code> is where you write 1 to clear a flag of <code>ISR</code>.</li>
+      <li><b>Data:</b> <code>RDR</code> and <code>TDR</code>, one byte each way. They are 9 bits wide for 9-bit frames. This lesson uses 8.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>CR1, ISR and ICR: the enable, the flag and the clear share a bit number</h4></div>
+      <p class="fig-lede">The low byte of each register, bit 7 on the left. Blue cells are the bits this lesson sets or tests. RXNEIE and RXNE are both bit 5, TXEIE and TXE both bit 7, ORE and ORECF both bit 3. The two CR1 rows are the values <code>uart_init()</code> and <code>_write()</code> leave behind.</p>
+      <div data-viz="bits"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. Clock gate, pins and baud rate (slide 1b)</h4>
+    <pre class="calc">RCC-&gt;APBENR1 |= 1u &lt;&lt; 17;             USART2EN              = 0x00020000
+GPIOA-&gt;AFR[0]: PA2 → bits 11:8, PA3 → bits 15:12, AF1 = 0001 in each
+               0x00000100 | 0x00001000                = 0x00001100
+
+BRR = f_clk / baud = 48 000 000 / 115 200 = 416.67 → 417 = 0x1A1
+uart.c rounds:  (48 000 000 + 57 600) / 115 200 = 417   (integer division)
+actual rate:    48 000 000 / 417 = 115 108 baud, 0.08% slow</pre>
+    <ul>
+      <li><code>BRR</code> is "clocks per bit", so the same baud rate needs a different <code>BRR</code> on a different clock. At the 12 MHz reset clock, 115 200 baud needs 12 000 000 / 115 200 = 104.17 → 104.</li>
+      <li>Other rates at 48 MHz: 9600 → 5000, 19 200 → 2500, 57 600 → 833.33 → 833.</li>
+      <li>0.08% is "far inside the few percent a UART tolerates, because the receiver resynchronises on every start bit" (Figure 3).</li>
+      <li>The banner prints <code>BRR = 417</code>, read back from the register.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. One byte on the wire (slide 2)</h4>
+    <ul>
+      <li>The line idles high. A <b>start bit</b> (low) opens the frame, 8 data bits follow <b>least significant bit first</b>, and a <b>stop bit</b> (high) closes it: "10 bit-times per byte".</li>
+      <li><b>Sending:</b> a 90-character line takes about 8 ms, and a polled <code>printf</code> holds the CPU for all of it.</li>
+      <li><b>Receiving:</b> the UART holds <b>one</b> received byte. The next one is complete 86.8 µs later. If software has not read <code>RDR</code> by then, a byte is lost and <code>ORE</code> (overrun) is set.</li>
+    </ul>
+    <pre class="calc">115 200 bits/s ÷ 10 bits per byte = 11 520 bytes/s
+1 / 11 520 = 86.8 µs per byte              (one bit = 8.68 µs)
+90-character line: 90 × 86.8 µs = 7.8 ms ≈ 8 ms
+at 9600 baud: 10 / 9600 = 1.04 ms per byte</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>One byte is 10 bit times: start, b0 to b7, stop</h4></div>
+      <p class="fig-lede">Pick a character of the frame <code>$LED,170*57</code>. The data bits leave least significant bit first, so the wire shows the binary number backwards. The time axis is for 115 200 baud.</p>
+      <div data-viz="frame-steps"></div>
+      <div data-viz="frame"></div>
+      <p class="step-note" data-role="frame-note" aria-live="polite"></p>
+    </figure>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>The receiver samples mid-bit from the start edge, so BRR must match the clock</h4></div>
+      <p class="fig-lede">The PC receives at 115 200 baud. It waits for the falling edge of a start bit, then samples the line in the middle of each of the next 10 bit times. Top: what the board sends for L (0x4C). Bottom: the PC's samples and the byte they make. Switch to a BRR that was computed for the wrong clock.</p>
+      <div data-viz="sample-steps"></div>
+      <p class="step-note" data-role="sample-note" aria-live="polite"></p>
+      <div data-viz="sample"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Why receive must be an interrupt (slide 3)</h4>
+    <ul>
+      <li>"Polling would work only if every path through the program came back to the UART within 86.8 µs." One <code>printf</code> holds a task for 8 ms, and lesson 07's hog never comes back at all.</li>
+      <li>So receive becomes a <b>producer and a consumer</b>. The ISR reads <code>RDR</code> and calls <code>os_queue_put_from_isr()</code>. <code>task_proto</code> calls <code>uart_getc()</code>, which blocks in <code>os_queue_get()</code>.</li>
+      <li>"The ISR meets the hard 86.8 µs deadline with a few dozen instructions. The queue turns it into a soft one": the task only has to catch up before 64 bytes pile up, 64 × 86.8 µs = 5.56 ms.</li>
+      <li>While nothing arrives, the protocol task is blocked and costs nothing (lesson 07, slide 15).</li>
+      <li><code>USART2_IRQn</code> = 28 has NVIC priority 1, above the kernel's SysTick and PendSV at 3. In the NVIC, 0 is the most urgent.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Receive: a hard deadline in the ISR, a soft one in the task</h4></div>
+      <p class="fig-lede">Each byte passes from the pin to RDR, from RDR to the queue (in the ISR) and from the queue to the task. Each hand-off has its own deadline and its own way to lose a byte, counted separately in the statistics.</p>
+      <div data-viz="rx"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. One interrupt, three jobs, five ways to clear a flag (slide 4)</h4>
+    <pre class="calc">void USART2_IRQHandler(void)
+{
+    uint32_t isr = USART2-&gt;ISR;
+    if (isr &amp; USART_ISR_ORE) {                /* overrun             */
+        USART2-&gt;ICR = USART_ICR_ORECF;        /* clear: write 1, ICR */
+        stats.rx_overruns++;
+    }
+    if (isr &amp; USART_ISR_RXNE_RXFNE) {         /* a byte arrived      */
+        uint8_t c = (uint8_t)USART2-&gt;RDR;     /* reading clears RXNE */
+        if (!os_queue_put_from_isr(&amp;rx_queue, &amp;c)) stats.rx_dropped++;
+    }
+    if ((USART2-&gt;CR1 &amp; TXEIE) &amp;&amp; (isr &amp; USART_ISR_TXE_TXFNF)) { ... }
+}</pre>
+    <ul>
+      <li>One vector for everything: the handler reads <code>ISR</code> once and checks all three flags on every entry.</li>
+      <li>The <code>TXE</code> branch also tests <code>TXEIE</code>, because <code>TXE</code> is set whenever the transmitter is idle, even when this handler ran for a received byte.</li>
+      <li>The ISR version of put never blocks. A full queue drops the byte and counts it.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>USART2_IRQHandler: each job clears its own flag in its own way</h4></div>
+      <p class="fig-lede">The three checks run top to bottom on every entry. Pick a cause to follow its path and see what clears the flag that caused the interrupt.</p>
+      <div data-viz="isr-steps"></div>
+      <p class="step-note" data-role="isr-note" aria-live="polite"></p>
+      <div data-viz="isr"></div>
+    </figure>
+    <p>Count the ways a flag is cleared in this course so far:</p>
+    <div data-viz="clear"></div>
+    <p>Five conventions on one chip. The slide's habit: "for every flag, look up how it clears." The penalty for guessing is an interrupt that never stops.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Transmit: a lock-free ring (slide 5)</h4>
+    <p>Sending goes the other way: tasks produce, the interrupt consumes.</p>
+    <pre class="calc">static uint8_t           tx_ring[256];
+static volatile uint16_t tx_head;   /* written ONLY by tasks (producer) */
+static volatile uint16_t tx_tail;   /* written ONLY by the ISR (consumer) */
+
+static void tx_put(uint8_t c)
+{
+    uint16_t next = (tx_head + 1) % 256;
+    while (next == tx_tail) { os_delay(1); }    /* full: let the ISR drain */
+    tx_ring[tx_head] = c;                        /* 1. the data            */
+    tx_head = next;                              /* 2. THEN publish it     */
+}</pre>
+    <ul>
+      <li>"No mutex, no masked interrupts, because <b>each index has exactly one writer</b>." Tasks read <code>tail</code> and write <code>head</code>. The ISR reads <code>head</code> and writes <code>tail</code>. This is lesson 03 slide 7's safe case (a single aligned word written by exactly one context), applied twice.</li>
+      <li><b>Data before index.</b> If <code>head</code> moved first, the ISR could send a slot that has not been filled yet.</li>
+      <li><b>One slot always empty.</b> <code>head == tail</code> means empty. If the ring could fill completely, full would look identical. So 256 slots hold at most 255 bytes.</li>
+      <li>Bytes waiting = (head − tail) mod 256. The size is a power of two, so <code>% 256</code> becomes a mask.</li>
+      <li>The RX side uses a kernel queue with locking inside, the TX side a ring without any, on purpose, so you have seen both.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>The ring, step by step: tasks move head, the ISR moves tail</h4></div>
+      <p class="fig-lede">Drawn with 8 slots so every state fits. The real ring has 256 and works the same way. head (blue, above) is written only by tasks, tail (plum, below) only by the ISR. Filled slots hold bytes waiting to be sent. Grey letters are old bytes that were already sent: only the two indices say which slots are valid.</p>
+      <div data-viz="ring-steps"></div>
+      <p class="step-note" data-role="ring-note" aria-live="polite"></p>
+      <div data-viz="ring"></div>
+      <div class="legend">
+        <span><i class="sw-pri-soft"></i>waiting to be sent</span>
+        <span><i class="sw-ter-soft"></i>written, head not moved yet</span>
+        <span><i class="sw-seg"></i>free (old byte or never used)</span>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. TXEIE: on only while there is work (slide 6)</h4>
+    <p><code>TXE</code> means "the transmit register is empty". When the UART is idle it is empty all the time, so a permanently enabled <code>TXEIE</code> would interrupt continuously.</p>
+    <pre class="calc">/* in the ISR */
+if (tx_tail != tx_head) {
+    USART2-&gt;TDR = tx_ring[tx_tail];           /* send one, clears TXE   */
+    tx_tail = (tx_tail + 1) % 256;
+} else {
+    USART2-&gt;CR1 &amp;= ~USART_CR1_TXEIE_TXFNFIE;  /* nothing left: stop     */
+}
+
+/* in _write(), after filling the ring: CR1 0x2D → 0xAD */
+__disable_irq();
+USART2-&gt;CR1 |= USART_CR1_TXEIE_TXFNFIE;
+__enable_irq();</pre>
+    <ul>
+      <li>The interrupt request is <code>TXE</code> AND <code>TXEIE</code>. <code>TXE</code> is a level that stays 1 while <code>TDR</code> is empty, so only <code>TXEIE</code> can stop the requests.</li>
+      <li><b>Measured</b> with the <code>else</code> line removed: "nothing is printed at all, not even the banner." The ISR sent the first character, found the ring empty and was called again and again at priority 1, "above everything that could ever put more data in". Lesson 05's endless interrupt, in a new costume.</li>
+      <li><code>_write()</code> sets <code>TXEIE</code> with a read-modify-write of <code>CR1</code>, which the ISR also writes. So that one line is a <b>critical section</b>, two instructions long. Two contexts doing read-modify-write on one register is lesson 03's lost-update hazard, so <code>_write()</code> masks interrupts around it.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>TXE stays 1 when idle, so TXEIE decides when the handler runs</h4></div>
+      <p class="fig-lede"><code>_write()</code> puts 3 bytes in the ring at time 0 and sets TXEIE. TDR plus the shift register hold two bytes, so the first two leave the ring at once and the third one byte time later. Compare the handler with and without the line that turns TXEIE off.</p>
+      <div data-viz="txe-steps"></div>
+      <p class="step-note" data-role="txe-note" aria-live="polite"></p>
+      <div data-viz="txe"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Replacing printf's back end: weak again (slide 7)</h4>
+    <pre class="calc">/* _lib/retarget.c */
+__attribute__((weak)) int _write(int fd, const char *buf, int len) { ...polled... }
+
+/* 08_UART_And_Python_Host/uart.c */
+int _write(int fd, const char *buf, int len) { ...ring buffer... }</pre>
+    <ul>
+      <li><code>printf</code> has called <code>_write()</code> since lesson 04. <code>retarget.c</code>'s version polls, and it is marked weak.</li>
+      <li>"A strong definition beats a weak one at link time." This is the same mechanism as the vector table (lesson 05, slide 30), where a correctly named handler replaces the weak <code>Default_Handler</code> alias.</li>
+      <li>The lesson keeps <code>retarget.c</code>'s syscall stubs and replaces exactly one function. <code>printf</code> does not know anything changed. It now returns as soon as the text is in the ring, before the last bit has left the pin.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 8</span><h4>One name, two definitions: the linker keeps the strong one</h4></div>
+      <p class="fig-lede">Both object files define <code>_write</code>. Two strong definitions would be a link error. One weak and one strong is legal, and the weak one is dropped. The vector table uses the same rule for <code>USART2_IRQHandler</code>.</p>
+      <div data-viz="weak"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Two tasks, one serial port (slide 8)</h4>
+    <pre class="calc">static void say(const char *fmt, ...)
+{
+    va_list ap;  va_start(ap, fmt);
+    os_mutex_lock(&amp;print_lock);
+    vprintf(fmt, ap);
+    os_mutex_unlock(&amp;print_lock);
+    va_end(ap);
+}</pre>
+    <ul>
+      <li>The telemetry task and the protocol task both print. Without coordination, two lines can interleave character by character, and a line that is half one frame and half another fails its checksum on the PC.</li>
+      <li>Lesson 07's mutex makes each line atomic. Only tasks print through <code>say()</code>. An ISR could not take the mutex, because locking may block.</li>
+      <li>Second reason: newlib-nano's <code>printf</code> keeps state in one shared structure and is <b>not re-entrant</b>. Two tasks inside it at once can corrupt each other's output even when the timing looks harmless.</li>
+      <li>The lesson makes no measured claim here. In Renode the UART sends instantly, so the window never opened.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 9</span><h4>Without the lock, a preempting task splits a frame</h4></div>
+      <p class="fig-lede">The telemetry task (kernel priority 2) is part-way through its frame when <code>$LED,85*6C</code> arrives. The protocol task (priority 3, more urgent in the kernel's numbering) wakes and prints its reply. Each character sits in the column where it goes out on the wire.</p>
+      <div data-viz="mix-steps"></div>
+      <p class="step-note" data-role="mix-note" aria-live="polite"></p>
+      <div data-viz="mix"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. Lines for people, frames for programs, keys (slides 9, 9b)</h4>
+    <p>The protocol task collects bytes until <code>\r</code> or <code>\n</code>, then looks at the first character:</p>
+    <div data-viz="lines"></div>
+    <ul>
+      <li>"A person wants words and forgiveness. A program wants a format it can parse and proof the line arrived intact", because a serial line picks up noise, drops bytes when a buffer overflows, and gets cut in half when a cable is pulled.</li>
+      <li>A line longer than 63 characters is thrown away whole instead of being acted on in part.</li>
+      <li><b>Keys.</b> On a raw terminal each key is sent when you press it. A letter is one byte, an arrow key is three: <code>ESC [ A</code> to <code>ESC [ D</code>, with <code>ESC</code> = 0x1B. <code>keys.c</code> is a state machine with the frame's structure: a start byte, a body, and a <b>final byte</b> 0x40–0x7E that ends it, the part the <code>*</code> plays in a frame.</li>
+      <li>A <b>lone Esc</b> is the same 0x1B that starts every sequence. Only time tells them apart: 50 ms of silence.</li>
+      <li><b>A <code>$</code> line is never echoed</b>, or <code>host.py</code> would read it as a frame from the board. <b>Telemetry waits while a line is half typed</b>, or the board would send <code>sta$TEL,...</code>, which <code>host.py</code> skips because the line does not start with <code>$</code>.</li>
+    </ul>
+    <div data-viz="keys"></div>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 10</span><h4>One byte stream, three kinds of input</h4></div>
+      <p class="fig-lede">Every byte from <code>uart_getc()</code> goes through the key decoder first. Ordinary bytes are collected into a line, and Enter sends the line to the frame check or the shell. Pick an input to follow its path.</p>
+      <div data-viz="cls-steps"></div>
+      <p class="step-note" data-role="cls-note" aria-live="polite"></p>
+      <div data-viz="cls"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. The frame: NMEA 0183 and its XOR checksum (slide 10)</h4>
+    <pre class="calc">$LED,170*57
+ \_____/ \/
+  body   checksum: XOR of every byte of the body, two hex digits
+
+L  E  D  ,  1  7  0
+4C 45 44 2C 31 37 30    XOR all seven  -&gt;  0x57</pre>
+    <ul>
+      <li>"This is NMEA 0183, the sentence format GPS receivers have printed since the 1980s." The body is everything between <code>$</code> and <code>*</code>. Neither of the two is included.</li>
+      <li><code>host.py --selftest</code> checks its own arithmetic against a real GPS sentence (<code>$GPGGA,...*47</code>), so this is the NMEA checksum, not one that merely agrees with itself.</li>
+      <li>XOR of bytes is the <b>parity of each bit column</b>: checksum bit k is 1 when an odd number of body bytes have bit k set.</li>
+      <li><b>Catches any single flipped bit.</b> <code>$LED,171*57</code> (0 → 1, one bit) is rejected: the checksum comes out 56.</li>
+      <li><b>Misses two errors in the same bit position of different bytes</b>: they cancel. A CRC catches those. MAVLink, the drone protocol of lessons 13–14, uses one.</li>
+      <li>Replies: <code>$ACK,...</code> when the frame is good, <code>$NAK,CHECKSUM</code> on a mismatch, <code>$NAK,NOSTAR</code> when there is no <code>*</code>. "A frame that fails its checksum is thrown away and counted, never half-used."</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 11</span><h4>The checksum of LED,170 by hand: XOR one byte at a time</h4></div>
+      <p class="fig-lede">Each row is one byte of the body in binary. The right column is the running XOR. By hand, work one hex digit (nibble) at a time: 4 ^ 4 = 0 and C ^ 5 = 9, so 4C ^ 45 = 09.</p>
+      <div data-viz="xor-steps"></div>
+      <p class="step-note" data-role="xor-note" aria-live="polite"></p>
+      <div data-viz="xor"></div>
+    </figure>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 12</span><h4>What XOR detects: a column that changes parity</h4></div>
+      <p class="fig-lede">The board receives the body with damage and recomputes the XOR. It compares the result with the 57 that came with the frame. Red rings mark the flipped bits.</p>
+      <div data-viz="det-steps"></div>
+      <p class="step-note" data-role="det-note" aria-live="polite"></p>
+      <div data-viz="det"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. A measured session and host.py, the other end (slides 11–13)</h4>
+    <pre class="calc">help            -&gt; commands: led &lt;0-255&gt;   rate &lt;20-5000 ms&gt;   quiet   stats   help
+led 170         -&gt; bar = 0xAA
+$LED,85*6C      -&gt; $ACK,LED,85*09
+$LED,85*00      -&gt; $NAK,CHECKSUM*65          (damaged on purpose)
+$LED,85         -&gt; $NAK,NOSTAR*7D            (no checksum at all)
+bogus           -&gt; unknown command 'bogus' - try help
+$RATE,250*19    -&gt; $ACK,RATE,250*7C
+$STAT*12        -&gt; $STAT,71,3,2,0,0,0*25     (71 bytes in, 3 frames ok, 2 bad)
+
+telemetry:  $TEL,1000,0,500,0,0*75   $TEL,2000,1,1000,0,0*43   $TEL,2250,2,875,0,0*7C</pre>
+    <div data-viz="host"></div>
+    <ul>
+      <li><code>host.py</code> is about 230 lines of Python. Its only dependency is pyserial.</li>
+      <li><b>Why three routes?</b> Wokwi in a browser keeps its serial port inside the browser, and nothing on the PC can open it. So the browser route is to copy the serial monitor's text into a file. The VS Code extension forwards the port as RFC2217 on TCP port 4000, which pyserial speaks natively. A real board is just <code>COM5</code>.</li>
+      <li>"The protocol being printable is what makes the copy-and-paste route possible at all. A binary protocol could not survive a text box."</li>
+      <li><b>Slide 13:</b> every frame the C code built passed the Python check, and every frame Python built was accepted by the C check. "Two implementations, two languages, one arithmetic, each testing the other."</li>
+      <li><code>--demo</code>: a line altered in transit is counted <b>bad</b>, and the sequence number it carried never arrives intact, so it is <b>also</b> a gap.</li>
+      <li>Counts from measured runs are not exam material (guide §1). The mechanisms behind them are.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>14. The silent-failure checklist, UART edition (slide 14)</h4>
+    <div data-viz="check"></div>
+    <p>The last two rows are design questions: which context may wait, and which data is shared. Lessons 03 and 07 are why you can reason about them.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>15. What carries forward (slide 15)</h4>
+    <ul>
+      <li>"Every later peripheral that moves a stream of data looks like this": an interrupt that feeds or drains a buffer, and a task that blocks. Lesson 10 replaces the per-byte interrupt with <b>DMA</b>, one interrupt per block.</li>
+      <li>The board now has a partner. Lesson 09 sends real sensor readings in <code>$TEL</code> frames and <code>host.py</code> plots them. Part 3 swaps this protocol for <b>MAVLink</b>, and <code>host.py</code> for mission software that flies a drone.</li>
+      <li><b>Checked data, not trusted data.</b> A frame that fails its checksum is thrown away and counted. That rule scales from a text line to a flight controller.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>General idea vs this chip</h4>
+    <div data-viz="contrast"></div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li><code>BRR</code> = f_clk / baud, rounded: 48 000 000 / 115 200 = 416.67 → 417 (0x1A1, 0.08% slow). At 48 MHz, 9600 baud → 5000. At the 12 MHz reset clock, 115 200 baud → 104.</li>
+      <li>Byte time = 10 / baud (start + 8 data + stop): 86.8 µs at 115 200 (11 520 bytes/s), 1.04 ms at 9600. The UART holds one received byte, so the ISR has one byte time to read <code>RDR</code>.</li>
+      <li>Bits: <code>CR1</code> UE 0, RE 2, TE 3, RXNEIE 5, TXEIE 7 → 0x2D idle, 0xAD sending. <code>ISR</code> ORE 3, RXNE 5, TXE 7. <code>ICR</code> ORECF 3.</li>
+      <li>Clearing: RXNE by reading <code>RDR</code>, TXE by writing <code>TDR</code>, ORE by writing 1 to ORECF in <code>ICR</code>. Compare EXTI (write 1), TIM <code>UIF</code> (write 0), <code>CC1IF</code> (read <code>CCR1</code>).</li>
+      <li><code>USART2_IRQn</code> = 28: vector 16 + 28 = 44 at 0x08000000 + 44 × 4 = 0x080000B0. One vector for all three jobs, NVIC priority 1 (0 is most urgent), above the kernel's 3.</li>
+      <li>TX ring: <code>head</code> written only by tasks, <code>tail</code> only by the ISR. Store the data, then move <code>head</code>. <code>head == tail</code> means empty, so 256 slots hold 255 bytes.</li>
+      <li><code>TXEIE</code> left on with an empty ring gives an interrupt storm, because TXE is 1 whenever the transmitter is idle. The <code>CR1 |= TXEIE</code> in <code>_write()</code> is a critical section because the ISR also writes <code>CR1</code>.</li>
+      <li>uart.c's strong <code>_write()</code> beats retarget.c's weak one at link time, like a handler name in the vector table.</li>
+      <li>An ISR never blocks: <code>os_queue_put_from_isr()</code> drops a byte (rx_dropped) when the queue is full. Tasks print through a mutex, or lines interleave and checksums fail.</li>
+      <li>NMEA checksum = XOR of the bytes between <code>$</code> and <code>*</code>: <code>LED,170</code> → 57, <code>PING</code> → 10. It catches any single flipped bit (<code>LED,171</code> → 56) and misses two flips in the same bit position (<code>LED,060</code> also gives 57).</li>
+    </ul>
+    <p class="source">Slides: L08 slides 1–15 and the two pin-map slides · Notes: 09_Week7_L08_UART_PythonHost.md · Guide: §3 Lesson 08</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lesson</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

@@ -1,0 +1,167 @@
+<article class="q" id="exam1" data-part="ex" data-num="1" data-topic="The exam and how to prepare">
+  <div class="q-head">
+    <p class="eyebrow">From the professor's midterm guide · exam_midterm_overview.md</p>
+    <h3 class="q-title">The exam and how to prepare</h3>
+    <p class="fig-lede">The midterm is 33 multiple-choice questions on lessons 00 to 08. The three samples on this page copy its format and spread. This card collects the professor's rules, the study plan, the key contrasts and the fact sheet, with links to the lesson explainers below.</p>
+  </div>
+  <div class="sol-part">
+    <h4>Format</h4>
+    <div class="scroll"><table class="tbl"><tbody>
+<tr><td class="l">Duration</td><td class="l"><strong>60 minutes</strong></td></tr>
+<tr><td class="l">Questions</td><td class="l"><strong>33 multiple choice</strong>, one mark each, total 33</td></tr>
+<tr><td class="l">Answers</td><td class="l">Four options, A–D. Choose exactly one. Only the answer sheet on the cover page is marked</td></tr>
+<tr><td class="l">Wrong answers</td><td class="l">No penalty, so answer every question. About 1 minute 50 seconds each: mark a best guess and come back</td></tr>
+<tr><td class="l">Materials</td><td class="l"><strong>None.</strong> Closed book, no notes, no calculator, no electronic devices</td></tr>
+<tr><td class="l">Pen</td><td class="l">Blue or black, non-erasable. No pencil, highlighter or correction pen</td></tr>
+<tr><td class="l">Identification</td><td class="l">Name in capitals, student ID and section number on every page. A wrong section number is penalised</td></tr>
+</tbody></table></div>
+  </div>
+  <div class="sol-part">
+    <h4>What the questions ask</h4>
+    <ul>
+      <li><strong>Predict behaviour.</strong> "This code does X; what does the board do?" Many are silent failures: the code compiles with no warning, then does nothing or hangs.</li>
+      <li><strong>Calculate by hand.</strong> Bit positions and register values for a pin, a 32-bit value in hex, little-endian bytes, an IRQ's vector address, PSC and ARR, BRR. The numbers work without a calculator.</li>
+      <li><strong>Choose the correct line of code</strong> out of four, for example the statement that clears a flag correctly.</li>
+      <li><strong>Name the concept:</strong> the general idea behind a mechanism, its alternatives, and which one this chip picked.</li>
+      <li>Never asked: writing code, a register address the question does not give, or numbers from a measured run.</li>
+    </ul>
+  </div>
+  <div class="sol-part">
+    <h4>Scope and spread</h4>
+    <p>Everything in the decks of lessons 00 to 08. Lesson 09 and later are not on the exam. Every lesson gives 2 to 5 questions, roughly in proportion to its size. Each sample uses this split.</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Where the 33 questions of a sample come from</h4></div>
+      <p class="fig-lede">One square per question, grouped by lesson. Part 0 (models) gives 14 questions, Part 1 (instances) gives 19.</p>
+      <div data-viz="spread"></div>
+    </figure>
+    <div class="scroll"><table class="tbl"><thead><tr><th class="l">Lesson</th><th class="l">Deck</th><th class="l">Part</th><th class="l">In each sample</th><th>Count</th></tr></thead><tbody>
+<tr><td class="l"><a href="#topic0">L00</a></td><td class="l">The Programmer&#x27;s Model</td><td class="l">Part 0: models</td><td class="l">Q1–4</td><td>4</td></tr>
+<tr><td class="l"><a href="#topic1">L01</a></td><td class="l">Instruction Set</td><td class="l">Part 0: models</td><td class="l">Q5–8</td><td>4</td></tr>
+<tr><td class="l"><a href="#topic2">L02</a></td><td class="l">Development</td><td class="l">Part 0: models</td><td class="l">Q9–11</td><td>3</td></tr>
+<tr><td class="l"><a href="#topic3">L03</a></td><td class="l">Execution and Concurrency</td><td class="l">Part 0: models</td><td class="l">Q12–14</td><td>3</td></tr>
+<tr><td class="l"><a href="#topic4">L04</a></td><td class="l">Startup and the Linker Script</td><td class="l">Part 1: instances</td><td class="l">Q15–17</td><td>3</td></tr>
+<tr><td class="l"><a href="#topic5">L05</a></td><td class="l">GPIO and Interrupts</td><td class="l">Part 1: instances</td><td class="l">Q18–22</td><td>5</td></tr>
+<tr><td class="l"><a href="#topic6">L06</a></td><td class="l">Time and Timers</td><td class="l">Part 1: instances</td><td class="l">Q23–26</td><td>4</td></tr>
+<tr><td class="l"><a href="#topic7">L07</a></td><td class="l">RTOS</td><td class="l">Part 1: instances</td><td class="l">Q27–30</td><td>4</td></tr>
+<tr><td class="l"><a href="#topic8">L08</a></td><td class="l">UART and a Python Host</td><td class="l">Part 1: instances</td><td class="l">Q31–33</td><td>3</td></tr>
+</tbody></table></div>
+  </div>
+  <div class="sol-part">
+    <h4>How to prepare</h4>
+    <ol class="subq">
+      <li><span class="tag">1</span><span><strong>Answer every "What You Should Be Able to Say" slide</strong> at the end of lessons 00–03 out loud, without looking. Each of <a href="#topic0">Topic 0</a>, <a href="#topic1">1</a>, <a href="#topic2">2</a> and <a href="#topic3">3</a> answers its slide.</span></li>
+      <li><span class="tag">2</span><span><strong>Walk the silent-failure checklists:</strong> lesson 05 slide 33, lesson 06 slide 17, lesson 08 slide 14. For each row, explain why that symptom follows. The tables with a "why" column are in <a href="#topic5">Topic 5</a>, <a href="#topic6">Topic 6</a> and <a href="#topic8">Topic 8</a>.</span></li>
+      <li><span class="tag">3</span><span><strong>Practise the arithmetic</strong> until it is automatic: pin bit positions, clear-then-set on a reset value, BSRR values and vector addresses (<a href="#topic5">Topic 5</a>), PSC and ARR (<a href="#topic6">Topic 6</a>), BRR and XOR checksums (<a href="#topic8">Topic 8</a>), little-endian decoding (<a href="#topic0">Topic 0</a>). Start with the practice problems below; every sample has each kind.</span></li>
+      <li><span class="tag">4</span><span><strong>Know how each flag clears</strong> (lesson 08 slide 4, <a href="#topic8">Topic 8</a>) and <strong>which priority numbering is in use</strong> (lesson 07 slide 9, <a href="#topic7">Topic 7</a>).</span></li>
+      <li><span class="tag">5</span><span><strong>For each mechanism, know the general idea and this chip's answer:</strong> I/O model, address spaces, instruction-set model, flags, return address, address binding, dispatch, mutual exclusion, scheduling. The contrast table below lists them.</span></li>
+      <li><span class="tag">6</span><span><strong>Bring</strong> a blue or black pen. Nothing else is allowed on the desk.</span></li>
+    </ol>
+  </div>
+  <div class="sol-part">
+    <h4>Key contrasts: expect these</h4>
+    <p>Several questions test a pair of ideas. Know both sides, which one this chip uses, and what follows from it in practice: the questions describe a situation and ask what happens.</p>
+    <div class="scroll"><table class="tbl"><thead><tr><th class="l">Pair</th><th class="l">This chip</th><th class="l">What follows</th><th class="l">Where</th></tr></thead><tbody>
+<tr><td class="l"><strong>Load–store</strong> vs register–memory</td><td class="l">load–store</td><td class="l"><code>x++</code> on memory is 3 instructions (<code>ldr</code>, <code>adds</code>, <code>str</code>), but the same 2 bus accesses as x86's single instruction; read-modify-write has a gap an interrupt can land in</td><td class="l"><a href="#topic1">L01</a>, slide 4</td></tr>
+<tr><td class="l"><strong>RISC</strong> vs CISC</td><td class="l">RISC (Thumb)</td><td class="l">fixed 2/4-byte instructions: simple decoder, uniform pipeline; costs more instructions, not more memory traffic</td><td class="l"><a href="#topic1">L01</a>, slides 2, 4</td></tr>
+<tr><td class="l"><strong>Memory-mapped</strong> vs port-mapped (isolated) I/O</td><td class="l">memory-mapped</td><td class="l">peripherals are reached by ordinary <code>ldr</code>/<code>str</code>; with no MMU, a stray pointer can write a peripheral</td><td class="l"><a href="#topic0">L00</a>, slides 4, 8, 15</td></tr>
+<tr><td class="l"><strong>Von Neumann</strong> vs Harvard</td><td class="l">one address space</td><td class="l"><code>const</code> data in flash is read by ordinary <code>ldr</code>; no <code>PROGMEM</code>/<code>LPM</code>; separate buses on some cores don't change the map</td><td class="l"><a href="#topic0">L00</a>, slide 4</td></tr>
+<tr><td class="l"><strong>Polling</strong> vs interrupt (vs DMA)</td><td class="l">all three are used</td><td class="l">polling is simple but depends on the loop coming back and samples (filters) fast events; an interrupt sees every edge, wanted or not</td><td class="l"><a href="#topic3">L03</a>, slide 1; <a href="#topic5">L05</a>, slides 20–22, 32</td></tr>
+<tr><td class="l"><strong>Cooperative</strong> (superloop) vs <strong>preemptive</strong> (RTOS) scheduling</td><td class="l">both, lessons 06 and 07</td><td class="l">cooperative: a job stops only when it returns, so one CPU hog freezes everything; preemptive: the kernel's tick takes the CPU away</td><td class="l"><a href="#topic6">L06</a>, slide 4; <a href="#topic7">L07</a>, slides 1, 9, 11</td></tr>
+<tr><td class="l">Condition codes vs compare-and-branch</td><td class="l">condition codes (N Z C V)</td><td class="l"><code>cmp</code> then a branch; signed (<code>blt</code>) vs unsigned (<code>bcc</code>) branches</td><td class="l"><a href="#topic1">L01</a>, slide 7</td></tr>
+<tr><td class="l">Link register vs stack-based return</td><td class="l">link register</td><td class="l"><code>bl</code> saves the return in <code>LR</code>; non-leaf functions must <code>push {lr}</code></td><td class="l"><a href="#topic1">L01</a>, slide 8</td></tr>
+<tr><td class="l">Vectored vs non-vectored interrupts</td><td class="l">vectored, table of addresses</td><td class="l">the handler's <em>name</em> puts its address in the table</td><td class="l"><a href="#topic0">L00</a>, slide 9</td></tr>
+<tr><td class="l">Compile-, load- or run-time address binding</td><td class="l">build time</td><td class="l">no loader, no MMU, so you write the linker script</td><td class="l"><a href="#topic2">L02</a>, slide 2</td></tr>
+</tbody></table></div>
+  </div>
+  <div class="sol-part">
+    <h4>Formula and fact sheet</h4>
+    <p>These count as known in the exam, so a question may rely on them without giving them.</p>
+    <div class="scroll"><table class="tbl"><thead><tr><th class="l">Quantity</th><th class="l">Formula / fact</th></tr></thead><tbody>
+<tr><td class="l">Bits per hex digit</td><td class="l">4</td></tr>
+<tr><td class="l">GPIO bit position, pin <em>n</em></td><td class="l">1-bit regs: <em>n</em> · 2-bit regs: 2*n*+1:2*n* · <code>AFR[n/8]</code>: 4(<em>n</em> mod 8)+3:4(<em>n</em> mod 8) · <code>BSRR</code>: <em>n</em> set, <em>n</em>+16 reset</td></tr>
+<tr><td class="l"><code>MODER</code> codes</td><td class="l">00 in · 01 out · 10 AF · 11 analog</td></tr>
+<tr><td class="l"><code>PUPDR</code> codes</td><td class="l">00 none · 01 up · 10 down</td></tr>
+<tr><td class="l">Vector number of IRQ <em>n</em></td><td class="l">16 + <em>n</em></td></tr>
+<tr><td class="l">Vector address</td><td class="l"><code>0x08000000 + (16 + n) × 4</code></td></tr>
+<tr><td class="l">NVIC priority byte</td><td class="l"><code>IPR[n/4]</code>, byte <em>n</em> mod 4, value <code>prio &lt;&lt; 6</code> (4 levels, 0 most urgent)</td></tr>
+<tr><td class="l">Timer count rate</td><td class="l">f / (PSC + 1)</td></tr>
+<tr><td class="l">Timer update rate</td><td class="l">f / ((PSC + 1)(ARR + 1))</td></tr>
+<tr><td class="l">SysTick <code>LOAD</code></td><td class="l">ticks − 1 (24 bits max)</td></tr>
+<tr><td class="l">UART <code>BRR</code></td><td class="l">f / baud (rounded)</td></tr>
+<tr><td class="l">UART byte time</td><td class="l">10 / baud</td></tr>
+<tr><td class="l"><code>uint32_t</code> ms wrap</td><td class="l">2³² ms ≈ 49.7 days</td></tr>
+<tr><td class="l">Elapsed time</td><td class="l"><code>now - start</code> (unsigned)</td></tr>
+<tr><td class="l">Memory</td><td class="l">Flash 32 KB @ <code>0x08000000</code> · SRAM 12 KB @ <code>0x20000000</code> · top of RAM <code>0x20003000</code></td></tr>
+<tr><td class="l">Bases</td><td class="l">RCC <code>0x40021000</code> · USART2 <code>0x40004400</code> · TIM3 <code>0x40000400</code> · EXTI <code>0x40021800</code> · GPIOA <code>0x50000000</code> · GPIOB <code>0x50000400</code> · SysTick <code>0xE000E010</code> · NVIC <code>0xE000E100</code> · SCB <code>0xE000ED00</code></td></tr>
+<tr><td class="l">Clock</td><td class="l">reset 12 MHz (HSI48 ÷ 4) → 48 MHz with 1 flash wait state</td></tr>
+<tr><td class="l"><code>EXC_RETURN</code></td><td class="l"><code>0xFFFFFFF9</code> Thread/MSP · <code>0xFFFFFFFD</code> Thread/PSP · <code>0xFFFFFFF1</code> Handler</td></tr>
+<tr><td class="l">Hardware-stacked registers</td><td class="l"><code>r0</code>–<code>r3</code>, <code>r12</code>, <code>lr</code>, <code>pc</code>, <code>xPSR</code> (8 words)</td></tr>
+</tbody></table></div>
+  </div>
+  <div class="sol-part">
+    <h4>The guide's practice problems</h4>
+    <p>The professor calls these "similar in kind and difficulty to the exam" but not the exam's questions. Try each one, then open it for the answer.</p>
+    <div class="related">
+<details class="rel"><summary><span class="qid">P1</span><span>Which bits of <code>GPIOB-&gt;MODER</code> belong to PB3, and what value makes PB3 an output?</span></summary><div class="rel-body"><p>Bits 7:6 (2*n*+1:2*n* with <em>n</em> = 3). Write <code>01</code>.</p></div></details>
+<details class="rel"><summary><span class="qid">P2</span><span>Write the single <code>BSRR</code> value that sets PB1 high and PB6 low and leaves every other pin of port B alone.</span></summary><div class="rel-body"><p><code>(1u &lt;&lt; 1) | (1u &lt;&lt; (6 + 16))</code> = <code>0x00000002 | 0x00400000</code> = <strong><code>0x00400002</code></strong>.</p></div></details>
+<details class="rel"><summary><span class="qid">P3</span><span>PA9 needs alternate function 1. Which register and which bits hold PA9's AF number?</span></summary><div class="rel-body"><p><code>AFR[1]</code> (9 / 8 = 1). 9 mod 8 = 1, so bits 7:4. Write <code>0001</code>.</p></div></details>
+<details class="rel"><summary><span class="qid">P4</span><span><code>GPIOA-&gt;PUPDR</code> reads <code>0x24000000</code>. What does it read after enabling a pull-up on PA4 with the clear-then-set idiom?</span></summary><div class="rel-body"><p>PA4's field is bits 9:8. Clearing them leaves <code>0x24000000</code>, and OR-ing <code>1 &lt;&lt; 8</code> gives <strong><code>0x24000100</code></strong>.</p></div></details>
+<details class="rel"><summary><span class="qid">P5</span><span><code>EXTI4_15_IRQn</code> is IRQ 7. What is its vector number, and at which address is its vector?</span></summary><div class="rel-body"><p>Vector 16 + 7 = 23. Address <code>0x08000000 + 23 × 4</code> = <code>0x08000000 + 92</code> = <strong><code>0x0800005C</code></strong>.</p></div></details>
+<details class="rel"><summary><span class="qid">P6</span><span>At 48 MHz, choose <code>PSC</code> and <code>ARR</code> for a timer that counts at 1 MHz and updates every 1 ms.</span></summary><div class="rel-body"><p><code>PSC = 47</code> (48 MHz / 48 = 1 MHz). <code>ARR = 999</code> (1000 counts = 1 ms).</p></div></details>
+<details class="rel"><summary><span class="qid">P7</span><span>What value of <code>BRR</code> gives 9600 baud at 48 MHz, and how long does one byte take on the wire?</span></summary><div class="rel-body"><p>48 000 000 / 9600 = <strong>5000</strong>. One byte = 10 bits / 9600 ≈ <strong>1.04 ms</strong>.</p></div></details>
+<details class="rel"><summary><span class="qid">P8</span><span><code>start = 0xFFFFFF00</code> and now <code>millis()</code> returns <code>0x00000100</code>. What does <code>millis() - start</code> give, and is a 500 ms timeout expired?</span></summary><div class="rel-body"><p><code>0x00000100 − 0xFFFFFF00</code> = <code>0x00000200</code> = <strong>512 ms</strong>, modulo 2³². Yes, 512 ≥ 500, so it has expired. Compare the wrong form, <code>millis() &gt;= start + 500</code>. Here <code>start + 500</code> wraps to <code>0x000000F4</code>. Only 16 ms after <code>start</code>, when <code>millis()</code> is <code>0xFFFFFF10</code>, that test is already true, so the timeout fires about 484 ms early. Only the subtraction form is always right.</p></div></details>
+<details class="rel"><summary><span class="qid">P9</span><span>Compute the NMEA checksum of the body <code>LED,1</code>.</span></summary><div class="rel-body"><p><code>L</code>=<code>0x4C</code>, <code>E</code>=<code>0x45</code>, <code>D</code>=<code>0x44</code>, <code>,</code>=<code>0x2C</code>, <code>1</code>=<code>0x31</code>. <code>4C ^ 45 = 09</code>, <code>^ 44 = 4D</code>, <code>^ 2C = 61</code>, <code>^ 31 = 50</code>. Frame: **<code>$LED,1*50</code>**.</p></div></details>
+<details class="rel"><summary><span class="qid">P10</span><span>The first data record of a hex file contains the bytes <code>00 30 00 20 C5 06 00 08</code>. What are the initial SP and the reset handler's actual address?</span></summary><div class="rel-body"><p>Little-endian: SP = <strong><code>0x20003000</code></strong> (top of 12 KB RAM). Reset vector = <code>0x080006C5</code>, so the handler is at <strong><code>0x080006C4</code></strong> (bit 0 is the Thumb bit).</p></div></details>
+<details class="rel"><summary><span class="qid">P11</span><span>Sort these by where they live and whether they cost flash: <code>const char msg[] = "hi";</code>, <code>int total;</code>, <code>int limit = 50;</code>.</span></summary><div class="rel-body"><p><code>msg</code>: <code>.rodata</code>, flash only. <code>total</code>: <code>.bss</code>, RAM only, no flash. <code>limit</code>: <code>.data</code>, RAM <strong>and</strong> flash.</p></div></details>
+<details class="rel"><summary><span class="qid">P12</span><span>A global <code>uint32_t</code> is written only by an ISR and only read by <code>main()</code>. Does it need <code>volatile</code>? Does it need a critical section?</span></summary><div class="rel-body"><p>It needs <code>volatile</code>, so <code>main()</code> really reads it each time. It does <strong>not</strong> need a critical section: it is a single aligned word with one writer, so it can't tear.</p></div></details>
+<details class="rel"><summary><span class="qid">P13</span><span>A task of priority 2 in this course's kernel and an interrupt of NVIC priority 2. Which numbering treats a larger number as more urgent?</span></summary><div class="rel-body"><p>The kernel (like FreeRTOS): a higher number is more urgent. In the NVIC, 0 is the most urgent.</p></div></details>
+<details class="rel"><summary><span class="qid">P14</span><span>Why can't an interrupt handler call <code>os_mutex_lock()</code>?</span></summary><div class="rel-body"><p>Locking may have to <strong>block</strong>, putting the caller to sleep until the owner unlocks. A handler is not a task; there is nothing to put to sleep, so an ISR must use non-blocking APIs such as <code>os_queue_put_from_isr()</code>. ---</p></div></details>
+    </div>
+  </div>
+  <div class="sol-part">
+    <details class="rel"><summary><span class="qid">A–Z</span><span>Glossary: 35 terms from the guide</span></summary>
+      <div class="rel-body"><div class="scroll"><table class="tbl"><thead><tr><th class="l">Term</th><th class="l">Meaning</th></tr></thead><tbody>
+<tr><td class="l">AAPCS</td><td class="l">ARM's calling convention: who owns which register across a call</td></tr>
+<tr><td class="l">Active low</td><td class="l">the interesting state reads 0 (a pressed button with a pull-up)</td></tr>
+<tr><td class="l">Alternate function (AF)</td><td class="l">a pin handed to a peripheral; the number selects which</td></tr>
+<tr><td class="l">As-if rule</td><td class="l">the compiler need only preserve observable behaviour</td></tr>
+<tr><td class="l">Atomic</td><td class="l">cannot be observed half-done</td></tr>
+<tr><td class="l">Bounce</td><td class="l">a mechanical contact opening and closing many times per press</td></tr>
+<tr><td class="l">Callee-saved</td><td class="l">a register a function must restore before returning (<code>r4</code>–<code>r11</code>)</td></tr>
+<tr><td class="l">Clock gate</td><td class="l">the RCC bit that powers a peripheral; off at reset</td></tr>
+<tr><td class="l">CMSIS</td><td class="l">ARM's vendor-neutral headers for Cortex-M; headers, not a library</td></tr>
+<tr><td class="l">Context switch</td><td class="l">saving one task's registers and stack pointer, restoring another's</td></tr>
+<tr><td class="l">Cooperative scheduling</td><td class="l">each job runs until it returns</td></tr>
+<tr><td class="l">Critical section</td><td class="l">code that must not be interleaved with another context</td></tr>
+<tr><td class="l">Deadline-monotonic</td><td class="l">the shorter the deadline, the more urgent the priority</td></tr>
+<tr><td class="l">EXTI</td><td class="l">the block that turns pin edges into interrupt requests</td></tr>
+<tr><td class="l">Harvard</td><td class="l">separate code and data address spaces</td></tr>
+<tr><td class="l">High-water mark</td><td class="l">the deepest a stack has ever reached</td></tr>
+<tr><td class="l">Literal pool</td><td class="l">constants stored beside the code, loaded PC-relative</td></tr>
+<tr><td class="l">Load–store</td><td class="l">only <code>ldr</code>/<code>str</code> touch memory; arithmetic uses registers</td></tr>
+<tr><td class="l">Memory-mapped I/O</td><td class="l">peripherals at ordinary addresses</td></tr>
+<tr><td class="l">Mutex</td><td class="l">a lock that blocks only the tasks wanting one resource</td></tr>
+<tr><td class="l">NVIC</td><td class="l">ARM's interrupt controller: enable, pending, priority</td></tr>
+<tr><td class="l">Open-drain</td><td class="l">output that can only pull low; wired-AND</td></tr>
+<tr><td class="l">Overrun</td><td class="l">a received byte overwritten before software read it</td></tr>
+<tr><td class="l">PendSV</td><td class="l">a software-pended, lowest-priority exception used for context switches</td></tr>
+<tr><td class="l">Preemption</td><td class="l">a more urgent context displacing a running one</td></tr>
+<tr><td class="l">Priority inheritance</td><td class="l">a mutex holder temporarily runs at its highest waiter's priority</td></tr>
+<tr><td class="l">Priority inversion</td><td class="l">a task waits, in effect, on a lower-priority task it outranks</td></tr>
+<tr><td class="l">Race condition</td><td class="l">the result depends on the timing of two contexts</td></tr>
+<tr><td class="l">Read-modify-write</td><td class="l">load, change, store: three steps an interrupt can split</td></tr>
+<tr><td class="l">Shadow (preload) register</td><td class="l">a buffered copy that takes effect at the next update</td></tr>
+<tr><td class="l">Tearing</td><td class="l">reading one logical value in two accesses and getting half old, half new</td></tr>
+<tr><td class="l">TCB</td><td class="l">task control block: the kernel's record of one task</td></tr>
+<tr><td class="l">Thumb bit</td><td class="l">bit 0 of every code address on a Cortex-M; always 1</td></tr>
+<tr><td class="l"><code>volatile</code></td><td class="l">every access to this object must really happen, in order</td></tr>
+<tr><td class="l">Weak symbol</td><td class="l">a default definition that any ordinary definition replaces at link time</td></tr>
+</tbody></table></div></div>
+    </details>
+  </div>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>33 questions in 60 minutes, no calculator, no penalty for guessing. Know the arithmetic cold, know how every flag clears, and for every mechanism know the general idea, the alternative, and this chip's choice.</p>
+    <p class="source">Source: slides/exam_midterm_overview.md §1 format, §2 scope and key contrasts, §4 fact sheet, §5 glossary, §6 practice problems, §7 how to prepare</p>
+  </div>
+</article>

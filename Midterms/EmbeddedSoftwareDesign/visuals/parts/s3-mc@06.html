@@ -1,0 +1,258 @@
+<article class="q" id="s3-mc23" data-part="mc" data-num="23" data-topic="16-bit ARR" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 23 · L06, PSC and ARR for 100 ms</p>
+    <h3 class="q-title">TIM3 is a 16-bit timer clocked at 48 MHz. It must raise an update event every 100 ms. Which register values do that?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span><code>PSC = 4799</code>, <code>ARR = 999</code></span>
+      <span class="why">Correct. 48 MHz / 4800 = 10 kHz, one count every 100 µs, and 1000 counts make 100 ms.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>PSC = 47</code>, <code>ARR = 99999</code></span>
+      <span class="why">No. 100 000 counts need 17 bits. ARR keeps 0x869F = 34 463, so the period is 34.464 ms.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>PSC = 4800</code>, <code>ARR = 1000</code></span>
+      <span class="why">No. Both registers hold N − 1. This is 4801 × 1001 clocks, 100.12 ms, and nothing complains.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>PSC = 479</code>, <code>ARR = 999</code></span>
+      <span class="why">No. That counts at 100 kHz, so 1000 counts take 10 ms.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> The counter steps once every PSC + 1 clocks: 48 MHz / 4800 = 10 kHz, one count every 100 µs. 1000 counts of 100 µs make 100 ms, so <code>ARR&nbsp;=&nbsp;999</code>. Check with the slide-5b formula: 48 000 000 / (4800 × 1000) = 10 Hz.</p>
+    <p>B would be right with the lesson's 1 µs count, but 100 000 counts do not fit a 16-bit ARR (at most 65 535). Only the low 16 bits of 0x1869F stay, 0x869F = 34 463, and the period is 34.464 ms. C forgets the −1 in both registers (100.1 ms), and D counts at 100 kHz and updates every 10 ms.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The hand calculation: a count rate that fits 16 bits, then PSC, then ARR</h4>
+    </div>
+    <p class="fig-lede">The top row is the time base of slide 5b. The chart below it shows how many counts 100 ms takes at four count rates, on a log scale; a 16-bit ARR allows at most 65 536. Step through the calculation.</p>
+    <div data-viz="calc-steps"></div>
+    <div data-viz="calc"></div>
+    <pre class="calc" data-role="calc"></pre>
+    <p class="step-note" data-role="calc-note" aria-live="polite"></p>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>What each option leaves in ARR, and when the updates come</h4>
+    </div>
+    <p class="fig-lede">The top row is the value written to ARR, in binary. TIM3 has no bit 16, so a value above 65 535 loses its top bit. The chart draws CNT over 210 ms to scale: each dot is an update event, and the dashed lines are the 100 ms target. Pick an option.</p>
+    <div data-viz="pick"></div>
+    <div data-viz="ramp"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">Count rate</span><span class="v pri" data-role="rate">10 kHz</span><span class="sub">48 MHz / (PSC + 1)</span></div>
+      <div class="stat"><span class="label">Counts per period</span><span class="v" data-role="counts">1 000</span><span class="sub">stored ARR + 1</span></div>
+      <div class="stat"><span class="label">Update every</span><span class="v ok" data-role="period">100 ms</span><span class="sub">counts / count rate</span></div>
+    </div>
+    <p class="verdict" data-role="verdict"></p>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>f<sub>update</sub> = f<sub>clk</sub> / ((PSC + 1)(ARR + 1)). TIM3 and TIM14 are 16-bit timers, so ARR + 1 is at most 65 536 counts: for a long period, slow the count with PSC first, then count with ARR. Both registers hold N − 1.</p>
+    <p class="source">Source: L06 slides 5b, 5 · Notes: L06 › 6. Time base: PSC, ARR, CNT</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc24" data-part="mc" data-num="24" data-topic="AF number" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 24 · L06, the pin's AF number</p>
+    <h3 class="q-title"><code>TIM3_CH1</code> is AF1 on PA6, but the code puts PA6 in alternate-function mode with AF number 2. Everything else is as in the lesson: 1 µs counts, a 20 ms frame, and a report line that counts TIM3 updates per second. What does the board show?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>The report still reads <code>TIM3 50/s</code> and <code>CCR1</code> still follows the target, but the servo never moves</span>
+      <span class="why">Correct. The AF number only picks who drives the pin. TIM3 inside the chip runs as before.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>TIM3 stops counting, so the report reads <code>TIM3 0/s</code></span>
+      <span class="why">No. That is the missing clock gate: the registers read 0 and nothing counts.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The servo moves, but every pulse is about 2 % too long</span>
+      <span class="why">No. That is the missing −1 in PSC: 48.98 Hz, and 1500 counts take 1531 µs.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The update handler re-enters forever and <code>millis()</code> stops</span>
+      <span class="why">No. That is clearing UIF by writing 1. The AF number does not touch the timer's flags.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> The AF number only picks which peripheral drives the pin. With AF2, PA6 is electrically fine but driven by another peripheral or by nothing. TIM3 inside the chip still counts, still interrupts 50 times a second and still updates CCR1: the timer works, the pin doesn't.</p>
+    <p>PA6's AF field is <code>AFR[0]</code> bits 27:24 (6 / 8 = 0, and 4 × 6 = 24). The number comes from the datasheet's AF table, and the same signal has different numbers on different pins: <code>TIM3_CH1</code> is AF1 on PA6 but AF12 on PB6.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The timer is inside the chip; the AF field picks who drives the pin</h4>
+    </div>
+    <p class="fig-lede">Left: TIM3 as the lesson sets it up. Middle: PA6's alternate-function selector, eight inputs, one chosen by the 4-bit AF field in <code>GPIOA-&gt;AFR[0]</code> (bottom). Right: what reaches the servo. Switch between the code as written and the fix.</p>
+    <div data-viz="af-steps"></div>
+    <div data-viz="af"></div>
+    <p class="step-note" data-role="af-note" aria-live="polite"></p>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Four silent failures from slide 17, four different fingerprints</h4>
+    </div>
+    <p class="fig-lede">Each row is the fault one option describes, and each column is something you can observe on the board. Only a wrong AF number leaves everything inside the chip working and the pin dead.</p>
+    <div data-viz="matrix"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>A wrong AF number gives a pin that is electrically fine, driven by some other peripheral or by nothing. The timer still counts, the interrupt still fires, the report still says 50 updates a second, and the servo does not move: the timer works, the pin doesn't.</p>
+    <p class="source">Source: L06 slides 10, 17 · Notes: L06 › 11. Getting the signal out, the AF table</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc25" data-part="mc" data-num="25" data-topic="Deadline priority" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 25 · L06, priority follows deadline</p>
+    <h3 class="q-title">In the lesson the TIM14 echo capture gets NVIC priority 1, the TIM3 update priority 2 and SysTick priority 3 (0 is the most urgent), though a viewer cares more about the servo, driven by TIM3, than about the clock. Which rule picks this order?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Importance to the user: the job that matters most gets the most urgent priority</span>
+      <span class="why">No. The slide rejects it: the servo matters more to a viewer, and TIM3 still gets only 2.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>Deadline: the job that must be served soonest gets the most urgent priority</span>
+      <span class="why">Correct. Shortest deadline, most urgent priority: deadline-monotonic.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>IRQ number: the lower IRQ number gets the more urgent priority</span>
+      <span class="why">No. TIM3 is IRQ 16 and TIM14 is IRQ 19, yet TIM14 is more urgent. The IRQ number only breaks ties.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Origin: a core exception such as SysTick always ranks below the vendor's peripheral interrupts</span>
+      <span class="why">No. SysTick's level is a field in SHPR3 like any other, and <code>SysTick_Config</code> chose 3.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> Priority follows deadline, not significance (deadline-monotonic). The capture must be read before the next edge overwrites <code>CCR1</code>. The update only has to set <code>CCR1</code> within the 20 ms frame. A late SysTick tick is still counted.</p>
+    <p>The IRQ number only breaks ties: equal priorities never preempt each other, they queue, and the NVIC takes the lower IRQ number first. Lesson 07 builds a scheduler on the same rule.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Each rule sorts the three handlers by a different key; only deadline gives 1, 2, 3</h4>
+    </div>
+    <p class="fig-lede">The rows are NVIC priority levels, most urgent at the top. The left column is the lesson's choice from slide 15. The right column is the order the chosen rule gives, with each handler's sort key beside it: green where it matches the lesson, red where it does not.</p>
+    <div data-viz="rule-steps"></div>
+    <div data-viz="ladder"></div>
+    <p class="step-note" data-role="rule-note" aria-live="polite"></p>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Where the three numbers live: a 2-bit field at the top of each byte</h4>
+    </div>
+    <p class="fig-lede">The two registers from slide 15, bit by bit. IRQ <i>n</i> owns byte <i>n</i> mod 4 of <code>IPR[n/4]</code>, and the value is prio &lt;&lt; 6; bits 5:0 do not exist on this chip (faded). SysTick's byte is in the SCB, written by <code>SysTick_Config</code>.</p>
+    <div data-viz="regs"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Priority follows deadline, not significance (deadline-monotonic): TIM14 capture 1, it must read <code>CCR1</code> before the next edge; TIM3 update 2, it has the 20 ms frame; SysTick 3, a late tick is still counted. Equal priorities queue, lower IRQ number first.</p>
+    <p class="source">Source: L06 slides 15, 2 · Notes: L06 › 18. Three interrupts, three priorities</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc26" data-part="mc" data-num="26" data-topic="SysTick range" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 26 · L06, SysTick's 24-bit reload</p>
+    <h3 class="q-title">At 48 MHz, LD4 must toggle once a second while the superloop also prints report lines that each take several milliseconds. Which code does it?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>SysTick_Config(SystemCoreClock);</code> and toggle LD4 in <code>SysTick_Handler</code></span>
+      <span class="why">No. ticks − 1 = 47 999 999 is more than 0xFFFFFF, so SysTick_Config returns 1 and configures nothing.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span><code>SysTick_Config(SystemCoreClock / 1000u);</code> and, in the loop, <code>if (now - beat_at &gt;= 1000) { beat_at += 1000; toggle_ld4(); }</code></span>
+      <span class="why">Correct. A 1 ms tick fits 24 bits, the interrupt counts through every print, and the loop counts 1000 ticks.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>SysTick at 1 ms with no interrupt; the loop waits for <code>COUNTFLAG</code> and toggles LD4 on every 1000th wrap</span>
+      <span class="why">No. COUNTFLAG remembers one wrap, so each print loses all but one of its milliseconds.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>SysTick-&gt;LOAD = SystemCoreClock - 1u;  SysTick-&gt;CTRL = 7u;</code> and toggle LD4 in <code>SysTick_Handler</code></span>
+      <span class="why">No. LOAD keeps only bits 23:0, 0xDC6BFF, so LD4 toggles about every 0.3 s.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> SysTick is a 24-bit down-counter, so its longest period is 2²⁴ clocks, about 350 ms at 48 MHz. One second cannot be one SysTick period. B ticks every 1 ms (<code>LOAD&nbsp;=&nbsp;47999</code>), and the loop counts 1000 ticks with <code>now - beat_at</code>. The interrupt keeps counting through every print.</p>
+    <p>A asks for <code>LOAD</code> = 47 999 999, more than 0xFFFFFF = 16 777 215, so <code>SysTick_Config</code> returns 1 and configures nothing: LD4 never toggles. D writes the same value directly; only its low 24 bits stay (0xDC6BFF), and LD4 toggles about every 0.3 s. C polls, and <code>COUNTFLAG</code> remembers only one wrap, so the heartbeat runs slow.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>What lands in the 24-bit LOAD, and how often LD4 then toggles</h4>
+    </div>
+    <p class="fig-lede">The top row is the reload value each option asks for, in binary; the second is what <code>LOAD</code> holds afterwards. <code>LOAD</code> has bits 23:0 only. The bottom row is LD4 over 3 s, to scale. Pick an option.</p>
+    <div data-viz="load-steps"></div>
+    <div data-viz="load"></div>
+    <pre class="calc" data-role="load-calc"></pre>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>During an 8 ms print, polling sees one wrap; the interrupt sees all eight</h4>
+    </div>
+    <p class="fig-lede">20 ms with a 1 ms SysTick, to scale. The superloop prints a report line from 5.5 ms to 13.5 ms. Compare option C, which polls <code>COUNTFLAG</code>, with option B, where every wrap runs <code>SysTick_Handler</code>.</p>
+    <div data-viz="poll-steps"></div>
+    <div data-viz="poll"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">Wraps in 20 ms</span><span class="v pri">20</span><span class="sub">one per millisecond</span></div>
+      <div class="stat"><span class="label">Milliseconds counted</span><span class="v" data-role="counted">13</span><span class="sub" data-role="counted-sub">by the loop</span></div>
+      <div class="stat"><span class="label">Lost</span><span class="v" data-role="lost">7 ms</span><span class="sub">for good, every print</span></div>
+    </div>
+    <p class="step-note" data-role="poll-note" aria-live="polite"></p>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>SysTick is 24 bits: <code>LOAD</code> = ticks − 1 must fit 0xFFFFFF, so the longest period is 2²⁴ clocks, about 350 ms at 48 MHz, and <code>SysTick_Config</code> returns 1 for anything longer. For a slow beat, tick at 1 ms and count: <code>if (now - beat_at &gt;= 1000)</code>.</p>
+    <p class="source">Source: L06 slides 2, 1, 3 · Notes: L06 › 2. SysTick Config, five readable lines</p>
+  </div>
+</article>

@@ -1,0 +1,242 @@
+<article class="q" id="s3-mc27" data-part="mc" data-num="27" data-topic="SHPR3 priority" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 27 · L07, PendSV and SysTick priority value</p>
+    <h3 class="q-title"><code>os_start()</code> must make PendSV and SysTick the least urgent exceptions on the chip. In <code>SHPR3</code>, SysTick's priority is bits 31:30 and PendSV's is bits 23:22; these are the only implemented bits (<code>__NVIC_PRIO_BITS = 2</code>). Which 32-bit value written to <code>SHPR3</code> does it?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>0x00000000</code></span>
+      <span class="why">No. Both fields 00 is priority 0, the most urgent NVIC level.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>0x03030000</code></span>
+      <span class="why">No. The 3s land in bits 25:24 and 17:16, which do not exist, so both stay at 0.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span><code>0xC0C00000</code></span>
+      <span class="why">Correct. 3 &lt;&lt; 6 = 0xC0 in SysTick's byte and in PendSV's byte.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>0x80800000</code></span>
+      <span class="why">No. Only bits 31 and 23 are set: each field reads 10, priority 2.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> In the NVIC numbering 0 is most urgent, so the least urgent level is 3, binary 11. Each priority byte keeps only its top two bits, so 3 becomes 3 &lt;&lt; 6 = <code>0xC0</code>.</p>
+    <p>SysTick's byte is bits 31:24 and PendSV's is bits 23:16, so <code>SHPR3 = 0xC0C00000</code>, the value slide 4b shows after <code>os_start</code>. Option A is the kernel's numbering, where 0 is idle, applied to the NVIC.</p>
+  </div>
+  <pre class="calc">least urgent NVIC level   = 3 = 11₂
+one priority byte         = 3 &lt;&lt; 6 = 1100 0000₂ = 0xC0   (only bits 7:6 exist)
+SysTick, byte 31:24       = 0xC0 &lt;&lt; 24 = 0xC0000000
+PendSV,  byte 23:16       = 0xC0 &lt;&lt; 16 = 0x00C00000
+SHPR3                     = 0xC0C00000</pre>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>SHPR3 bit by bit: only the top two bits of each byte are kept</h4>
+    </div>
+    <p class="fig-lede">The top row is the value written, the second row what the chip keeps: bits that do not exist read 0. The bottom line places the resulting priority on the NVIC ladder, where 3 is least urgent. Try each option.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="reg"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>a 1 in an implemented bit</span>
+      <span><i class="sw-bad"></i>a 1 in a bit that does not exist</span>
+      <span><i class="sw-seg"></i>0</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>NVIC: 0 is most urgent, 3 least (2 bits, the top of each byte). PendSV and SysTick at 3: SHPR3 = 0xC0C00000, since 3 &lt;&lt; 6 = 0xC0.</p>
+    <p class="source">Source: L07 slide 4, slide 4b, slide 9 · Notes: L07 › 5. The System Control Block: ICSR and SHPR3</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc28" data-part="mc" data-num="28" data-topic="Forged frame" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 28 · L07, Forging the first frame</p>
+    <h3 class="q-title">A student edits <code>os_task_create()</code> so that every new task's forged frame holds <code>xPSR = 0x00000000</code> instead of <code>0x01000000</code>. Everything else is unchanged. What happens after <code>os_start()</code>?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>The tasks run normally: the flags N, Z, C and V simply start at 0</span>
+      <span class="why">No. The flags are harmless; bit 24, T, is the one that matters.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>The first switch into a task HardFaults at that task's first instruction, because T = 0 asks for ARM state, which the M0+ does not have</span>
+      <span class="why">Correct. The forged xPSR is popped on the first switch, with T = 0.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The tasks run on MSP instead of PSP, because the forged xPSR no longer selects the process stack</span>
+      <span class="why">No. EXC_RETURN bit 2 picks the stack; 0xFFFFFFFD still says PSP.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The kernel runs until the first SysTick, which faults because the frame the hardware pushes now has T = 0</span>
+      <span class="why">No. The hardware stacks the live xPSR, whose T is 1. Only the forged word is wrong.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> The hardware pops the forged xPSR on the first switch into each task, when PendSV returns with <code>0xFFFFFFFD</code>. Bit 24, T, must be 1: the M0+ runs only Thumb code, so T = 0 asks for ARM state and the core HardFaults at the task's first instruction.</p>
+    <p>The first task to be switched to is the most urgent READY one, so that is the task the fault report names.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The forged frame is popped on the first switch, and T decides what happens</h4>
+    </div>
+    <p class="fig-lede">Left, the 16 words <code>os_task_create()</code> writes, as if the task had just been interrupted at its first instruction. Right, the forged xPSR bit by bit and the first switch into the task. Compare the deck's value with the student's.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="frame"></div>
+    <div class="legend">
+      <span><i class="sw-pri-soft"></i>restored by PendSV_Handler</span>
+      <span><i class="sw-sec-soft"></i>popped by the hardware</span>
+      <span><i class="sw-ok"></i>T = 1, Thumb</span>
+      <span><i class="sw-bad"></i>T = 0, fault</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>A new task's forged frame: xPSR 0x01000000 (T bit only), pc = the task function, lr = task_exit, r0 = its argument, zeros elsewhere. Forging xPSR = 0 HardFaults at the first instruction.</p>
+    <p class="source">Source: L07 slide 8, slide 3b · Notes: L07 › 10. Forging the first frame</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc29" data-part="mc" data-num="29" data-topic="Priority inheritance" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 29 · L07, Priority inversion and inheritance</p>
+    <h3 class="q-title">Three tasks run on this kernel: high (priority 3), mid (2) and low (1). Low locks a mutex. While low holds it, high asks for the same mutex and blocks. Then mid, which never uses the mutex, becomes READY and computes for 120 ms. With <code>OS_PRIORITY_INHERIT</code> set to 1, what does the kernel do?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Low inherits mid's priority, 2, so low and mid take turns, one tick each</span>
+      <span class="why">No. The holder borrows the waiter's priority, high's 3. At 2, high would still wait through mid's turns.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Nothing: high waiting for low is ordinary blocking, so mid runs its 120 ms first</span>
+      <span class="why">No. That is the unbounded priority inversion the flag exists to stop.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>Low runs at high's priority, 3, until it unlocks, so mid cannot preempt it and high waits only for low's critical section</span>
+      <span class="why">Correct. Priority inheritance, slide 14.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Mid's priority is lowered to 0 while high waits, so low can finish first</span>
+      <span class="why">No. The kernel raises the holder; it never lowers a third task.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> Without a fix this is priority inversion: mid preempts low, low cannot unlock, and high ends up waiting for mid, a task it outranks, for as long as mid runs.</p>
+    <p>Priority inheritance lends the holder the waiter's priority. Low runs at 3 until it unlocks, drops back to its <code>base_prio</code> 1, and high goes. Mid still gets its 120 ms, only later.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Who high is really waiting for, with inheritance off and on</h4>
+    </div>
+    <p class="fig-lede">A schematic timeline. Low's critical section is 30 ms, as on slide 13, and high and mid both wake 10 ms into it. The bottom bar shows who holds the mutex.</p>
+    <div data-viz="steps"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">High's wait</span><span class="v" data-role="wait">20 ms</span><span class="sub">from asking to getting the mutex</span></div>
+      <div class="stat"><span class="label">Spent waiting for mid</span><span class="v" data-role="formid">0 ms</span><span class="sub">a task high outranks</span></div>
+    </div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="timeline"></div>
+    <div class="legend">
+      <span><i class="sw-sec"></i>high</span>
+      <span><i class="sw-ter"></i>mid</span>
+      <span><i class="sw-pri"></i>low</span>
+      <span><i class="sw-pri-soft"></i>mutex held by low</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Priority inversion: high waits, in effect, for mid, a task it outranks. Priority inheritance: while low holds a mutex high wants, low runs at high's priority, so mid cannot preempt it; on unlock low returns to base_prio.</p>
+    <p class="source">Source: L07 slide 13, slide 14 · Notes: L07 › 16. Priority inheritance, measured</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc30" data-part="mc" data-num="30" data-topic="r8–r11 save" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 30 · L07, Why r8–r11 go the long way round</p>
+    <h3 class="q-title">In <code>PendSV_Handler</code> on the Cortex-M0+, the old task's r4–r7 are already stored and <code>r0</code> points at the next free word of its stack. Which sequence stores r8–r11 next?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>stmia r0!, {r8-r11}</code></span>
+      <span class="why">No. The Thumb-1 register list has bits for r0–r7 only; this form exists on the Cortex-M3.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>push {r8-r11}</code></span>
+      <span class="why">No. push lists only r0–r7 and lr, and in PendSV it would use MSP, not the task's stack.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>str r8, [r0, #0]</code> … <code>str r11, [r0, #12]</code></span>
+      <span class="why">No. Thumb-1 str also names only r0–r7.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>mov r4, r8</code> / <code>mov r5, r9</code> / <code>mov r6, r10</code> / <code>mov r7, r11</code>, then <code>stmia r0!, {r4-r7}</code></span>
+      <span class="why">Correct. Copy into the already-saved r4–r7, then store those.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> The M0+ runs Thumb-1, where <code>stm</code> and <code>ldm</code> have an 8-bit register list, one bit for each of r0–r7, so they cannot name r8–r11.</p>
+    <p>The kernel copies r8–r11 into r4–r7, which are already saved and free, with <code>mov</code>, one of the few Thumb-1 instructions that reach r8–r12, and stores those. The restore runs backwards: r8–r11 first, r4–r7 last.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The encodings: an 8-bit list for stmia, a 4-bit Rm for mov</h4>
+    </div>
+    <p class="fig-lede">Two halfwords from this lesson's PendSV_Handler (slide 7). The stmia list has one bit per register, r7 down to r0, and nothing beyond. The mov has a 4-bit Rm, so it can read r8 (1000).</p>
+    <div data-viz="enc"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Saving r8–r11 through r4–r7, and restoring in the opposite order</h4>
+    </div>
+    <p class="fig-lede">Top row, the core's registers; bottom row, the 8 words PendSV fills on the old task's stack. A.r8 means the value task A had in r8.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="save"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Thumb-1 stm and ldm list only r0–r7, so PendSV copies r8–r11 into the already-saved r4–r7 with mov and stores them. On restore it does r8–r11 first and r4–r7 last.</p>
+    <p class="source">Source: L07 slide 7, slide 6 · Notes: L07 › 9. Why r8-r11 go the long way round</p>
+  </div>
+</article>

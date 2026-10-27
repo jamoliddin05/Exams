@@ -1,0 +1,182 @@
+<article class="q" id="s1-mc15" data-part="mc" data-num="15" data-topic="Reset vector" data-ref="topic4">
+  <div class="q-head">
+    <p class="eyebrow">Question 15 · L04, Reset vector</p>
+    <h3 class="q-title">The first eight bytes of a firmware image, from <code>0x08000000</code> upward, are <code>00 30 00 20 1D 02 00 08</code>. At reset the core loads SP and PC from them before any instruction runs. What is the initial SP, and at which address is the first instruction of <code>Reset_Handler</code>?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>SP = <code>0x20003000</code>, <code>Reset_Handler</code> at <code>0x0800021C</code></span>
+      <span class="why">Correct. Each word reads right to left, and bit 0 of <code>0x0800021D</code> is the Thumb bit.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>SP = <code>0x20003000</code>, <code>Reset_Handler</code> at <code>0x0800021D</code></span>
+      <span class="why">No. Bit 0 is the Thumb bit, not part of the address. Instructions sit at even addresses.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>SP = <code>0x00300020</code>, <code>Reset_Handler</code> at <code>0x1D020008</code></span>
+      <span class="why">No. That reads the bytes big-endian. ARM is little-endian.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>SP = <code>0x0800021D</code>, <code>Reset_Handler</code> at <code>0x20003000</code></span>
+      <span class="why">No. That swaps the words. Word 0 is the stack pointer, word 1 the reset vector.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> ARM is little-endian, so the byte at the lowest address is the least significant one, and each group of four bytes reads right to left. Word 0 is <code>0x20003000</code>, the top of the 12 KB RAM, and the core loads it into SP. Word 1 is <code>0x0800021D</code>, and the core loads it into PC.</p>
+    <p>Bit 0 of a code address is the Thumb bit. The core reads it as "this target is Thumb code", not as part of the address, so <code>Reset_Handler</code>'s first instruction is at <code>0x0800021C</code>. Because the hardware sets SP itself, that first instruction already has a valid stack, and <code>Reset_Handler</code> can be written in C.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Eight bytes become SP and PC</h4>
+    </div>
+    <p class="fig-lede">Top row: the bytes as they sit in FLASH, lowest address on the left. Middle row: the same bytes regrouped as 32-bit values, most significant byte on the left. The crossing lines are little-endian order. Step through it.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="bytes"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>The same address, and one extra bit</h4>
+    </div>
+    <p class="fig-lede">The handler's real address, as <code>nm</code> reports it, against the value the vector table holds. Only bit 0 differs. Bits 31:1 are the address; bit 0 is T, the Thumb bit, and it must be 1.</p>
+    <div data-viz="bits"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>address bit = 1</span>
+      <span><i class="sw-sec"></i>Thumb bit T = 1</span>
+      <span><i class="sw-seg"></i>bit = 0</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>At reset the core loads word 0 of FLASH into SP and word 1 into PC before any instruction runs. Each word reads right to left, and bit 0 of a handler address is the Thumb bit, so <code>0x0800021D</code> means code at <code>0x0800021C</code>.</p>
+    <p class="source">Source: L04 slides 5, 7 · Notes: L04 › 9. The vector table, an array at a known address</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc16" data-part="mc" data-num="16" data-topic="Linker symbols" data-ref="topic4">
+  <div class="q-head">
+    <p class="eyebrow">Question 16 · L04, Linker symbols</p>
+    <h3 class="q-title"><code>link.ld</code> places <code>.data</code> from <code>0x20000000</code> up to <code>0x20000064</code>, and <code>startup.c</code> declares the two boundary symbols as below. Which line stores the size of <code>.data</code> in bytes, 100, in <code>n</code>?</h3>
+    <pre class="calc">extern uint32_t _sdata, _edata;   /* defined in link.ld */</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>uint32_t n = _edata - _sdata;</code></span>
+      <span class="why">No. Without <code>&amp;</code> each name reads the four bytes stored at that address. It compiles cleanly and gives garbage.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>uint32_t n = &amp;_edata - &amp;_sdata;</code></span>
+      <span class="why">No. Subtracting two <code>uint32_t *</code> pointers counts words: 100 / 4 = 25.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span><code>uint32_t n = (uintptr_t)&amp;_edata - (uintptr_t)&amp;_sdata;</code></span>
+      <span class="why">Correct. Two addresses as integers: <code>0x20000064 − 0x20000000 = 0x64</code> = 100.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>uint32_t n = (uintptr_t)_edata - (uintptr_t)_sdata;</code></span>
+      <span class="why">No. The cast comes after the read, so this is A again: memory contents, not addresses.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> The linker creates no storage for <code>_sdata</code> or <code>_edata</code>. It creates a symbol whose value is the address. <code>extern uint32_t _sdata;</code> is "a polite lie told to the compiler" so that <code>&amp;_sdata</code> has a type, and the rule is that a linker symbol is only ever used with <code>&amp;</code>.</p>
+    <p>C takes both addresses, turns them into integers and subtracts: <code>0x20000064 − 0x20000000 = 0x64</code> = 100 bytes. A and D read whatever words happen to live at those addresses. B uses the right addresses, but pointer subtraction divides by <code>sizeof(uint32_t)</code>, so it gives 25.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>A linker symbol is an address with nothing stored behind it</h4>
+    </div>
+    <p class="fig-lede">Left: the two symbols <code>link.ld</code> made. Their values are addresses. Right: RAM, where those addresses point. With <code>&amp;</code> the code uses the value on the left. Without it, the code goes to RAM and reads what is stored there. Pick an option.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="sym"></div>
+    <pre class="calc" data-role="calc"></pre>
+    <p class="fig-lede">The RAM contents shown are an example. Whatever they are, A and D compute with them instead of with the addresses.</p>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>A linker symbol is only ever used with <code>&amp;</code>. <code>&amp;_sdata</code> is the address the linker chose; <code>_sdata</code> alone is the four bytes that happen to live there, and it compiles cleanly.</p>
+    <p class="source">Source: L04 slide 12 · Notes: L04 › 13. Linker symbols are addresses, not variables</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc17" data-part="mc" data-num="17" data-topic="Flash wait states" data-ref="topic4">
+  <div class="q-head">
+    <p class="eyebrow">Question 17 · L04, Flash wait states</p>
+    <h3 class="q-title">A student swaps the two halves of <code>SystemInit()</code>, so the clock is raised before the flash wait state is set, as below. It builds with no warnings. What happens on a real chip?</h3>
+    <pre class="calc">RCC-&gt;CR &amp;= ~RCC_CR_HSIDIV;                 /* divide by 1 -&gt; 48 MHz */
+while (!(RCC-&gt;CR &amp; RCC_CR_HSIRDY)) { }
+FLASH-&gt;ACR = (FLASH-&gt;ACR &amp; ~FLASH_ACR_LATENCY) | FLASH_ACR_LATENCY_0;
+while ((FLASH-&gt;ACR &amp; FLASH_ACR_LATENCY) != FLASH_ACR_LATENCY_0) { }
+SystemCoreClock = 48000000UL;</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Nothing changes, because the compiler moves the <code>FLASH-&gt;ACR</code> write back in front of the clock switch</span>
+      <span class="why">No. Register accesses are <code>volatile</code>, and the compiler keeps them in program order.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>For a while the CPU runs at 48 MHz with zero flash wait states, so it can fetch an instruction that is not ready and hang with no error, somewhere unrelated to the bug</span>
+      <span class="why">Correct. Wait states go up before the frequency.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The chip stays at 12 MHz, because <code>HSIDIV</code> cannot change while <code>LATENCY</code> is 0</span>
+      <span class="why">No. Nothing in hardware ties the two fields together. The divider changes at once.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The clock switch raises a HardFault, and the fault handler restores 12 MHz and carries on</span>
+      <span class="why">No. Nothing detects the mistake, and <code>HardFault_Handler</code> is the weak <code>Default_Handler</code>, an infinite loop.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> The STM32C0 wakes at 12 MHz, HSI48 ÷ 4. Flash memory cannot be read as fast as the CPU runs at 48 MHz, so it needs one wait state. Slide 16 sets <code>LATENCY</code> first, waits until it reads back, and only then clears <code>HSIDIV</code>.</p>
+    <p>In the swapped order the clock is already 48 MHz while <code>LATENCY</code> is still 0. The instructions that follow, the <code>HSIRDY</code> loop and the <code>FLASH-&gt;ACR</code> write, are themselves fetched from flash in that window. The CPU can fetch an instruction that is not ready yet, and the part hangs with no error, somewhere that has nothing to do with the bug.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The unsafe window: 48 MHz with 0 wait states</h4>
+    </div>
+    <p class="fig-lede">The CPU clock and the flash wait states, line by line through <code>SystemInit()</code>. Red marks the time when the clock is too fast for the flash. Compare the slide's order, the swapped order, and the way back down.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="timeline"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>CPU clock</span>
+      <span><i class="sw-sec"></i>flash wait states</span>
+      <span><i class="sw-bad"></i>48 MHz with 0 wait states</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Wait states go up before the frequency, and come down after it. In the wrong order the part hangs with no error, somewhere that has nothing to do with the bug.</p>
+    <p class="source">Source: L04 slide 16 · Notes: L04 › 17. The clock, 12 to 48 MHz in one register write</p>
+  </div>
+</article>

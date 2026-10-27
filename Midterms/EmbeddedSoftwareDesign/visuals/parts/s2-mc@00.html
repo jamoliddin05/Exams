@@ -1,0 +1,246 @@
+<article class="q" id="s2-mc1" data-part="mc" data-num="1" data-topic="Alignment" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 1 · L00, Alignment and byte order</p>
+    <h3 class="q-title">A packet arrives in <code>uint8_t buf[8]</code> at address <code>0x20000100</code>. It holds the bytes <code>11 22 33 44 55 66 77 88</code>, <code>buf[0]</code> first. One field is the little-endian <code>uint32_t</code> stored at <code>buf + 1</code>. Which line puts that field into <code>uint32_t v</code> on the Cortex-M0+?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>v = *(uint32_t *)(buf + 1);</code></span>
+      <span class="why">No. It loads a word from 0x20000101, which is not a multiple of 4. The M0+ HardFaults.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>v = (uint32_t)buf[1] &lt;&lt; 24 | buf[2] &lt;&lt; 16 | buf[3] &lt;&lt; 8 | buf[4];</code></span>
+      <span class="why">No. It puts buf[1] in the top byte. That is big-endian and gives 0x22334455.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>v = *(uint32_t *)buf &gt;&gt; 8;</code></span>
+      <span class="why">No. The aligned word is 0x44332211, and shifting it gives 0x00443322. The 0x55 is never loaded.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>v = buf[1] | buf[2] &lt;&lt; 8 | buf[3] &lt;&lt; 16 | (uint32_t)buf[4] &lt;&lt; 24;</code></span>
+      <span class="why">Correct. Four aligned byte loads put buf[1] in the low byte and give 0x55443322.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> The field is the bytes <code>22 33 44 55</code> at <code>0x20000101</code> to <code>0x20000104</code>. Little-endian puts the byte at the lowest address in the low end, so the field's value is <code>0x55443322</code>. D builds exactly that from four byte loads, and a byte load is aligned at any address.</p>
+    <p>A casts the buffer to <code>uint32_t *</code> and loads a word from <code>0x20000101</code>. That address is not a multiple of 4, so the Cortex-M0+ HardFaults. A Cortex-M3 or M4 would return <code>0x55443322</code>, more slowly. B assembles the bytes big-endian, and C loads the wrong word and loses <code>0x55</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The field straddles a word boundary, so only byte loads can reach it on the M0+</h4>
+    </div>
+    <p class="fig-lede">Top: the buffer in memory, lowest address on the left, with the 4-byte word boundaries drawn thick. The field's four bytes are blue. Bottom: the register <code>v</code>, bit 31 on the left. Pick a line to see which bytes it loads and where they land.</p>
+    <div data-viz="field-steps"></div>
+    <p class="step-note" data-role="field-note" aria-live="polite"></p>
+    <div data-viz="field"></div>
+    <div data-viz="field-table"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Natural alignment, where an n-byte access wants an address divisible by n</h4>
+    </div>
+    <p class="fig-lede">Each row is one access size, each column one address. A blue cell is an address where that access may start. <code>buf + 1</code> is the outlined column, where only a byte access is legal.</p>
+    <div data-viz="align"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>An n-byte access wants an address divisible by n. The Cortex-M0+ HardFaults on an unaligned word access; an M3 or M4 performs it, more slowly. Casting a <code>uint8_t *</code> buffer to <code>uint32_t *</code> is the classic trap, so assemble a packet field from bytes, lowest address in the low byte.</p>
+    <p class="source">Source: L00 slide 10, slide 17 item 9 · Notes: L00 › 11. The data model: width, alignment, byte order</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc2" data-part="mc" data-num="2" data-topic="Von Neumann" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 2 · L00, Harvard vs von Neumann</p>
+    <h3 class="q-title">On an AVR, a lookup table was declared <code>PROGMEM</code> and read with <code>pgm_read_byte()</code>. Ported to the STM32C031, it becomes the code below, and the table is placed in flash. What does the second line do?</h3>
+    <pre class="calc">const uint8_t gamma[256] = { 0, 0, 1, 1, 2, 2, 3, 4, /* ... */ };
+uint8_t y = gamma[i];</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>It reads SRAM at the table's address, because an ordinary load reaches only the data space</span>
+      <span class="why">No. That is Harvard thinking. Here one address names one place, and the table's address is in flash.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>It raises a HardFault, because an ordinary load may not read the flash region</span>
+      <span class="why">No. Flash sits in the same map as everything else, and ordinary loads read it.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>It reads the byte from flash with an ordinary load, because code and data share one address space</span>
+      <span class="why">Correct. One address space, so the same ldrb that reads a variable reads flash.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>It reads a copy of the table that the startup code placed in SRAM, so the load never touches flash</span>
+      <span class="why">No. Startup copies only .data. A const table stays in flash.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> The STM32C031 has one unified (von Neumann) address space. The table's address is a flash address, and the same <code>ldrb</code> that reads a variable reads it. <code>PROGMEM</code> "has no equivalent here and needs none", so <code>pgm_read_byte()</code> becomes a plain array read.</p>
+    <p>A is Harvard thinking. On the AVR, program memory and data memory each start at 0, so one number names two places, and an ordinary load picks the data one. That is why <code>LPM</code> existed. Nothing faults here (B), and a <code>const</code> table is never copied to SRAM (D).</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>On the AVR one number names two places; on the STM32C031 it names one</h4>
+    </div>
+    <p class="fig-lede">Left: the AVR, where the table sits at program address <code>0x0100</code> and data address <code>0x0100</code> is a different byte. The instruction decides which one you get. Right: the STM32C031 map, not to scale, where the table's address can only mean flash.</p>
+    <div data-viz="hv-steps"></div>
+    <p class="step-note" data-role="hv-note" aria-live="polite"></p>
+    <div data-viz="hv"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Startup copies .data to SRAM; a const table stays in flash</h4>
+    </div>
+    <p class="fig-lede">Where each kind of object lives after reset, not to scale. <code>gamma</code> is <code>const</code>, so the linker puts it in <code>.rodata</code> in flash, and every read of it goes there.</p>
+    <div data-viz="sections"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Harvard: separate code and data spaces, so the AVR needed <code>LPM</code> and <code>PROGMEM</code>. This chip has one unified address space. A <code>const</code> array in flash is read by the same <code>ldr</code> as anything else, and <code>PROGMEM</code> has no equivalent here.</p>
+    <p class="source">Source: L00 slide 4, slide 15, slide 17 item 13 · Notes: L00 › 4. Reaching a device: memory mapped vs port mapped IO</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc3" data-part="mc" data-num="3" data-topic="Dispatch" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 3 · L00, Vectored vs non-vectored dispatch</p>
+    <h3 class="q-title">A small 8-bit controller sends every interrupt to one fixed address. The code there reads status registers one by one to find which source fired, then calls the right routine. What is this scheme called, and what does the STM32C031 do instead?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Vectored dispatch. The STM32C031 instead polls each peripheral's status register from <code>main()</code></span>
+      <span class="why">No. One shared entry that asks who called is non-vectored, and this chip dispatches in hardware.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>Non-vectored dispatch. The STM32C031 is vectored: the source's number indexes a table of handler addresses</span>
+      <span class="why">Correct. The number picks the slot, and the hardware jumps to the address in it.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>Non-vectored dispatch. The STM32C031 is vectored, and like the AVR its table entries are jump instructions</span>
+      <span class="why">No. The AVR's slots hold jump instructions. This chip's slots hold plain addresses.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Vectored dispatch. The STM32C031 uses the same scheme, with the NVIC as the status register that software reads</span>
+      <span class="why">No. Wrong name, and the NVIC indexes the table itself. No software searches.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> One fixed entry point whose code must "interrogate the hardware to discover who called" is non-vectored dispatch. It is cheap in silicon and slower in software, because every interrupt pays for the status reads.</p>
+    <p>The STM32C031 is vectored. The source has a number, the number indexes a table, and the hardware goes straight to the handler. Vectored machines differ in what a slot holds. It is a jump instruction on the AVR, a descriptor on x86 and a plain address here, so C is wrong, and A and D give the scheme in the question the wrong name.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Non-vectored: software asks who called. Vectored: the number picks the slot.</h4>
+    </div>
+    <p class="fig-lede">The UART raises an interrupt on both machines. Left: the scheme in the question. Right: this chip, where USART2 is IRQ 28. Step through the three stages and compare who does the work in each.</p>
+    <div data-viz="disp-steps"></div>
+    <p class="step-note" data-role="disp-note" aria-live="polite"></p>
+    <div data-viz="disp"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Vectored machines differ in what a slot holds</h4>
+    </div>
+    <p class="fig-lede">Three vectored designs from slide 9. All three index a table by the source's number. What the CPU finds in the slot, and what it does with it, differs.</p>
+    <div data-viz="slots"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Non-vectored: every interrupt enters at one fixed address, and software interrogates the hardware to find who called. Vectored: the source's number indexes a table. The AVR's slots hold jump instructions, x86's hold descriptors, and this chip's hold plain addresses.</p>
+    <p class="source">Source: L00 slide 9, slide 15 · Notes: L00 › 10. The exception model: vectored dispatch</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc4" data-part="mc" data-num="4" data-topic="Register roles" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 4 · L00, Control, status, data</p>
+    <h3 class="q-title">You meet a peripheral the course never covers, ST's I2C1. Its chapter lists <code>CR1</code> (peripheral enable, interrupt enables), <code>ISR</code> (flags such as <code>TXIS</code>, <code>RXNE</code>, <code>BUSY</code>), <code>TXDR</code> and <code>RXDR</code>. Using the programmer's model, which reading is right?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>Control: <code>CR1</code>. Status: <code>ISR</code>. Data: <code>TXDR</code>, <code>RXDR</code>. Look it up in ST's reference manual</span>
+      <span class="why">Correct. CR1 configures, ISR reports, TXDR and RXDR carry the bytes, and I2C1 is ST's block.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Control: <code>CR1</code>. Status: <code>ISR</code>. Data: <code>TXDR</code>, <code>RXDR</code>. Look it up in ARM's Cortex-M Generic User Guide</span>
+      <span class="why">No. The roles are right. ARM's guide covers only NVIC, SysTick, SCB and MPU.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>Control: <code>ISR</code>. Status: <code>CR1</code>. Data: <code>TXDR</code>, <code>RXDR</code>. Look it up in ST's reference manual</span>
+      <span class="why">No. The hardware writes ISR to report what happened. You write CR1.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Control: <code>TXDR</code>. Status: <code>RXDR</code>. Data: <code>CR1</code>, <code>ISR</code>. Look it up in ARM's Cortex-M Generic User Guide</span>
+      <span class="why">No. TXDR and RXDR carry the payload, and ARM's guide does not describe I2C1.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> "Configure with CONTROL. Watch with STATUS. Move bytes through DATA." You write the settings in <code>CR1</code>, the hardware reports what happened in <code>ISR</code>, and <code>TXDR</code> and <code>RXDR</code> carry the payload out and in. These are the same roles as USART's <code>CR1</code>, <code>ISR</code>, <code>TDR</code> and <code>RDR</code>.</p>
+    <p>I2C is ST's peripheral, so ST's reference manual describes it. ARM's Cortex-M Generic User Guide covers only ARM's own blocks, the NVIC, SysTick, SCB and MPU. B has the right roles and the wrong manual, and C and D get the roles wrong.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Three roles, three peripherals, different names</h4>
+    </div>
+    <p class="fig-lede">The template from slide 6. Blue is written by software, plum is written by the hardware and read by software, and ochre carries the payload both ways. Switch peripherals and watch the names change while the roles stay put.</p>
+    <div data-viz="roles-steps"></div>
+    <p class="step-note" data-role="roles-note" aria-live="polite"></p>
+    <div data-viz="roles"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Who made the block decides which manual describes it</h4>
+    </div>
+    <p class="fig-lede">ARM's blocks sit at <code>0xE0000000</code> and are the same on every Cortex-M. ST's blocks fill the peripheral regions at <code>0x40000000</code> and <code>0x50000000</code>. I2C1 is one of ST's.</p>
+    <div data-viz="manuals"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Every peripheral has the same three roles: control (you write the settings), status (the hardware reports what happened) and data (the payload, both ways). The names move between chips; the roles never do. ARM's blocks are in ARM's Generic User Guide, and ST's blocks are in ST's reference manual.</p>
+    <p class="source">Source: L00 slide 6, slide 7, slide 2, slide 17 items 5 and 6 · Notes: L00 › 7. Every peripheral has the same three registers</p>
+  </div>
+</article>

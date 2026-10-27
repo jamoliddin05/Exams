@@ -1,0 +1,169 @@
+<article class="q" id="s2-mc15" data-part="mc" data-num="15" data-topic=".data placement" data-ref="topic4">
+  <div class="q-head">
+    <p class="eyebrow">Question 15 · L04, .data placement</p>
+    <h3 class="q-title"><code>int limit = 50;</code> is a global that the program changes at run time, and it must hold 50 again after every power-on. <code>Reset_Handler</code> copies <code>.data</code> from <code>_sidata</code>, defined in <code>link.ld</code> as <code>_sidata = LOADADDR(.data);</code>. Which <code>link.ld</code> line places <code>.data</code> correctly?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>.data : { _sdata = .; *(.data*) _edata = .; } &gt;FLASH</code></span>
+      <span class="why">No. <code>limit</code> would live in FLASH, which is <code>(rx)</code>, so an ordinary store cannot change it.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>.data : { _sdata = .; *(.data*) _edata = .; } &gt;RAM</code></span>
+      <span class="why">No. Nothing is stored in FLASH, so 50 is gone after power-off, and <code>LOADADDR</code> is the RAM address itself.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>.data : { _sdata = .; *(.data*) _edata = .; } &gt;FLASH AT&gt; RAM</code></span>
+      <span class="why">No. This is backwards. It would run from FLASH and be stored in RAM, which is empty at reset.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>.data : { _sdata = .; *(.data*) _edata = .; } &gt;RAM AT&gt; FLASH</code></span>
+      <span class="why">Correct. Lives in RAM, stored in FLASH. <code>LOADADDR(.data)</code> is the FLASH copy.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> A global with an initial value needs two addresses. The value must survive power-off, so it is stored in FLASH. The variable must be writable, so it lives in RAM. <code>&gt;RAM AT&gt; FLASH</code> is the syntax for those two addresses. The run address (VMA) is in RAM, and the load address (LMA) is in FLASH.</p>
+    <p><code>LOADADDR(.data)</code> returns the load address, so <code>_sidata</code> points at the stored 50 in FLASH, and <code>Reset_Handler</code>'s first loop copies it to <code>_sdata</code> in RAM before <code>main()</code>. On the next power-on the copy runs again and <code>limit</code> is 50 once more.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Where each line puts <code>limit</code>, and what survives a power cycle</h4>
+    </div>
+    <p class="fig-lede">FLASH keeps its contents with the power off and is read-only to ordinary stores. RAM is writable and empty at reset. A section's VMA is where it runs; its LMA is where it is stored. Pick an option.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="map"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>where <code>limit</code> runs (VMA)</span>
+      <span><i class="sw-pri-soft"></i>where its 50 is stored (LMA)</span>
+      <span><i class="sw-seg"></i>other sections</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>&gt;RAM AT&gt; FLASH</code> means the section lives in RAM and is stored in FLASH. <code>LOADADDR(.data)</code> gives the FLASH copy, <code>_sidata</code>, and <code>Reset_Handler</code> copies it to <code>_sdata</code> before <code>main()</code>.</p>
+    <p class="source">Source: L04 slides 10, 14 · Notes: L04 › 15. link.ld part 2, SECTIONS and the location counter</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc16" data-part="mc" data-num="16" data-topic="Memory usage" data-ref="topic4">
+  <div class="q-head">
+    <p class="eyebrow">Question 16 · L04, Memory usage</p>
+    <h3 class="q-title"><code>arm-none-eabi-size -A</code> prints the sections below for a build, and there are no others. How much FLASH and how much RAM does the linker report as used?</h3>
+    <pre class="calc">section               size
+.isr_vector            180
+.text                 4000
+.rodata                800
+.data                  120
+.bss                   400
+._user_heap_stack     1536</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>FLASH 4980 B, RAM 2056 B</span>
+      <span class="why">No. 4980 leaves out the FLASH copy of <code>.data</code>.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>FLASH 5500 B, RAM 2056 B</span>
+      <span class="why">No. 5500 also counts <code>.bss</code>, which gets no FLASH at all, only a size.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>FLASH 5100 B, RAM 2056 B</span>
+      <span class="why">Correct. 180 + 4000 + 800 + 120 = 5100 and 120 + 400 + 1536 = 2056.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>FLASH 5100 B, RAM 520 B</span>
+      <span class="why">No. 520 leaves out the 1536-byte heap and stack reservation.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> FLASH holds the vector table, <code>.text</code>, <code>.rodata</code> and the stored copy of <code>.data</code>: 180 + 4000 + 800 + 120 = 5100 bytes. RAM holds <code>.data</code>, <code>.bss</code> and the heap and stack reservation: 120 + 400 + 1536 = 2056 bytes.</p>
+    <p><code>.data</code> is counted twice, once at its RAM address and once at its FLASH load address, so it costs both. <code>.bss</code> is all zeros, so it gets no FLASH, only a size, and the startup code writes the zeros at run time.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Where each section's bytes go, to scale</h4>
+    </div>
+    <p class="fig-lede">The two bars are the used parts of FLASH and RAM, drawn on one byte scale. Step through the sections to see which bar each one adds to. Only <code>.data</code> lands in both.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="bars"></div>
+    <div data-viz="table"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>FLASH used = vectors + <code>.text</code> + <code>.rodata</code> + <code>.data</code> again. RAM used = <code>.data</code> + <code>.bss</code> + the heap and stack reservation. <code>.data</code> costs you both, and <code>.bss</code> costs no FLASH at all.</p>
+    <p class="source">Source: L04 slides 9, 15 · Notes: L04 › 16. Where the memory actually went</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc17" data-part="mc" data-num="17" data-topic="Weak alias" data-ref="topic4">
+  <div class="q-head">
+    <p class="eyebrow">Question 17 · L04, Weak alias</p>
+    <h3 class="q-title"><code>startup.c</code> declares the line below, and <code>nm</code> shows <code>Default_Handler</code> at <code>0x08000678</code>. A student enables the TIM3 interrupt and defines <code>void TIM3_IRQhandler(void) { ... }</code> in <code>main.c</code>. The build has no errors and no warnings. Which value does TIM3's entry in the vector table hold?</h3>
+    <pre class="calc">void TIM3_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));</pre>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span><code>0x08000679</code>, the address of <code>Default_Handler</code> with the Thumb bit set</span>
+      <span class="why">Correct. The misspelt function overrides nothing, so the weak alias stays.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>0x08000678</code>, the address of <code>Default_Handler</code></span>
+      <span class="why">No. Every handler entry has bit 0 set, the Thumb bit. An even entry faults on the first instruction.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0x00000000</code>, because no <code>TIM3_IRQHandler</code> was defined</span>
+      <span class="why">No. The weak alias defines <code>TIM3_IRQHandler</code> as <code>Default_Handler</code>, so the slot is never empty.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The address of the student's <code>TIM3_IRQhandler</code> plus 1, because it is the only TIM3 handler in the program</span>
+      <span class="why">No. The linker matches names exactly. <code>IRQhandler</code> is not <code>IRQHandler</code>.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> A weak symbol is a default that any ordinary definition of the same name overrides at link time. The name is the registration. <code>TIM3_IRQhandler</code> has a lower-case <code>h</code>, so it is a different name, and it overrides nothing.</p>
+    <p>The table therefore keeps the weak alias, <code>Default_Handler</code> at <code>0x08000678</code>, stored with the Thumb bit as <code>0x08000679</code>. There is no error and no warning. The first TIM3 interrupt runs <code>Default_Handler</code>'s <code>for (;;)</code>, and the board hangs.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The linker matches handler names letter by letter</h4>
+    </div>
+    <p class="fig-lede">Left: the symbols each object file brings, as <code>nm</code> marks them (<code>W</code> weak, <code>T</code> an ordinary definition). Middle: the name the vector table asks for against the name the student wrote. Right: what lands in TIM3's slot, vector 32 (TIM3 is IRQ 16), and what the first interrupt does. Compare the two spellings.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="link"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>The name is the registration. A misspelt handler overrides nothing, the weak <code>Default_Handler</code> stays in the table, and the first interrupt hangs the board with no error and no warning.</p>
+    <p class="source">Source: L04 slides 7, 8 · Notes: L04 › 10. Weak aliases and the misspelling trap</p>
+  </div>
+</article>

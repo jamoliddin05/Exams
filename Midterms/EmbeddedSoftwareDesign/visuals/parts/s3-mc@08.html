@@ -1,0 +1,208 @@
+<article class="q" id="s3-mc31" data-part="mc" data-num="31" data-topic="Polled printf time" data-ref="topic8">
+  <div class="q-head">
+    <p class="eyebrow">Question 31 · L08, Byte time and a polled printf</p>
+    <h3 class="q-title">USART2 is clocked at 48 MHz and <code>BRR</code> reads 5000 (8N1). Lesson 04's polled <code>_write()</code> sends a 48-character line. For about how long does that <code>printf</code> call hold the CPU?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>4.2 ms</span>
+      <span class="why">No. 4.2 ms is 48 bytes at 115 200 baud, 86.8 µs each. <code>BRR</code> = 5000 at 48 MHz gives 9600 baud.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>50 ms</span>
+      <span class="why">Correct. 48 000 000 / 5000 = 9600 baud, 960 bytes a second, so 48 bytes take 50 ms.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>40 ms</span>
+      <span class="why">No. 40 ms counts 8 bits per byte. The start and stop bits are on the wire too, so a byte is 10 bits.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Almost no time: <code>printf</code> returns as soon as the text is in a buffer</span>
+      <span class="why">No. That is lesson 08's <code>_write()</code>, which fills a ring. Lesson 04's version waits on every byte.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> <code>BRR</code> counts clocks per bit, so the line runs at 48 000 000 / 5000 = 9600 baud. 8N1 puts 10 bits on the wire per byte (start, 8 data, stop), so 960 bytes a second and 1.04 ms per byte.</p>
+    <p>The polled <code>_write()</code> waits for <code>TXE</code> before each byte, so <code>printf</code> returns only when the line has gone out: 48 / 960 s = 50 ms of CPU spent waiting. Lesson 08's <code>_write()</code> copies the line into the ring and returns, and the interrupt sends the bytes.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>From BRR to 50 ms, by hand</h4>
+    </div>
+    <p class="fig-lede">Top: one 8N1 byte at 9600 baud, ten bit cells. Bottom: the 48 bytes of the line on a 0 to 50 ms axis, with the three timed options bracketed. Step through the calculation.</p>
+    <div data-viz="calc-steps"></div>
+    <p class="step-note" data-role="calc-note" aria-live="polite"></p>
+    <div data-viz="calc"></div>
+    <pre class="calc" data-role="calc-pre"></pre>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>The same 50 ms on the pin, two ways to spend the CPU</h4>
+    </div>
+    <p class="fig-lede">The bytes leave the pin at the same rate either way. Lesson 04's polled <code>_write()</code> keeps the CPU inside <code>printf</code> until the last byte. Lesson 08's <code>_write()</code> puts the 48 bytes in the 256-byte ring and returns, and one short interrupt per byte feeds <code>TDR</code>. That is option D, the wrong lesson's <code>_write()</code>.</p>
+    <div data-viz="cpu"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>CPU inside <code>printf</code></span>
+      <span><i class="sw-ter-soft"></i>CPU free for other work</span>
+      <span><i class="sw-sec"></i>USART2 interrupt: one byte to <code>TDR</code></span>
+      <span><i class="sw-seg"></i>a byte on the pin</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>BRR</code> = clock / baud, and an 8N1 byte is 10 bits. 48 000 000 / 5000 = 9600 baud = 960 bytes a second, so a polled <code>printf</code> of 48 characters holds the CPU for 50 ms. Lesson 08's ring <code>_write()</code> returns as soon as the text is in the ring.</p>
+    <p class="source">Source: L08 slide 1b, slide 2, slide 7 · Notes: L08 › 3. One byte on the wire · L08 › 9. Replacing the printf back end: weak again</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc32" data-part="mc" data-num="32" data-topic="Bad and lost frames" data-ref="topic8">
+  <div class="q-head">
+    <p class="eyebrow">Question 32 · L08, host.py: bad and lost frames</p>
+    <h3 class="q-title"><code>host.py --file</code> reads a capture of ten <code>$TEL</code> frames, <code>seq</code> 0 to 9, and nothing else. In transit the <code>seq</code> 4 frame <code>$TEL,5000,4,500,0,0*75</code> arrived as <code>$TEL,5000,4,600,0,0*75</code>; nothing else was damaged or lost. What does host.py's summary line <code>frames good …, bad …, lost (sequence gaps) …</code> report?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>good 10, bad 0, lost 0</span>
+      <span class="why">No. <code>5</code> → <code>6</code> changes one byte, and XOR catches any change inside one byte: the body gives <code>76</code>.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>good 9, bad 1, lost 0</span>
+      <span class="why">No. This counts the bad line and forgets that <code>seq</code> 4 never arrives intact, so the good frames jump from 3 to 5.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>good 9, bad 0, lost 1</span>
+      <span class="why">No. A line that fails its checksum is counted bad. host.py does not drop it silently.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span>good 9, bad 1, lost 1</span>
+      <span class="why">Correct. The damaged line is counted bad, and its <code>seq</code> 4 is missing from the good frames: a gap of one.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> The damage is inside one byte: <code>5</code> → <code>6</code> is <code>35 ^ 36</code> = <code>03</code>, so the XOR of the body becomes <code>75 ^ 03</code> = <code>76</code>. The line still carries <code>75</code>, so the check fails, and host.py counts the line bad and uses none of it.</p>
+    <p>Only good frames reach the sequence check. They carry <code>seq</code> 0, 1, 2, 3, 5, 6, 7, 8, 9, and the jump from 3 to 5 adds 5 − 3 − 1 = 1 to lost. Slide 13: a line altered in transit is counted bad, and the sequence number it carried never arrives intact, so it is also a gap.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The damaged line fails its own checksum</h4>
+    </div>
+    <p class="fig-lede">The frame byte by byte, with each byte's hex value. The two lower rows run the XOR along the body, as sent and as received. From the damaged byte on, every running value differs by <code>03</code>.</p>
+    <div data-viz="frame-steps"></div>
+    <p class="step-note" data-role="frame-note" aria-live="polite"></p>
+    <div data-viz="frame"></div>
+    <pre class="calc" data-role="frame-calc"></pre>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>host.py's three counters, line by line</h4>
+    </div>
+    <p class="fig-lede">Top: the ten lines in the order host.py reads them. Middle: the <code>seq</code> of each good frame, which is all the sequence check sees. Bottom: the counters. Step through the capture.</p>
+    <div data-viz="count-steps"></div>
+    <p class="step-note" data-role="count-note" aria-live="polite"></p>
+    <div data-viz="count"></div>
+    <div class="legend">
+      <span><i class="sw-ok"></i>good frame</span>
+      <span><i class="sw-bad"></i>bad: checksum fails</span>
+      <span><i class="sw-ter"></i>sequence gap</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>A frame that fails its checksum is thrown away and counted bad, never half-used. Its sequence number never arrives intact, so host.py also counts a gap: good 9, bad 1, lost 1.</p>
+    <p class="source">Source: L08 slide 10, slide 13, slide 15 · Notes: L08 › 15. A measured session and host.py · L08 › 14. What XOR catches and what it misses</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc33" data-part="mc" data-num="33" data-topic="TXEIE storm" data-ref="topic8">
+  <div class="q-head">
+    <p class="eyebrow">Question 33 · L08, Turning TXEIE off</p>
+    <h3 class="q-title">The <code>else</code> branch that turns <code>TXEIE</code> off is deleted from <code>USART2_IRQHandler</code>, leaving the transmit branch below; <code>_write()</code> still turns <code>TXEIE</code> on after filling the ring. What happens after reset?</h3>
+    <pre class="calc">if ((USART2-&gt;CR1 &amp; USART_CR1_TXEIE_TXFNFIE) &amp;&amp; (isr &amp; USART_ISR_TXE_TXFNF)) {
+    if (tx_tail != tx_head) {
+        USART2-&gt;TDR = tx_ring[tx_tail];
+        tx_tail = (tx_tail + 1) % 256;
+    }
+}</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Every line prints normally; after each line the handler runs once more, finds the ring empty and returns</span>
+      <span class="why">No. Returning does not clear <code>TXE</code>. With <code>TXEIE</code> still on, the interrupt is pending again the moment the handler returns.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>Nothing is printed, not even the banner</span>
+      <span class="why">Correct. The handler re-enters forever at priority 1, so the code that fills the ring never runs again. Measured: not even the banner.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>Every line prints, a little slower: while the UART is idle, the handler runs once per byte time</span>
+      <span class="why">No. Once per byte time is the rate while bytes are going out. An idle UART keeps <code>TXE</code> at 1, so the handler runs back to back.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The build warns that <code>TXEIE</code> is turned on but never off, so the fault is caught before it runs</span>
+      <span class="why">No. To the compiler <code>TXEIE</code> is one bit of a register write. The measured build had zero warnings.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> <code>TXE</code> means the transmit register is empty. It stays 1 the whole time the UART is idle, and only a write to <code>TDR</code> clears it. With the <code>else</code> gone nothing turns <code>TXEIE</code> off, so once the ring is empty the handler finds nothing to send, returns, and is entered again at once.</p>
+    <p>The handler runs at priority 1, above SysTick, PendSV and every task, so the code that would put more bytes into the ring never runs again. Slide 6, measured with the <code>else</code> line removed: nothing is printed at all, not even the banner. The deleted line is the fix: <code>USART2-&gt;CR1 &amp;= ~USART_CR1_TXEIE_TXFNFIE;</code> when the ring is empty.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>After reset, with and without the else branch</h4>
+    </div>
+    <p class="fig-lede">Five lanes on one time axis: who has the CPU, the two bits that decide whether the interrupt is pending, and the TX pin. Compare the lesson's handler with the one in the question.</p>
+    <div data-viz="storm-steps"></div>
+    <p class="step-note" data-role="storm-note" aria-live="polite"></p>
+    <div data-viz="storm"></div>
+    <div class="legend">
+      <span><i class="sw-pri-soft"></i>thread code runs</span>
+      <span><i class="sw-sec"></i>USART2 handler runs</span>
+      <span><i class="sw-seg"></i>a byte on the pin</span>
+    </div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Why it never stops: a level flag, an enable nobody clears, and priority 1</h4>
+    </div>
+    <p class="fig-lede">Left: the loop the handler is caught in. Right: the NVIC priority ladder, where 0 is the most urgent. Everything that could refill the ring sits below the handler.</p>
+    <div data-viz="loop"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>TXE</code> stays 1 whenever the UART is idle, so <code>TXEIE</code> must be on only while there is work. Forget to turn it off when the ring is empty and the handler runs forever at priority 1: an interrupt storm, and measured, not even the banner.</p>
+    <p class="source">Source: L08 slide 6, slide 14 · Notes: L08 › 8. TXEIE on only while there is work · L08 › 16. The silent-failure checklist, UART edition</p>
+  </div>
+</article>

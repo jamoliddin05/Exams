@@ -1,0 +1,238 @@
+<article class="q" id="s1-mc27" data-part="mc" data-num="27" data-topic="Priority numbering" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 27 · L07, Two priority numberings</p>
+    <h3 class="q-title">In this course's kernel, the button task has priority 3 and the hog task has priority 1. On the same chip, an EXTI interrupt has NVIC priority 1 and SysTick has NVIC priority 3. Which statement is correct?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>The button task outranks the hog, and the EXTI interrupt outranks SysTick</span>
+      <span class="why">Correct. Kernel: bigger is more urgent, 3 beats 1. NVIC: 0 is most urgent, 1 beats 3.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>The hog outranks the button task, and the EXTI interrupt outranks SysTick</span>
+      <span class="why">No. This applies the NVIC rule, smaller is more urgent, to the tasks.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The button task outranks the hog, and SysTick outranks the EXTI interrupt</span>
+      <span class="why">No. This applies the kernel rule, bigger is more urgent, to the interrupts.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The hog outranks the button task, and SysTick outranks the EXTI interrupt</span>
+      <span class="why">No. Both orders are reversed.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> The chip has two numberings. In the kernel, as in FreeRTOS, a higher number is more urgent, so the button task (3) outranks the hog (1).</p>
+    <p>In the NVIC, 0 is most urgent, so the EXTI interrupt (1) outranks SysTick (3). Slide 9: "Two numbering schemes on one chip: always say which one you mean."</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Two ladders, most urgent at the top: the numbers run opposite ways</h4>
+    </div>
+    <p class="fig-lede">Left, the kernel's task priorities, which <code>pick()</code> compares. Right, the NVIC levels, which the hardware compares. Both ladders put the most urgent rung at the top, so the kernel counts up and the NVIC counts down. Pick an option to see the two orders it claims.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="ladders"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>named in the question</span>
+      <span><i class="sw-ok"></i>order the option gets right</span>
+      <span><i class="sw-bad"></i>order the option gets wrong</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Kernel (and FreeRTOS): the highest number is most urgent, 0 is idle. NVIC: 0 is most urgent, 3 is least (2 priority bits). Always say which numbering you mean.</p>
+    <p class="source">Source: L07 slide 9, slide 4b · Notes: L07 › 11. The scheduler rule: who runs next</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc28" data-part="mc" data-num="28" data-topic="Stack frame" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 28 · L07, Saved context on the task stack</p>
+    <h3 class="q-title">Task B was switched out by this kernel's <code>PendSV_Handler</code>, and B's TCB now holds <code>sp = 0x20000400</code>. At which address is B's saved <code>pc</code>, the instruction B will resume at?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>0x20000418</code></span>
+      <span class="why">No. That is tcb-&gt;sp + 24: it leaves out the 8 words PendSV saved and lands on r10.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>0x2000043C</code></span>
+      <span class="why">No. +60 is the last word, xPSR.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0x200003C8</code></span>
+      <span class="why">No. This counts downward. The saved words sit at higher addresses than tcb-&gt;sp.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>0x20000438</code></span>
+      <span class="why">Correct. 0x20000400 + 32 (r4–r11) + 24 (pc is frame word 6) = 0x20000438.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> <code>tcb-&gt;sp</code> points at r4. PendSV saved r4–r11 there, 8 words or 32 bytes, so the hardware frame r0, r1, r2, r3, r12, lr, pc, xPSR starts 32 bytes on, at <code>0x20000420</code>.</p>
+    <p>The pc is word 6 of that frame, 24 bytes further: 0x400 + 32 + 24 = 0x400 + 0x38, so <code>0x20000438</code>.</p>
+  </div>
+  <pre class="calc">tcb-&gt;sp                  = 0x20000400   → r4
++ 8 words (r4–r11) × 4   = + 32 = 0x20  → 0x20000420, r0: the hardware frame starts
++ 6 words (r0 … lr) × 4  = + 24 = 0x18  → 0x20000438, pc
+total offset 32 + 24     = 56   = 0x38</pre>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Sixteen words and one pointer: B's switched-out stack</h4>
+    </div>
+    <p class="fig-lede">Low addresses at the top, as on slide 5. The hardware pushed the lower 8 words of the drawing when B was interrupted; PendSV then stored r4–r11 in the 8 words above them and kept that address in the TCB. Step through the save and the later restore.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="stack"></div>
+    <div class="legend">
+      <span><i class="sw-pri-soft"></i>saved by PendSV_Handler</span>
+      <span><i class="sw-sec-soft"></i>pushed by the hardware</span>
+      <span><i class="sw-ok"></i>the saved pc</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>From tcb-&gt;sp upward: r4–r7 (+0), r8–r11 (+16), r0–r3 (+32), r12, lr, pc, xPSR (+48). The hardware frame starts 32 bytes above tcb-&gt;sp, and pc is its word 6: tcb-&gt;sp + 56.</p>
+    <p class="source">Source: L07 slide 5, slide 6 · Notes: L07 › 7. The exception stack frame, 16 words</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc29" data-part="mc" data-num="29" data-topic="Stack overflow" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 29 · L07, Stack overflow and the high-water mark</p>
+    <h3 class="q-title">The report task calls <code>printf</code> and needs 115 words of stack at its deepest. A student shrinks its stack from 512 to 96 words. The linker happens to place the hog task's counter <code>primes</code> in the word just below the report task's stack. What does the board most likely do?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>It HardFaults at the first <code>printf</code>, and the fault report names the report task</span>
+      <span class="why">No. Nothing on this core checks the stack pointer, so writing below the array does not fault.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>Nothing crashes; the report keeps printing, but the hog's <code>primes</code> count suddenly shows a huge, wrong value</span>
+      <span class="why">Correct. The 19 extra words land below the array, on primes.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The kernel detects the overflow at the next context switch and stops the report task</span>
+      <span class="why">No. That is FreeRTOS's check on every switch. This kernel only shows the high-water mark in its report.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The build fails, because the linker sees that 115 words do not fit in a 96-word array</span>
+      <span class="why">No. Stack depth is a run-time fact. The linker only places a 96-word array.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> The stack grows down, so the report task's 115 − 96 = 19 extra words land below its array, on <code>primes</code> and whatever lies under it. Nothing on this core checks the stack pointer, so nothing faults.</p>
+    <p>Another task's data goes quietly wrong, and the bug looks like it is in the hog. Slide 17: "not a crash, but somebody else's data quietly wrong, far from the cause." An MPU guard region, which would catch it, is for bigger cores.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The report stack in RAM, one cell per word: past 96 words the writes land on primes</h4>
+    </div>
+    <p class="fig-lede"><code>os_task_create()</code> fills the 96-word array with <code>0xDEADBEEF</code>. The stack starts at the top (right) and grows down (left). Drag the depth the task reaches. The high-water mark counts the words that no longer read <code>0xDEADBEEF</code>, so it stops at 96 / 96 however far the task goes.</p>
+    <div data-viz="slider"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">Deepest point</span><span class="v pri" data-role="depth">115</span><span class="sub">words the task pushes</span></div>
+      <div class="stat"><span class="label">High-water mark</span><span class="v" data-role="mark">96 / 96</span><span class="sub">used / size, in words</span></div>
+      <div class="stat"><span class="label">Below the array</span><span class="v" data-role="over">19</span><span class="sub">words of other data overwritten</span></div>
+    </div>
+    <p class="verdict" data-role="verdict"></p>
+    <div data-viz="ram"></div>
+    <div class="legend">
+      <span><i class="sw-seg"></i>still 0xDEADBEEF, never reached</span>
+      <span><i class="sw-pri"></i>used by the report stack</span>
+      <span><i class="sw-bad"></i>other data, overwritten</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>A stack overflow on an MCU usually does not crash: it quietly corrupts another task's data, far from the cause. Fill each stack with 0xDEADBEEF, exercise every path, read the high-water mark, add a margin.</p>
+    <p class="source">Source: L07 slide 16, slide 17 · Notes: L07 › 18. Sizing a stack: the high-water mark and overflow</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc30" data-part="mc" data-num="30" data-topic="ISR and queue" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 30 · L07, Why an ISR must not block</p>
+    <h3 class="q-title">A UART receive interrupt handler must pass each received byte <code>b</code> to a protocol task that waits in <code>os_queue_get(&amp;q, ...)</code>. Which line belongs in the handler?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>os_queue_put(&amp;q, &amp;b);</code></span>
+      <span class="why">No. The task API blocks while the queue is full, and a handler cannot block.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>os_mutex_lock(&amp;m); rx[n++] = b; os_mutex_unlock(&amp;m);</code></span>
+      <span class="why">No. A mutex is never used from an ISR: locking can block.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>while (!os_queue_put_from_isr(&amp;q, &amp;b)) { }</code></span>
+      <span class="why">No. On a full queue the handler spins forever. The task that would empty it cannot run until the handler returns.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>if (!os_queue_put_from_isr(&amp;q, &amp;b)) { dropped++; }</code></span>
+      <span class="why">Correct. Never blocks: it returns 0 when full and the handler decides.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> An interrupt handler must never block: there is no task to put to sleep, only a handler on MSP. <code>os_queue_put_from_isr()</code> never blocks. It returns 0 when the queue is full and lets the handler decide, here by counting the lost byte.</p>
+    <p>A and B call task APIs that can block, on a full queue or a held mutex. C never sleeps, but on a full queue it spins forever.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>One byte from the UART interrupt to the waiting task</h4>
+    </div>
+    <p class="fig-lede">Each row is one context, and time runs to the right. The handler runs on MSP above every task, so while it runs no task can, including the one that empties the queue. Compare a queue with room, a full queue with option D, and a full queue with option C.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="lanes"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>UART handler, on MSP</span>
+      <span><i class="sw-ter"></i>PendSV, the switch</span>
+      <span><i class="sw-ok"></i>protocol task running</span>
+      <span><i class="sw-seg"></i>hog running</span>
+      <span><i class="sw-bad"></i>stuck</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>An ISR must never block: there is no task to put to sleep. Use os_queue_put_from_isr(), which returns 0 when full; the task it wakes runs when the last handler returns.</p>
+    <p class="source">Source: L07 slide 15, slide 12 · Notes: L07 › 17. Queues, from tasks and from interrupts</p>
+  </div>
+</article>

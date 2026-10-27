@@ -1,0 +1,168 @@
+<article class="q" id="s3-mc9" data-part="mc" data-num="9" data-topic="Boot chain" data-ref="topic2">
+  <div class="q-head">
+    <p class="eyebrow">Question 9 · L02, Bootstrapping</p>
+    <h3 class="q-title">A classmate says: "Booting a microcontroller must work like booting a PC. Some firmware has to load a bootloader before my program can run." Which statement describes how the STM32C031C6 actually boots?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Like a PC, in four handoffs: boot firmware, bootloader, kernel, then <code>main()</code></span>
+      <span class="why">No. That is the PC's chain. This chip has no firmware, bootloader or kernel in front of your code.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>In two handoffs: the hardware runs <code>SystemInit</code>, and <code>SystemInit</code> calls <code>main()</code></span>
+      <span class="why">No. <code>SystemInit</code> is called by <code>Reset_Handler</code>, which is code in your startup file.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>In one link: the hardware reads two 32-bit words from the start of flash, the initial SP and the reset vector, and runs <code>Reset_Handler</code>; everything after that is code you can read</span>
+      <span class="why">Correct. "This chip's chain has one link. Two words, then your code."</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>With no handoff at all: the CPU starts executing <code>main()</code> at <code>0x08000000</code>, the first address of flash</span>
+      <span class="why">No. The word at <code>0x08000000</code> is the initial stack pointer, a value, not an instruction.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> Bootstrapping always starts with one fixed act by the hardware. A PC's CPU starts at a fixed address near the top of its address space and hands off four times: firmware, bootloader, kernel, your program.</p>
+    <p>This chip's chain has one link: load SP from word 0 and PC from word 1, then <code>Reset_Handler</code> runs and does the rest in code (copy <code>.data</code>, zero <code>.bss</code>, <code>SystemInit</code>, <code>main()</code>). It is short enough to read in full, and if one of those two words is wrong, nothing else exists to catch it.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>PC: four handoffs. This chip: one link</h4></div>
+    <p class="fig-lede">Both start with one fixed, dumb act by the hardware. Count the handoffs from that act to your program.</p>
+    <div data-viz="chain"></div>
+    <div class="legend">
+      <span><i class="sw-ter"></i>the hardware's fixed act</span>
+      <span><i class="sw-sec"></i>other people's software</span>
+      <span><i class="sw-pri"></i>your code</span>
+    </div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 2</span><h4>The one link: two words from flash go into SP and PC</h4></div>
+    <p class="fig-lede">The first two words of the spike's flash, from slide 7. Word 0 is a RAM address for the stack, so it cannot be code. Word 1 is odd: bit 0 is the Thumb bit, and the handler starts at <code>0x08000274</code>.</p>
+    <div data-viz="words"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>The only step the hardware does: read two 32-bit words from address zero of flash, the stack pointer and the reset vector, and start. A PC has four handoffs (firmware, bootloader, kernel, program). This chip's chain has one link.</p>
+    <p class="source">Source: L02 slide 8 what runs before <code>main()</code>, bootstrapping · L02 slide 10 item 9 · Notes: L02 › 8. What runs before main, and bootstrapping</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc10" data-part="mc" data-num="10" data-topic="Build-time binding" data-ref="topic2">
+  <div class="q-head">
+    <p class="eyebrow">Question 10 · L02, Address binding</p>
+    <h3 class="q-title">The map file of a build says <code>SystemCoreClock</code> is at <code>0x20000000</code>. You program the same <code>Main.hex</code> into two boards and press reset on each many times. Where is <code>SystemCoreClock</code> on each board and each run, and why?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>Always at <code>0x20000000</code>: the locate stage bound it at build time, and the address is burned into the image</span>
+      <span class="why">Correct. Compile-time (build-time) binding: no loader, no MMU.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>It can move after each reset, because <code>Reset_Handler</code> works as a loader and picks a new base for <code>.data</code></span>
+      <span class="why">No. That would be load-time binding. <code>Reset_Handler</code> copies <code>.data</code> to the addresses the linker already chose.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>It can differ between the boards, because an MMU maps <code>0x20000000</code> to a different physical address on each</span>
+      <span class="why">No. That would be run-time binding, and this chip has no MMU.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The programmer picks a free RAM address when it writes the hex file, so each board can get a different one</span>
+      <span class="why">No. The programmer copies flash bytes to the addresses in the records. It makes no layout choices.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> A name can be bound to its address at compile time, load time or run time. With no loader and no MMU, this chip binds at build time.</p>
+    <p>The code that uses <code>SystemCoreClock</code> carries <code>0x20000000</code> inside the image, so the address is the same on every board and every run until you re-link. Options B and C describe the other two moments, load time and run time, which this chip cannot use.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Where each option puts the binding, and what really happens there</h4></div>
+    <p class="fig-lede">Four moments in the life of the image. The top row is what each option claims. The bottom row is what this chip really does at that moment. Pick an option.</p>
+    <div data-viz="when-steps"></div>
+    <p class="step-note" data-role="when-note" aria-live="polite"></p>
+    <div data-viz="when"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Here there is no loader and no MMU, so binding happens at build time and is burned into the image. Every name has one real address, the same on every run, chosen by the locate stage from your linker script.</p>
+    <p class="source">Source: L02 slide 2 address binding, "binding happens at build time and is burned into the image" · L02 slide 10 item 7 · Notes: L02 › 2. Five stages, not one, and address binding</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc11" data-part="mc" data-num="11" data-topic="RAM LENGTH" data-ref="topic2">
+  <div class="q-head">
+    <p class="eyebrow">Question 11 · L02, Linker script LENGTH</p>
+    <h3 class="q-title">A linker script for the STM32C031C6, which has 12 KB of SRAM, says <code>RAM (rw) : ORIGIN = 0x20000000, LENGTH = 16K</code>, and the stack top is <code>ORIGIN(RAM) + LENGTH(RAM)</code>. What initial SP ends up in the image, and what happens?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>0x20003000</code>, and the program runs normally, because the hardware limits SP to the real end of RAM</span>
+      <span class="why">No. The hardware loads word 0 into SP as it is. Nothing checks it.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span><code>0x20004000</code>: the build succeeds, but the stack starts above the real 12 KB, so the program fails at run time</span>
+      <span class="why">Correct. 16K = <code>0x4000</code>. The linker trusts your numbers, and the failure comes later.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0x20004000</code>, but the linker stops with an error because the chip has only 12 KB, so no image is produced</span>
+      <span class="why">No. The linker knows nothing about your chip. The <code>MEMORY</code> block is all it knows.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>0x20010000</code>, because 16K is <code>0x10000</code>, and the program fails at run time</span>
+      <span class="why">No. <code>0x10000</code> = 65536 = 64K. 16K is <code>0x4000</code>.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> 16K = 16 × 1024 = 16384 = <code>0x4000</code>, so the stack top is <code>0x20000000 + 0x4000 = 0x20004000</code>. Real SRAM ends at <code>0x20002FFF</code> (12K = <code>0x3000</code>).</p>
+    <p>The linker knows nothing about your chip, so the build succeeds and even reports a smaller RAM percentage. In the slide's words, the failure arrives later, as a stack that walks off the end of memory: the first push writes to memory that does not exist.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>The linker's RAM against the chip's RAM</h4></div>
+    <p class="fig-lede">Drag <code>LENGTH</code>. The top bar is the SRAM the chip really has. The bottom bar is the RAM region you told the linker about, with the stack top at its end. The stack grows down from there.</p>
+    <pre class="calc">LENGTH = 16K = 16 × 1024 = 16384 = 0x4000
+SP     = ORIGIN + LENGTH = 0x20000000 + 0x4000 = 0x20004000
+real   = 12K = 0x3000, last byte 0x20002FFF, top 0x20003000</pre>
+    <div data-viz="len-slider"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">LENGTH in hex</span><span class="v" data-role="len-hex">0x4000</span><span class="sub">K × 1024</span></div>
+      <div class="stat"><span class="label">Initial SP</span><span class="v pri" data-role="sp">0x20004000</span><span class="sub">ORIGIN + LENGTH</span></div>
+      <div class="stat"><span class="label">RAM % reported</span><span class="v" data-role="pct">12.21%</span><span class="sub">for 2000 B used, slide 6</span></div>
+    </div>
+    <p class="verdict" data-role="len-verdict"></p>
+    <div data-viz="len"></div>
+    <div class="legend">
+      <span><i class="sw-pri-soft"></i>real SRAM, 12 KB</span>
+      <span><i class="sw-bad"></i>no memory at these addresses</span>
+      <span><i class="sw-seg"></i>region you gave the linker</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>The <code>MEMORY</code> numbers come from the datasheet: FLASH 32K at <code>0x08000000</code>, RAM 12K at <code>0x20000000</code>. Get <code>LENGTH</code> wrong and the build succeeds; the failure arrives later, as a stack that quietly walks off the end of memory.</p>
+    <p class="source">Source: L02 slide 6 the linker script is the memory map, get <code>LENGTH</code> wrong and the build succeeds · L02 slide 10 item 5 · Notes: L02 › 6. The linker script is the memory map, written down</p>
+  </div>
+</article>
