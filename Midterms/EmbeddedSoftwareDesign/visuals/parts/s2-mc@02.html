@@ -1,0 +1,156 @@
+<article class="q" id="s2-mc9" data-part="mc" data-num="9" data-topic="Link errors" data-ref="topic2">
+  <div class="q-head">
+    <p class="eyebrow">Question 9 · L02, Declare vs define</p>
+    <h3 class="q-title"><code>startup.c</code> sets <code>SystemCoreClock</code> and <code>main.c</code> reads it. Both files include <code>clock.h</code>. Which arrangement builds and links without an error?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>uint32_t SystemCoreClock = 12000000;</code> in both <code>startup.c</code> and <code>main.c</code></span>
+      <span class="why">No. Two definitions: <code>multiple definition of SystemCoreClock</code>. The linker will not choose for you.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>extern uint32_t SystemCoreClock;</code> in <code>clock.h</code>, and no definition anywhere</span>
+      <span class="why">No. Two needs and no definition: <code>undefined reference to SystemCoreClock</code>.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span><code>extern uint32_t SystemCoreClock;</code> in <code>clock.h</code>, plus <code>uint32_t SystemCoreClock = 12000000;</code> in <code>startup.c</code> only</span>
+      <span class="why">Correct. One declaration shared by both files, exactly one definition.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>uint32_t SystemCoreClock = 12000000;</code> in <code>clock.h</code></span>
+      <span class="why">No. The preprocessor pastes the header into both files, so both objects define it: <code>multiple definition</code>.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> Each <code>.c</code> file is compiled alone. <code>extern</code> is a declaration, so <code>main.o</code> leaves a hole and a note saying it needs <code>SystemCoreClock</code>. The linker matches every need to exactly one definition, and C has exactly one, in <code>startup.o</code>.</p>
+    <p>A and D give two definitions, since a definition in a header lands in every file that includes it, and the linker stops with <code>multiple definition</code>. B gives none, and the linker stops with <code>undefined reference to SystemCoreClock</code>, the error the course's spike really hit.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>The linker matches every need to exactly one definition</h4></div>
+    <p class="fig-lede">Pick an option. The header is pasted into both files before they are compiled, one at a time. Each object then lists what it defines and what it needs, and the linker counts the definitions of <code>SystemCoreClock</code>.</p>
+    <div data-viz="link-steps"></div>
+    <p class="step-note" data-role="link-note" aria-live="polite"></p>
+    <div data-viz="link"></div>
+    <div class="legend">
+      <span><i class="sw-ok"></i>matched</span>
+      <span><i class="sw-bad"></i>duplicated or missing</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>The linker matches every "needs" to exactly one "defines". None left over, none duplicated, or it refuses: <code>undefined reference to X</code> means nobody defines X, <code>multiple definition of X</code> means two files do. Declare with <code>extern</code> in the header, define in one <code>.c</code> file.</p>
+    <p class="source">Source: L02 slide 3 the linker matches every "needs" to exactly one "defines", <code>undefined reference</code>, <code>multiple definition</code> · Notes: L02 › 3. The compiler sees one file at a time</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc10" data-part="mc" data-num="10" data-topic="Hex record" data-ref="topic2">
+  <div class="q-head">
+    <p class="eyebrow">Question 10 · L02, Intel HEX address</p>
+    <h3 class="q-title">A hex file for the STM32C031C6 contains these two consecutive records. At which address is the first data byte of the second record (<code>0A</code>) programmed?</h3>
+    <pre class="calc">:020000040800F2
+:100120000A4B1B68013B0B4A13600B4B1A68FF21FB</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>0x00000120</code></span>
+      <span class="why">No. That ignores the type-04 record. It would be right only if all of flash fit in 16 bits of address.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span><code>0x08000120</code></span>
+      <span class="why">Correct. Upper 16 bits <code>0800</code> from record 1, lower 16 bits <code>0120</code> from record 2.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0x08000010</code></span>
+      <span class="why">No. <code>10</code> is the byte count LL, the first field after the colon. The offset is the next four digits.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>0x00000920</code></span>
+      <span class="why">No. That adds <code>0x0800 + 0x0120</code>. The 04 record supplies the upper half of the address, so it is shifted 16 bits up.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> The first record has type <code>04</code>, extended linear address: its data <code>0800</code> becomes the upper 16 bits of every following address. The second record reads <code>10</code> (16 data bytes), <code>0120</code> (offset) and <code>00</code> (data).</p>
+    <p>So the address is <code>0x0800</code> in the upper half and <code>0x0120</code> in the lower half, <code>0x08000120</code>. An 8-bit AVR never needed the 04 record, because its whole flash fits in 16 bits of address. This chip's flash starts at <code>0x08000000</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Two records, field by field, and the address they build</h4></div>
+    <p class="fig-lede">Every record is <code>:LL AAAA TT data CC</code>. The blue field of record 1 gives the upper half of the address, and the plum field of record 2 gives the lower half.</p>
+    <div data-viz="hex-steps"></div>
+    <p class="step-note" data-role="hex-note" aria-live="polite"></p>
+    <div data-viz="hex"></div>
+    <div data-viz="hex-table"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Record <code>:LL AAAA TT data CC</code>. Type <code>04</code>, extended linear address, sets the upper 16 bits: after <code>:020000040800F2</code>, offset <code>0x0120</code> means <code>0x08000120</code>. The 8-bit chips never needed it, because their flash fits in 16 bits of address.</p>
+    <p class="source">Source: L02 slide 7 record fields, extended linear address record · L02 slide 10 item 6 · Notes: L02 › 7. What actually gets programmed: elf, bin, hex</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc11" data-part="mc" data-num="11" data-topic="Run-time binding" data-ref="topic2">
+  <div class="q-head">
+    <p class="eyebrow">Question 11 · L02, Address binding</p>
+    <h3 class="q-title">On a laptop, two programs run at the same time, and each keeps its own data at address <code>0x400000</code> without disturbing the other. What makes this possible, and why can't the STM32C031C6 do the same?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>The compiler gives each program its own <code>0x400000</code>; the chip's compiler cannot, because the chip has only one RAM</span>
+      <span class="why">No. The compiler sees one file at a time and fixes no final address at all.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>The loader moves one of the two programs to a free address when it starts; the chip has no loader</span>
+      <span class="why">No. That is load-time binding. The moved program would then use a different address, not <code>0x400000</code>.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>An MMU translates every address while the programs run (run-time binding), so <code>0x400000</code> means a different physical place for each; the chip has no MMU, so its addresses are bound at build time and each is one real location</span>
+      <span class="why">Correct. Run-time binding needs an MMU, and this chip has none.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The OS saves one program's <code>0x400000</code> to disk while the other runs; the chip has no disk</span>
+      <span class="why">No. Swapping to disk does not let two running programs use the same address. Translation does.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> This is run-time binding. An MMU translates each program's addresses while it runs, so two programs can both believe they own <code>0x400000</code>, in the slide's words.</p>
+    <p>This chip has no MMU and no loader, so binding happens at build time and is burned into the image. <code>0x20000000</code> is one real SRAM word for every piece of code that uses it.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Laptop: one virtual address, two physical places. Chip: one address, one word</h4></div>
+    <p class="fig-lede">Left: the MMU sits between each program and RAM and translates every access. Right: on this chip the address in the code is the address on the bus. The physical addresses on the left are an example.</p>
+    <div data-viz="mmu"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>program A, or this chip's variable</span>
+      <span><i class="sw-sec"></i>program B</span>
+      <span><i class="sw-seg"></i>other memory</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Three moments to bind: compile time, load time, run time. A desktop binds at run time and needs an MMU. This chip has no loader and no MMU, so binding happens at build time and is burned into the image.</p>
+    <p class="source">Source: L02 slide 2 a desktop binds late, run time with an MMU · L02 slide 10 item 7 · Guide §2 key contrasts, address binding · Notes: L02 › 2. Five stages, not one, and address binding</p>
+  </div>
+</article>

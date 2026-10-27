@@ -1,0 +1,370 @@
+<article class="q" id="topic2" data-part="tp" data-num="2" data-topic="Development">
+  <div class="q-head">
+    <p class="eyebrow">Lesson 02 · Week 3 · 3 of 33 exam questions</p>
+    <h3 class="q-title">Development: From Text to a Chip That Runs</h3>
+    <p class="fig-lede">The third of four lessons with no code to write. Lessons 00 and 01 gave you a model of the machine and of its instructions. This one is about the other machine, the toolchain: how text becomes bytes at fixed addresses in flash, and what runs between power-on and the first line of <code>main()</code>. Every figure in the deck is real output from the course's build of the STM32C031C6 spike.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. On a PC, an operating system hides all of this (slide 1)</h4>
+    <p>Run <code>gcc hello.c</code> on a laptop and the OS "decides where your program lives in memory, provides a stack, zeroes your globals, opens <code>stdout</code>, and calls <code>main()</code> for you." <b>There is no operating system here.</b> "Every one of those jobs still has to be done, and if you do not arrange it, nothing does."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Job (on a PC, the OS)</th><th class="l">Who does it on this chip</th><th class="l">Slide</th></tr></thead>
+        <tbody>
+          <tr><td class="l">decide where the program lives</td><td class="l">the linker, from your <code>link.ld</code> (the locate stage)</td><td class="l">2, 6</td></tr>
+          <tr><td class="l">provide a stack</td><td class="l">the hardware loads SP from word 0 of flash</td><td class="l">8</td></tr>
+          <tr><td class="l">set up globals</td><td class="l"><code>Reset_Handler</code>: copy <code>.data</code>, zero <code>.bss</code></td><td class="l">5</td></tr>
+          <tr><td class="l">open <code>stdout</code></td><td class="l">your <code>_write</code>, which <code>printf</code> in <code>libc_nano.a</code> needs</td><td class="l">3</td></tr>
+          <tr><td class="l">call <code>main()</code></td><td class="l"><code>Reset_Handler</code></td><td class="l">8</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The lesson answers one question. "Between power-on and the first line of <code>main()</code>, who does the work, and what happens if nobody does?"</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. Five stages, not one (slide 2)</h4>
+    <ul>
+      <li>"<code>gcc</code> is not a compiler. It is a driver that runs four or five programs in sequence, and on embedded the last one is the one that bites."</li>
+      <li><b>The five stages are preprocess, compile, assemble, link and locate.</b> <code>main.c</code> becomes <code>main.o</code>. Then <code>main.o</code>, <code>startup.c</code> and <code>link.ld</code> go into LINK and LOCATE, which "resolve names, then assign real addresses".</li>
+      <li>The first stages are ordinary. <b>Locate is the embedded one.</b> It decides that <code>SystemInit</code> lives at <code>0x0800022c</code> and <code>SystemCoreClock</code> at <code>0x20000000</code>.</li>
+      <li>"On a PC the last stage is invisible. Here you write its input by hand." Its input is <code>link.ld</code>, together with <code>startup.c</code>.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>One name through the five stages: only locate gives it an address</h4></div>
+      <p class="fig-lede">Follow <code>SystemCoreClock</code>, used in <code>main.c</code> and defined in <code>startup.c</code>. The first three stages see one file at a time. Pick a stage to see what it outputs and what is known about the address.</p>
+      <div data-viz="tc-steps"></div>
+      <p class="step-note" data-role="tc-note" aria-live="polite"></p>
+      <div data-viz="tc"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. Address binding: when does a name get its address? (slide 2)</h4>
+    <p><b>The general idea is address binding.</b> "At what moment does a name in your source acquire a real address?" An operating-systems text gives three possible moments, and every system picks one.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Bound at</th><th class="l">What that means</th><th class="l">Where you meet it</th></tr></thead>
+        <tbody>
+          <tr class="on"><td class="l"><b>compile time</b></td><td class="l">the address is fixed when the code is built, and cannot move</td><td class="l"><b>this chip</b>, and MS-DOS <code>.com</code> files</td></tr>
+          <tr><td class="l"><b>load time</b></td><td class="l">the loader picks a base when the program starts</td><td class="l">classic relocatable executables</td></tr>
+          <tr><td class="l"><b>run time</b></td><td class="l">addresses move while the program runs, translated by an MMU</td><td class="l">every desktop and phone OS</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>A desktop binds late. That is why the same binary runs at a different address every launch, and why two programs can both believe they own address <code>0x400000</code>.</li>
+      <li><b>"Here there is no loader and no MMU, so binding happens at build time and is burned into the image."</b></li>
+      <li>That single fact is why an embedded build needs a stage a desktop build does not, and why you write its input by hand.</li>
+      <li>So <code>SystemCoreClock</code> is at <code>0x20000000</code> on every board and every run until you re-link. <code>Reset_Handler</code> only copies values to the addresses the linker chose, and no MMU translates them.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>Three moments to bind a name, and the hardware each one needs</h4></div>
+      <p class="fig-lede">Time runs left to right, from the build to every memory access. The colored box in each row is the moment the real address is decided. Pick a row.</p>
+      <div data-viz="bind-steps"></div>
+      <p class="step-note" data-role="bind-note" aria-live="polite"></p>
+      <div data-viz="bind"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. The compiler sees one file at a time (slide 3)</h4>
+    <p>Each <code>.c</code> file is compiled alone, into an <code>.o</code>, "knowing nothing about the others. Where it needs a name it does not have, it leaves a hole and a note."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Object</th><th class="l">Defines</th><th class="l">Needs</th></tr></thead>
+        <tbody>
+          <tr><td class="l"><code>main.o</code></td><td class="l"><code>main</code>, <code>_write</code></td><td class="l"><code>printf</code>, <code>SystemCoreClock</code></td></tr>
+          <tr><td class="l"><code>startup.o</code></td><td class="l"><code>Reset_Handler</code>, <code>SystemCoreClock</code></td><td class="l"><code>main</code></td></tr>
+          <tr><td class="l"><code>libc_nano.a</code></td><td class="l"><code>printf</code></td><td class="l"><code>_write</code>, <code>_sbrk</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>"The linker matches every needs to exactly one defines. None left over, none duplicated, or it refuses." This explains the two errors you will meet most often.</li>
+      <li><b><code>undefined reference to X</code></b>: somebody needs X and nobody defines it. The spike really hit <code>undefined reference to SystemCoreClock</code>. ST's header declares it, and ST's <code>system_stm32c0xx.c</code> defines it, but the course deliberately does not use that file. The course's <code>startup.c</code> defines it instead.</li>
+      <li><b><code>multiple definition of X</code></b>: two files both define it, and the linker will not choose for you. A definition written in a header gives the same error, because it lands in every <code>.c</code> file that includes the header.</li>
+    </ul>
+    <pre class="calc">clock.h     extern uint32_t SystemCoreClock;        declaration: no storage, a need
+startup.c   uint32_t SystemCoreClock = 12000000;    definition: storage, in exactly one file
+main.c      #include "clock.h" ... f = SystemCoreClock;   main.o gets a hole and a note</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>The linker matches every need to exactly one definition</h4></div>
+      <p class="fig-lede">The three objects of slide 3, and the linker's table of who needs what and who defines it. Pick a case to break the match for <code>SystemCoreClock</code>.</p>
+      <div data-viz="sym-steps"></div>
+      <p class="step-note" data-role="sym-note" aria-live="polite"></p>
+      <div data-viz="sym"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Your program is sections, not one blob (slide 4)</h4>
+    <p><b>The general idea: "an object file is sorted by what things need, not by the order you wrote them."</b> Four different sets of requirements give four sections. The names are the same on Linux, on macOS and in any ELF file you ever open. <code>.bss</code> is older still, an assembler directive from the 1950s.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Section</th><th class="l">Holds</th><th class="l">Requirement</th><th class="l">Lives in</th><th class="l">Costs flash?</th><th class="l">Costs RAM?</th></tr></thead>
+        <tbody>
+          <tr><td class="l"><code>.isr_vector</code></td><td class="l">the vector table</td><td class="l">at the very start of flash</td><td class="l">flash, <code>0x08000000</code></td><td class="l">yes</td><td class="l">no</td></tr>
+          <tr><td class="l"><code>.text</code></td><td class="l">code</td><td class="l">executable, never changes</td><td class="l">flash</td><td class="l">yes</td><td class="l">no</td></tr>
+          <tr><td class="l"><code>.rodata</code></td><td class="l"><code>const</code> data, string literals</td><td class="l">never changes, no execution</td><td class="l">flash</td><td class="l">yes</td><td class="l">no</td></tr>
+          <tr class="on"><td class="l"><code>.data</code></td><td class="l">globals with a starting value</td><td class="l">writable <b>and</b> remembered</td><td class="l">RAM, values kept in flash</td><td class="l"><b>yes</b></td><td class="l"><b>yes</b></td></tr>
+          <tr><td class="l"><code>.bss</code></td><td class="l">globals that start at zero</td><td class="l">writable, no stored value</td><td class="l">RAM</td><td class="l"><b>no</b>, only its size</td><td class="l">yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The real output for the spike (slide 4):</p>
+    <pre class="calc">section          size    addr
+.isr_vector       180    0x08000000     the vector table
+.text            4792    0x080000b4     code
+.rodata           184    0x08002cac     const data, string literals
+.data              96    0x20000000     initialised variables
+.bss              364    0x20000060     variables that start at zero</pre>
+    <ul>
+      <li>Read the addresses. There are two distinct places, flash from <code>0x08000000</code> and SRAM from <code>0x20000000</code>.</li>
+      <li>".data exists twice: the values live in flash, the variables live in RAM."</li>
+      <li>SRAM also holds the heap and the stack, which grows down from the top of RAM.</li>
+      <li>Within a region, the next section starts where the one before it ends.</li>
+    </ul>
+    <pre class="calc">.text  starts at 0x08000000 + 180 (0xB4)  = 0x080000B4
+.bss   starts at 0x20000000 +  96 (0x60)  = 0x20000060
+.bss   ends   at 0x20000060 + 364 (0x16C) = 0x200001CC
+if .data grew to 100 B (0x64), .bss would start at 0x20000064</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Where a declaration lands, and what it costs in flash and RAM</h4></div>
+      <p class="fig-lede">The sections of slide 4 in flash and SRAM, not to scale. Pick a declaration to see which section it goes to and how many bytes it adds to each memory.</p>
+      <div data-viz="sec-steps"></div>
+      <div data-viz="sec"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. The awkward one: .data, and why .bss is free (slide 5)</h4>
+    <ul>
+      <li><code>uint32_t SystemCoreClock = 12000000;</code> must be <b>writable</b>, so it has to live in RAM. Its initial value must <b>survive power-off</b>, so it has to live in flash. "Both are true, so it exists in both places."</li>
+      <li><code>.bss</code> is the opposite case. A global that starts at zero has no value worth storing, so the image records only how many bytes to clear. <b>364 bytes of <code>.bss</code> cost nothing in flash, while 96 bytes of <code>.data</code> cost 96.</b></li>
+      <li>The trade is universal, and your desktop's C runtime does the same. Here you can see the loop that does it.</li>
+      <li>Somebody has to copy 96 bytes from flash to RAM before <code>main()</code> runs. On a PC the loader does it. Here <code>Reset_Handler</code> does, in four lines of the startup file.</li>
+    </ul>
+    <pre class="calc">src = &amp;_sidata;                                  /* where the values sit in flash */
+for (dst = &amp;_sdata; dst &lt; &amp;_edata; ) { *dst++ = *src++; }
+for (dst = &amp;_sbss;  dst &lt; &amp;_ebss;  ) { *dst++ = 0; }</pre>
+    <ul>
+      <li><code>_sidata</code>, <code>_sdata</code>, <code>_edata</code>, <code>_sbss</code> and <code>_ebss</code> are not variables. <b>The linker invents them</b>, and their values are addresses it chose.</li>
+      <li>"This is the one place where your C code reads decisions the linker made." The code writes <code>&amp;_sdata</code> because it wants the symbol's address. No value is stored there.</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Symbol</th><th class="l">Spike value</th><th class="l">Marks</th></tr></thead>
+        <tbody>
+          <tr><td class="l"><code>_sidata</code></td><td class="l">in flash, after the code and constants</td><td class="l">start of the <code>.data</code> values in flash</td></tr>
+          <tr><td class="l"><code>_sdata</code></td><td class="l"><code>0x20000000</code></td><td class="l">start of <code>.data</code> in RAM</td></tr>
+          <tr><td class="l"><code>_edata</code></td><td class="l"><code>0x20000060</code></td><td class="l">end of <code>.data</code>: 96 B = 24 words copied</td></tr>
+          <tr><td class="l"><code>_sbss</code></td><td class="l"><code>0x20000060</code></td><td class="l">start of <code>.bss</code></td></tr>
+          <tr><td class="l"><code>_ebss</code></td><td class="l"><code>0x200001CC</code></td><td class="l">end of <code>.bss</code>: 364 B = 91 words zeroed</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>Reset_Handler's two loops, between the linker's five symbols</h4></div>
+      <p class="fig-lede">Three words of <code>.data</code> and three of <code>.bss</code> stand for the 24 and 91 words of the spike. Step through the startup code to see RAM go from leftovers to the C starting values.</p>
+      <div data-viz="init-steps"></div>
+      <p class="step-note" data-role="init-note" aria-live="polite"></p>
+      <div data-viz="init"></div>
+    </figure>
+    <ul>
+      <li><b>"Skip the <code>.bss</code> loop and globals start as whatever was in RAM at power-on. The program works perfectly on a cold boot and misbehaves after a reset."</b></li>
+      <li>The bug is intermittent because a reset does not clear SRAM. The hardware's only act at reset is loading SP and PC. After the reset button, a global that should start at zero still holds what the previous run left, so the result depends on history.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>A missing .bss loop: correct after plugging in, wrong after the reset button</h4></div>
+      <p class="fig-lede"><code>static uint32_t presses;</code> counts button presses. Both rows run the same <code>main()</code>. The top row has the <code>.bss</code> loop and the bottom row lacks it. In these tests the RAM's power-up pattern happened to read 0.</p>
+      <div data-viz="bss-steps"></div>
+      <div data-viz="bss"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. The linker script is the memory map, written down (slide 6)</h4>
+    <p>"The linker knows nothing about your chip." You tell it where flash starts, how big RAM is and which section goes where.</p>
+    <pre class="calc">MEMORY
+{
+  FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 32K
+  RAM   (rw) : ORIGIN = 0x20000000, LENGTH = 12K
+}</pre>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Region</th><th class="l">Attr</th><th class="l">ORIGIN</th><th class="l">LENGTH</th><th class="l">Last byte</th></tr></thead>
+        <tbody>
+          <tr><td class="l">FLASH</td><td class="l"><code>rx</code></td><td class="l"><code>0x08000000</code></td><td class="l">32K = 32768 B = <code>0x8000</code></td><td class="l"><code>0x08007FFF</code></td></tr>
+          <tr><td class="l">RAM</td><td class="l"><code>rw</code></td><td class="l"><code>0x20000000</code></td><td class="l">12K = 12288 B = <code>0x3000</code></td><td class="l"><code>0x20002FFF</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>"Those four numbers come from the datasheet, and they are the difference between firmware that runs and firmware that does not."</li>
+      <li><b>"Get <code>LENGTH</code> wrong and the build succeeds. The failure arrives later, as a stack that quietly walks off the end of memory."</b> The linker has no way to check the numbers against the chip.</li>
+      <li>The stack starts at the top of RAM, ORIGIN + LENGTH = <code>0x20000000 + 0x3000 = 0x20003000</code>. With <code>LENGTH = 16K</code> it starts at <code>0x20004000</code>, 4 KB above the last real byte.</li>
+      <li>The build also reports what it used. "On a 32 KB part that number belongs in every build log. It is the only early warning you get."</li>
+    </ul>
+    <pre class="calc">Memory region   Used Size   Region Size   %age Used
+       FLASH:     5260 B        32 KB       16.05%
+         RAM:     2000 B        12 KB       16.28%
+
+%used = used / LENGTH:   5260 / 32768 = 16.05 %     2000 / 12288 = 16.28 %
+from the map file:  FLASH 5260 = 180 + 4792 + 184 + 96 (.data values) + 8 (two C-library tables)
+                    RAM   2000 = 96 + 364 + 4 (alignment) + 512 heap + 1024 stack, reserved by link.ld</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>The linker's RAM against the chip's RAM</h4></div>
+      <p class="fig-lede">The SRAM address range drawn to scale, 4 KB per tick. Pick a <code>LENGTH</code> to see where the linker puts the initial stack pointer and what the build report says.</p>
+      <div data-viz="ld-steps"></div>
+      <p class="step-note" data-role="ld-note" aria-live="polite"></p>
+      <div data-viz="ld"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. What actually gets programmed: elf, bin, hex (slide 7)</h4>
+    <p>The linker's output is an <code>.elf</code>, rich with symbols and debug information for the debugger and the simulator. What a programmer writes to flash is stripped down.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">File</th><th class="l">What it is</th><th class="l">Used by</th></tr></thead>
+        <tbody>
+          <tr><td class="l"><code>Main.elf</code></td><td class="l">code + addresses + symbols + debug</td><td class="l">debugger, simulator</td></tr>
+          <tr><td class="l"><code>Main.bin</code></td><td class="l">raw bytes, exactly as in flash</td><td class="l">some programmers</td></tr>
+          <tr><td class="l"><code>Main.hex</code></td><td class="l">the same bytes as printable text records</td><td class="l">most programmers</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The first two records of the real <code>Main.hex</code>:</p>
+    <pre class="calc">:020000040800F2
+:1000000000300020750200082902000829020008BB</pre>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Field</th><th class="l">In record 2</th><th class="l">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="l"><code>:</code></td><td class="l"><code>:</code></td><td class="l">every record starts with a colon</td></tr>
+          <tr><td class="l">LL</td><td class="l"><code>10</code></td><td class="l">16 data bytes follow</td></tr>
+          <tr><td class="l">AAAA</td><td class="l"><code>0000</code></td><td class="l">at offset <code>0x0000</code> (16 bits)</td></tr>
+          <tr><td class="l">TT</td><td class="l"><code>00</code></td><td class="l">record type: <code>00</code> data, <code>01</code> end of file, <code>04</code> extended linear address</td></tr>
+          <tr><td class="l">data</td><td class="l"><code>00300020</code></td><td class="l"><code>0x20003000</code>, the initial stack pointer</td></tr>
+          <tr><td class="l">data</td><td class="l"><code>75020008</code></td><td class="l"><code>0x08000275</code>, the reset vector</td></tr>
+          <tr><td class="l">CC</td><td class="l"><code>BB</code></td><td class="l">checksum: 0x100 minus the low byte of the sum of every byte from LL to the last data byte</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Words are stored <b>little-endian</b>, so the bytes <code>00 30 00 20</code> read back as <code>0x20003000</code>. That is <code>0x20000000</code> + 12K, one past the last byte of RAM.</li>
+      <li>"The reset vector is odd: bit 0 is the <b>Thumb bit</b>, and the handler itself starts at <code>0x08000274</code>."</li>
+      <li>The first record, <code>:02000004 0800</code>, is an <b>extended linear address</b> record. It sets the upper half of the address to <code>0x0800</code>, so offset <code>0x0000</code> means <code>0x08000000</code>.</li>
+      <li>"An 8-bit AVR never needed one, because its whole flash fits in 16 bits of address. Yours does not."</li>
+    </ul>
+    <pre class="calc">word 0, initial SP     0x20003000   bits 31:0  the stack top
+word 1, reset vector   0x08000275   bits 31:1  address 0x08000274 · bit 0  T = 1 (Thumb)</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 8</span><h4>Two hex records, field by field: the address, the two words, the checksum</h4></div>
+      <p class="fig-lede">Each box is one byte, written as two hex digits. Colors mark the fields. Pick a step to decode it.</p>
+      <div data-viz="hex-steps"></div>
+      <div data-viz="hex"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. What runs before main(), and bootstrapping (slide 8)</h4>
+    <p>The complete path from power to your code: power on or reset, then the hardware loads SP and PC from vector[0] and vector[1], then <code>Reset_Handler</code> copies <code>.data</code>, zeroes <code>.bss</code>, calls <code>SystemInit</code> and <code>__libc_init_array</code>, and then calls <code>main()</code>.</p>
+    <ul>
+      <li>Loading SP and PC is <b>the only step the hardware does for you</b>. "The CPU reads two 32-bit words from address zero of flash, the stack pointer and the reset vector, and starts. That is the entire boot process. Everything else is code you can read."</li>
+      <li>So at reset the hardware does not copy <code>.data</code>, does not clear <code>.bss</code> and does not set up the clock.</li>
+      <li><code>SystemInit</code> raises the clock from the reset 12 MHz to 48 MHz, and <code>__libc_init_array</code> runs the C library's start-up list. Lesson 04 shows both in detail.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 9</span><h4>From reset to main(): two loads by the hardware, then code</h4></div>
+      <p class="fig-lede">Left, the reset sequence of slide 8. Right, the machine state after each step. Pick a step.</p>
+      <div data-viz="boot-steps"></div>
+      <p class="step-note" data-role="boot-note" aria-live="polite"></p>
+      <div data-viz="boot"></div>
+    </figure>
+    <p><b>The general idea is bootstrapping</b>, and every computer ever built does the same thing. "On reset the hardware can only do one fixed, dumb act, and that act has to be enough to start software that is progressively less dumb."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l"></th><th class="l">PC</th><th class="l">This chip</th></tr></thead>
+        <tbody>
+          <tr><td class="l">The hardware's fixed act</td><td class="l">the CPU begins executing at a fixed address near the top of its address space</td><td class="l">the CPU reads SP and PC from the first two words of flash</td></tr>
+          <tr><td class="l">Chain</td><td class="l">firmware, which loads a bootloader, which loads a kernel, which starts your program</td><td class="l">your code</td></tr>
+          <tr><td class="l">Handoffs</td><td class="l"><b>four</b>, and several seconds</td><td class="l"><b>one link</b>: two words, then your code</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>The real difference is length. Embedded booting is no stranger than a PC's, and it is short enough to read in full.</li>
+      <li>It is also short enough that "if you get one of those two words wrong, nothing else exists to catch it."</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 10</span><h4>A PC hands off four times. This chip has one link</h4></div>
+      <p class="fig-lede">Each arrow is a handoff from one piece of software to the next, less dumb one.</p>
+      <div data-viz="chain"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Your instruments: Wokwi and Renode (slide 9)</h4>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l"></th><th class="l">Wokwi</th><th class="l">Renode</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Where</td><td class="l">a browser tab</td><td class="l">a terminal</td></tr>
+          <tr><td class="l">Shows you</td><td class="l">the board: LEDs, displays, wires</td><td class="l">serial output, registers, instruction counts</td></tr>
+          <tr><td class="l">Good for</td><td class="l"><i>does the circuit behave?</i></td><td class="l"><i>does the code behave?</i></td></tr>
+          <tr><td class="l">Cost</td><td class="l">free, nothing to install</td><td class="l">free, nothing to install</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Both load the same <code>Main.elf</code> you just built. <b>Neither compiles anything.</b> The compiler runs on your machine, and the simulator only executes.</li>
+      <li>"A thing is not working until you have watched it work." A clean build, a valid hex file and a correct-looking register dump have all, in the course repository's history, come from firmware that drove nothing at all.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>What you should be able to say (slide 10)</h4>
+    <ul>
+      <li><b>1. Name the five stages of a build. Which one is the embedded-specific one?</b> Preprocess, compile, assemble, link, locate. Locate is the embedded one: it gives every name its real address from <code>link.ld</code>. On a PC it is invisible; here you write its input.</li>
+      <li><b>2. Where does <code>.data</code> live, flash or RAM? Defend your answer.</b> Both. The variables must be writable, so they live in RAM. Their initial values must survive power-off, so a copy lives in flash, and <code>Reset_Handler</code> copies it to RAM before <code>main()</code>.</li>
+      <li><b>3. What are <code>_sdata</code> and <code>_ebss</code>, and who creates them?</b> Symbols the linker invents. Their values are addresses it chose: <code>_sdata</code> is the start of <code>.data</code> in RAM (<code>0x20000000</code>), <code>_ebss</code> the end of <code>.bss</code> (<code>0x200001CC</code>). They are not variables, so C reads them as <code>&amp;_sdata</code>.</li>
+      <li><b>4. What happens if the <code>.bss</code> loop is missing? Why is that bug intermittent?</b> Globals that should start at zero start as whatever RAM held. A reset does not clear SRAM, so after the reset button they keep the previous run's values. The program passes after a cold boot and fails after a reset.</li>
+      <li><b>5. Two numbers in the linker script come straight from the datasheet. Which, and what goes wrong if they are too large?</b> The two <code>LENGTH</code>s, FLASH 32K and RAM 12K. Too large and the build still succeeds. With RAM 16K the stack top becomes <code>0x20004000</code>, above real memory, and the program fails at run time.</li>
+      <li><b>6. The hex file begins <code>:02000004 0800</code>. What is that record for, and why did the 8-bit chips never need one?</b> It is an extended linear address record (type <code>04</code>). It sets the upper 16 bits of every following address to <code>0x0800</code>, so flash at <code>0x08000000</code> is reachable. An 8-bit AVR's whole flash fits in 16 bits of address, so the offset alone was enough.</li>
+      <li><b>7. The three moments of address binding. Which does this chip use, which does your laptop use, and what hardware does the laptop need?</b> Compile time, load time and run time. This chip binds at build (compile) time, with no loader and no MMU. The laptop binds at run time, which needs an MMU to translate every address.</li>
+      <li><b>8. Why does 364 bytes of <code>.bss</code> cost nothing in flash while 96 bytes of <code>.data</code> costs 96?</b> <code>.bss</code> is all zeros, so the image records only where it is and how many bytes to clear. Every byte of <code>.data</code> has a starting value that must survive power-off, so all 96 bytes are stored in flash.</li>
+      <li><b>9. The boot chain of a PC and of this chip. How many handoffs?</b> A PC starts at a fixed address near the top, then runs firmware, a bootloader, a kernel and your program: four handoffs. This chip reads SP and PC from the first two words of flash and runs your code: one link.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>General idea vs this chip</h4>
+    <p class="fig-lede">The shaded row is the key contrast that guide §2 assigns to this lesson. The other rows are the deck's own general ideas.</p>
+    <div data-viz="contrast"></div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Hex records: after <code>:020000040800F2</code> the base is <code>0x08000000</code>. In <code>:10000000 00300020 75020008 ...</code>, SP = <code>0x20003000</code> and the reset vector is <code>0x08000275</code>, so the handler is at <code>0x08000274</code>. Offset <code>0120</code> lands at <code>0x08000120</code>.</li>
+      <li>Checksum: <code>:02000004 0801 ??</code> gives <code>0x02 + 0x04 + 0x08 + 0x01 = 0x0F</code>, so CC = <code>0x100 − 0x0F = F1</code>.</li>
+      <li>Flash and RAM cost: <code>const uint8_t lut[64]</code> flash +64, RAM 0. <code>uint32_t samples[32];</code> flash 0, RAM +128. <code>uint32_t gain = 3;</code> flash +4, RAM +4. Together flash +68, RAM +132.</li>
+      <li>Section addresses: <code>.text</code> at <code>0x08000000 + 180 = 0x080000B4</code>. If <code>.data</code> grows to 100 B, <code>.bss</code> starts at <code>0x20000064</code>.</li>
+      <li>Link errors: a definition in two <code>.c</code> files or in a header gives <code>multiple definition</code>. Only an <code>extern</code> gives <code>undefined reference</code>. <code>extern</code> in the header plus one definition links.</li>
+      <li><code>RAM LENGTH = 16K</code> on this 12 KB part: builds clean, reports 12.21 % instead of 16.28 %, SP = <code>0x20004000</code>, fails at run time.</li>
+      <li>Missing <code>.bss</code> loop: correct after plugging in, wrong after the reset button, because a reset does not clear SRAM.</li>
+      <li>At reset the hardware does exactly two loads: SP from <code>0x08000000</code>, PC from <code>0x08000004</code>. There is no <code>.data</code> copy, no <code>.bss</code> clear and no clock set-up. Boot chains: PC four handoffs, this chip one link.</li>
+      <li>Binding: this chip at build time (no loader, no MMU), so <code>SystemCoreClock</code> is at <code>0x20000000</code> on every board and run. A laptop binds at run time with an MMU, so two programs can both use <code>0x400000</code>.</li>
+      <li>Which file: the debugger or simulator loads <code>Main.elf</code> (symbols); most programmers take <code>Main.hex</code>; <code>Main.bin</code> is the raw flash image. Wokwi: does the circuit behave? Renode: does the code behave? Neither compiles.</li>
+    </ul>
+    <p class="source">Slides: L02 slides 1–10 · Notes: 03_Week3_L02_Development_Toolchain.md · Guide: §3 Lesson 02</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lesson</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

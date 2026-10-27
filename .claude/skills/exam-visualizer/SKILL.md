@@ -33,6 +33,7 @@ Existing projects:
 |---|---|---|
 | Multimedia Computing, midterm (5 samples × 10 MC + 8 written) | `Midterms/MultimediaComputing/visuals` | https://claude.ai/artifact/FFfagp6CpEJvE15eAPJ6Zf |
 | Artificial Intelligence, midterm (5 samples × 10 MC + 6 written, weeks 2–6) | `Midterms/ArtificialIntelligence/visuals` | https://claude.ai/artifact/NEzuNxcuxexbHSV5zDe7cn |
+| Embedded System and Software Design, midterm (3 samples × 33 MC, Topics tab `#topic0`–`#topic8`; see its `BRIEF.md`) | `Midterms/EmbeddedSoftwareDesign/visuals` | https://claude.ai/artifact/PLXMNL7atJ796AWntJCHtE |
 
 About the user: keep messages short; they read the page in the claude.ai viewer, light or dark. They like being given
 `#` links to the exact question.

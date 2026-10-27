@@ -1,0 +1,241 @@
+<article class="q" id="s2-mc23" data-part="mc" data-num="23" data-topic="PWM waveform" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 23 · L06, PWM from PSC, ARR and CCR1</p>
+    <h3 class="q-title">At 48 MHz, TIM3 channel 1 runs in PWM mode 1 on PA6 with <code>PSC = 23</code>, <code>ARR = 39999</code> and <code>CCR1 = 3000</code>. What signal does PA6 carry?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>A 3.0 ms high pulse every 40 ms</span>
+      <span class="why">No. That reads every count as 1 µs. With PSC = 23 a count is 0.5 µs.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>A 3.0 ms high pulse every 20 ms</span>
+      <span class="why">No. The frame is right, but CCR1 = 3000 is 3000 counts of 0.5 µs, not 3000 µs.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>18.5 ms high, then 1.5 ms low, every 20 ms</span>
+      <span class="why">No. Mode 1 is high while CNT &lt; CCR1, at the start of each frame.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span>A 1.5 ms high pulse every 20 ms, the servo's centre position</span>
+      <span class="why">Correct. 40 000 counts × 0.5 µs = 20 ms, and 3000 counts × 0.5 µs = 1.5 ms.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> 48 MHz / (23 + 1) = 2 MHz, so one count is 0.5 µs. The frame is ARR + 1 = 40 000 counts = 20 ms, which is 50 Hz. PWM mode 1 holds the pin high while CNT &lt; CCR1: 3000 counts × 0.5 µs = 1.5 ms, the servo's nominal centre.</p>
+    <p>"CCR1 is the pulse width in microseconds" holds only at the lesson's 1 µs count, <code>PSC&nbsp;=&nbsp;47</code>. Here CCR1 holds the width in counts.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The counter ramps every 20 ms; PA6 is high while CNT is below CCR1</h4>
+    </div>
+    <p class="fig-lede">Two frames, to scale. CNT counts 0 to 39 999 at 2 MHz, so each ramp is 20 ms. The channel compares it with CCR1 in hardware: the shaded part of each frame is where CNT &lt; CCR1 and PA6 is high. Drag CCR1 across the servo's nominal range.</p>
+    <div data-viz="slider"></div>
+    <div data-viz="pwm"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">One count</span><span class="v pri">0.5 µs</span><span class="sub">(PSC + 1) / 48 MHz</span></div>
+      <div class="stat"><span class="label">Frame</span><span class="v">20 ms</span><span class="sub">(ARR + 1) × 0.5 µs, 50 Hz</span></div>
+      <div class="stat"><span class="label">High pulse</span><span class="v ok" data-role="pulse">1.5 ms</span><span class="sub" data-role="servo">CCR1 × 0.5 µs: centre</span></div>
+    </div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>The same three registers, read four ways</h4>
+    </div>
+    <p class="fig-lede">Each row is the PA6 waveform one option describes, over the same 40 ms. Only D uses 0.5 µs per count for both ARR and CCR1 and keeps the pin high at the start of the frame.</p>
+    <div data-viz="four"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>One count = (PSC + 1) / f<sub>clk</sub>. Frame = (ARR + 1) counts, pulse = CCR1 counts, high while CNT &lt; CCR1 (PWM mode 1). A servo reads a pulse every 20 ms: 1.0 ms one end, 1.5 ms centre, 2.0 ms the other end.</p>
+    <p class="source">Source: L06 slides 5b, 8, 9 · Notes: L06 › 9. Output compare, the timer draws a waveform</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc24" data-part="mc" data-num="24" data-topic="Cooperative scheduling" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 24 · L06, cooperative scheduling</p>
+    <h3 class="q-title">The superloop below runs three jobs, and <code>now</code> is read once per pass. The report job is changed so that it takes 130 ms. At t = 1000 ms the loop runs the ping, then starts the report. When does the next ping run, and when is the one after it due?</h3>
+    <pre class="calc">for (;;) {
+    uint32_t now = millis();
+    if (now - ping_at   &gt;= 100)  { ping_at   += 100;  ranger_ping(); }
+    if (now - report_at &gt;= 1000) { report_at += 1000; report();      }
+    if (now - beat_at   &gt;= 500)  { beat_at   += 500;  toggle_ld4();  }
+}</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>At 1100 ms: the SysTick interrupt stops the report and runs the ping on time</span>
+      <span class="why">No. That is preemption. SysTick_Handler only counts milliseconds; the jobs run from the loop.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>The 1100 ms ping is skipped; the next ping runs at 1200 ms</span>
+      <span class="why">No. When the loop comes back, now − ping_at = 130 ≥ 100, so the late ping still runs.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>At about 1130 ms, when the report returns; the one after it is still due at 1200 ms</span>
+      <span class="why">Correct. A job stops only when it returns, and += 100 keeps the 100 ms grid.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>At about 1130 ms, and every later ping is 30 ms late too: 1230, 1330, ...</span>
+      <span class="why">No. That is what ping_at = now would do. The += form absorbs the lateness.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> This is cooperative scheduling: a job stops only when it returns. The ping due at 1100 ms waits for the report and runs at about 1130 ms, when the loop comes back.</p>
+    <p><code>ping_at += 100</code> makes <code>ping_at</code> 1100, so the schedule stays on the 100 ms grid and the next ping is due at 1200 ms. Taking the CPU away from a running job is preemption, which lesson 07's kernel adds on top of the same SysTick.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>One slow job delays every job behind it</h4>
+    </div>
+    <p class="fig-lede">950 ms to 1550 ms, to scale. Triangles mark when a job falls due on its grid; blocks mark when it actually runs. The ping and the heartbeat take well under a millisecond and are drawn as thin bars. Switch between the code as given, the <code>= now</code> variant, and a preemptive kernel.</p>
+    <div data-viz="steps"></div>
+    <div data-viz="tl"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Cooperative scheduling (superloop): each job runs until it returns, so one job that takes 130 ms delays all the others by up to 130 ms. Preemptive scheduling (RTOS, lesson 07): the kernel's tick takes the CPU away. Write <code>x_at += period</code>, not <code>x_at = now</code>.</p>
+    <p class="source">Source: L06 slides 4, 18 · Notes: L06 › 4. Cooperative scheduling without waiting</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc25" data-part="mc" data-num="25" data-topic="Shadow registers" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 25 · L06, shadow registers and UG</p>
+    <h3 class="q-title">At 48 MHz a fresh TIM3 is set up as below for one update per second, but the <code>EGR = UG</code> line was left out. When do the update interrupts come?</h3>
+    <pre class="calc">TIM3-&gt;PSC   = 999;
+TIM3-&gt;ARR   = 47999;
+TIM3-&gt;DIER |= TIM_DIER_UIE;
+TIM3-&gt;CR1  |= TIM_CR1_CEN;     /* ARPE stays 0 */</pre>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>The first after 1 ms, then one every second</span>
+      <span class="why">Correct. The first period still uses the reset prescaler 0: 48 000 counts at 48 MHz.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Never: <code>PSC</code> stays in its preload register, so the counter never counts</span>
+      <span class="why">No. The counter runs with the old prescaler, and its first update copies the preload across.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>One every second from the start, since both registers take effect when written</span>
+      <span class="why">No. PSC is always double-buffered. Only ARR, with ARPE = 0, takes effect at once.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>One every millisecond, forever</span>
+      <span class="why">No. The first update event copies 999 into the shadow register; after that each period is 1 s.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> PSC is double-buffered. The write lands in the preload register, and the counter keeps using the shadow copy, still the reset value 0, until the next update event. The first period is 48 000 counts at 48 MHz, 1 ms. ARR took effect at once only because ARPE is 0.</p>
+    <p>That first update copies 999 across, and from then on 48 000 000 / (1000 × 48 000) = 1 Hz. <code>EGR&nbsp;=&nbsp;UG</code> forces that copy before the timer starts. On a timer that runs forever this is a glitch you probably will not see.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Same 48 000 counts, two speeds</h4>
+    </div>
+    <p class="fig-lede">CNT against time, drawn twice at different time scales. Left: the first 2 ms, where the counter still divides by 1. Right: the first 3 s, where that first period is a sliver at the start. Dots are update events, each one an interrupt.</p>
+    <div data-viz="ramps"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>PSC has a preload and a shadow; only an update event copies one into the other</h4>
+    </div>
+    <p class="fig-lede">The counter always divides by the shadow PSC + 1. Step through the start-up without UG.</p>
+    <div data-viz="sh-steps"></div>
+    <div data-viz="shadow"></div>
+    <p class="step-note" data-role="sh-note" aria-live="polite"></p>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>PSC, ARR and CCR1 are double-buffered: a write lands in the preload register and takes effect at the next update event. Write <code>EGR = UG</code> after PSC and ARR, then clear the UIF it raised, or the first period runs at the wrong rate.</p>
+    <p class="source">Source: L06 slides 6, 17 · Notes: L06 › 7. Shadow registers, and why UG comes first</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc26" data-part="mc" data-num="26" data-topic="Clearing CC1IF" data-ref="topic6">
+  <div class="q-head">
+    <p class="eyebrow">Question 26 · L06, capture flag CC1IF</p>
+    <h3 class="q-title">TIM14 counts at 1 MHz and captures both edges of the echo on PA7, with <code>CC1IE</code> set. Which body of <code>TIM14_IRQHandler</code> stores the edge's own timestamp in <code>t</code> and acknowledges the capture interrupt?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>t = (uint16_t)TIM14-&gt;CNT;  TIM14-&gt;SR = TIM_SR_CC1IF;</code></span>
+      <span class="why">No. CNT is the time now, and writing 1 leaves CC1IF set: the handler re-enters forever.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>t = (uint16_t)TIM14-&gt;CNT;  TIM14-&gt;SR = ~TIM_SR_CC1IF;</code></span>
+      <span class="why">No. The flag clears, but CNT is late by the interrupt latency.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>t = (uint16_t)TIM14-&gt;CNT;</code></span>
+      <span class="why">No. Reading CNT clears nothing, and it is the wrong time.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>t = (uint16_t)TIM14-&gt;CCR1;</code></span>
+      <span class="why">Correct. CCR1 holds the edge's time, and reading it clears CC1IF.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> At the edge the hardware copied CNT into CCR1, so CCR1 holds the edge's time. Reading CCR1 also clears CC1IF, the only clearing convention in the course that needs no write.</p>
+    <p>CNT is the time now, late by the interrupt latency, so A, B and C store the wrong time. B at least clears the flag, because timer flags clear by writing 0. A writes 1, which leaves CC1IF set, and C clears nothing, so both re-enter forever.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Where t comes from, and what is left in CC1IF</h4>
+    </div>
+    <p class="fig-lede">An echo edge arrives at CNT = 12 000 and the handler starts 35 µs later. The top row is what the hardware does before any code runs. Pick an option to see which value it stores and whether the interrupt is acknowledged.</p>
+    <div data-viz="opt-steps"></div>
+    <div data-viz="flow"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <p class="fig-lede">The flags in this course so far, and how each one clears:</p>
+    <div data-viz="conv"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Reading CCR1 clears CC1IF: <code>t = (uint16_t)TIM14-&gt;CCR1;</code> takes the edge's time and acknowledges the capture in one load. Timer SR flags clear by writing 0, EXTI flags by writing 1.</p>
+    <p class="source">Source: L06 slides 7, 12, 13 · Notes: L06 › 14. Measuring the echo with TIM14</p>
+  </div>
+</article>

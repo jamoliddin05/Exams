@@ -1,0 +1,336 @@
+<article class="q" id="topic3" data-part="tp" data-num="3" data-topic="Execution and concurrency">
+  <div class="q-head">
+    <p class="eyebrow">Lesson 03 · Week 4 · 3 of 33 exam questions</p>
+    <h3 class="q-title">Execution and Concurrency: When Two Things Run at Once</h3>
+    <p class="fig-lede">The last of four lessons with no code to write. Lessons 00 to 02 gave you the machine, its instructions and the toolchain. This one adds the model "that produces the hardest bugs in this course": what happens when the hardware interrupts your program. Two contexts then share one memory, which brings two hazards with two different fixes. Lessons 05, 06 and 07 apply it to EXTI, timers and the RTOS.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. Three ways to meet the hardware (slide 1)</h4>
+    <p>"A peripheral finishes when it finishes. Your program has to find out." There are exactly three arrangements, and every embedded design is built from them.</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Method</th><th class="l">What the CPU does while it waits</th><th class="l">Use when</th></tr></thead>
+        <tbody>
+          <tr><td class="l">Polling</td><td class="l">asks "ready yet?" in a loop and does nothing else</td><td class="l">the wait is shorter than the cost of being interrupted</td></tr>
+          <tr><td class="l">Interrupt</td><td class="l">useful work until told, then the handler runs</td><td class="l">events are rare or must not be missed</td></tr>
+          <tr><td class="l">DMA</td><td class="l">useful work while hardware moves the bytes, "CPU not involved at all"</td><td class="l">streams of data</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Left to right, the cost rises in complexity and falls in CPU time.</li>
+      <li>"Polling is not the beginner option." It is the right answer "whenever the wait is shorter than the cost of being interrupted".</li>
+      <li>The course's example is clock setup (L01 slide 13). After writing a new wait state into <code>FLASH-&gt;ACR</code>, the code polls until <code>LATENCY</code> reads back the new value. The loop is four instructions (<code>ldr</code>, <code>ands</code>, <code>cmp</code>, <code>bne</code>) and the wait is a few cycles. An interrupt's entry alone, eight registers pushed and a vector read, would cost more.</li>
+      <li>This chip uses all three. Polling depends on the loop coming back and only samples, so it can miss a fast event. An interrupt sees every edge, wanted or not (lesson 05).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Three ways to wait for the same peripheral</h4></div>
+      <p class="fig-lede">Each lane is the CPU's time, left to right. The dashed line is the moment the peripheral finishes. Pick a situation to see which arrangement wins, and why.</p>
+      <div data-viz="ways-steps"></div>
+      <p class="step-note" data-role="ways-note" aria-live="polite"></p>
+      <div data-viz="ways"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. An interrupt is a hardware-forced function call (slide 2)</h4>
+    <p>"No scheduler, no operating system." The hardware does this between two instructions of whatever was running:</p>
+    <ul>
+      <li><b>Push eight registers</b> onto the stack: <code>R0</code>–<code>R3</code>, <code>R12</code>, <code>LR</code>, <code>PC</code>, <code>xPSR</code>. That is 8 × 4 = 32 bytes, "stacked by the hardware itself".</li>
+      <li><b>Write the exception number into IPSR</b>, the low bits of xPSR, and load <code>LR</code> with a magic <code>EXC_RETURN</code> value: <code>0xFFFFFFF9</code> when <code>main()</code> on MSP was interrupted.</li>
+      <li><b>Read the vector table.</b> Slot 16 + IRQn holds the handler's address, and the handler runs, always on MSP.</li>
+      <li><b>Pop and resume.</b> The handler ends with an ordinary <code>bx lr</code>. Branching to <code>EXC_RETURN</code> makes the hardware pop the eight. "Your main program never knows it happened. That is the problem."</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>TIM3 interrupts main(): the frame, the vector and the return</h4></div>
+      <p class="fig-lede">TIM3 is IRQ 16, so it is exception 16 + 16 = 32 and its vector sits at <code>0x08000000 + 4 × 32 = 0x08000080</code>. The right column is the stack, higher addresses at the top. Step through entry and exit.</p>
+      <div data-viz="entry-steps"></div>
+      <p class="step-note" data-role="entry-note" aria-live="polite"></p>
+      <div data-viz="entry"></div>
+    </figure>
+    <p><b>Why an ISR can be an ordinary C function.</b> The eight pushed registers are "exactly the set AAPCS lets a function clobber". So there is "no special keyword, no <code>ISR()</code> macro. You simply define a function with the right name and the linker puts it in the vector table."</p>
+    <ul>
+      <li>AAPCS (L01 slide 18): any function may destroy <code>R0</code>–<code>R3</code>, <code>R12</code> and <code>LR</code> (caller-saved) and must restore <code>R4</code>–<code>R11</code> (callee-saved).</li>
+      <li>The hardware saves the caller-saved set, plus <code>PC</code> (where to resume) and <code>xPSR</code> (the interrupted code's flags). The handler's own prologue saves any of <code>R4</code>–<code>R11</code> it uses, as in every function.</li>
+      <li>The core has one set of <code>R0</code>–<code>R12</code>. Handler mode has no bank of its own.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>The hardware saves the caller-saved half, the prologue the callee-saved half</h4></div>
+      <p class="fig-lede">The core registers and xPSR, coloured by who preserves them across an interrupt. Between the two, everything the interrupted code relies on comes back unchanged.</p>
+      <div data-viz="saves"></div>
+    </figure>
+    <p>Three special registers beside <code>R0</code>–<code>R15</code> decide how interrupts behave. This deck uses the first two. They have no address; only <code>mrs</code> and <code>msr</code> reach them (L00 slide 3b).</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Register</th><th class="l">Bits</th><th class="l">Its job when an interrupt arrives</th><th class="l">Slide</th></tr></thead>
+        <tbody>
+          <tr class="on"><td class="l">xPSR</td><td class="l">31 N, 30 Z, 29 C, 28 V, 24 T, 5:0 exception number</td><td class="l">stacked with the eight; entry writes the exception number into its low bits</td><td class="l">2</td></tr>
+          <tr class="on"><td class="l">PRIMASK</td><td class="l">0 PM</td><td class="l">bit 0 set = no configurable interrupt is taken at all</td><td class="l">5</td></tr>
+          <tr><td class="l">CONTROL</td><td class="l">1 SPSEL, 0 nPRIV</td><td class="l">which stack Thread mode was on; a handler always uses MSP</td><td class="l">L00 slide 8</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><b>The trap.</b> "Spell the name wrong and you have written an unused function. It compiles, it links, it runs, and the interrupt does nothing. No warning, anywhere."</p>
+    <pre class="calc">void TIM3_IRQHandler(void) { ... }   overrides the weak default: slot 32 → your handler
+void TIM3_IRQhandler(void) { ... }   one letter wrong: an unused function; slot 32 keeps
+                                     the weak Default_Handler, which parks in for (;;)   (L04)</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. Two programs sharing one memory (slide 3)</h4>
+    <p>"This is the whole reason concurrency is a topic." Before interrupts, the program had one thread of control. After, it has two, "and they share every global variable".</p>
+    <ul>
+      <li><code>main()</code> "runs when nothing else does". The handler "runs whenever it likes".</li>
+      <li>"Neither one can see what the other is doing."</li>
+      <li>"Two distinct hazards follow, and they need different fixes. Students routinely apply one fix to the other problem and conclude the language is broken."</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Hazard</th><th class="l">Shared code</th><th class="l">What goes wrong</th><th class="l">The fix</th><th class="l">The other fix instead</th></tr></thead>
+        <tbody>
+          <tr><td class="l">1. The compiler (slide 4)</td><td class="l"><code>while (flag == 0) { }</code> waits for the ISR</td><td class="l">at <code>-Os</code> the loop reads <code>flag</code> once and never exits</td><td class="l"><code>volatile</code>: every access really happens</td><td class="l">masking around the loop: the ISR can never run, so it hangs for sure</td></tr>
+          <tr><td class="l">2. The mid-update interrupt (slide 5)</td><td class="l"><code>main()</code> and the ISR both do <code>counter++</code></td><td class="l">now and then an increment is lost</td><td class="l">a critical section: <code>ldr</code>, <code>adds</code>, <code>str</code> become indivisible</td><td class="l"><code>volatile</code>: every access already happened, and updates are still lost</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. Hazard one: the compiler does not believe you (slide 4)</h4>
+    <pre class="calc">while (flag == 0) { }        /* wait for the ISR to set it */</pre>
+    <ul>
+      <li>The compiler reasons, "correctly by the rules of C": this loop does not modify <code>flag</code>, so <code>flag</code> cannot change, so it reads it once and loops on a register. The result is an infinite loop "that no amount of staring at the source will explain".</li>
+      <li><b>The as-if rule.</b> "A C compiler is not required to do what you wrote; it is required to produce a program that behaves as if it had, judged only by the observable behaviour the language defines." How many times memory is read, in what order, and whether a variable exists at all, it may change freely. The same rule governs the compiler on your laptop.</li>
+      <li><b>Why hardware breaks it.</b> "The hardware is an observer the language does not know about." A pin that changes, a status bit that clears when read, another context writing a variable: none of these is observable in C's account. Optimising them away is not misbehaviour.</li>
+      <li><b>Fix: <code>volatile uint8_t flag;</code></b> It extends what counts as observable: "every access written must actually happen, all of them, in the order written."</li>
+      <li>"<code>volatile</code> is about the compiler. It is not a lock, it does not make anything atomic, and it does not help with the next slide."</li>
+      <li>CMSIS already declares every peripheral register <code>__IO</code>, which is <code>volatile</code>. Your own shared globals are your job. The classic symptom is "works at <code>-O0</code>, hangs at <code>-Os</code>" (L01 slide 21).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>The same loop at -Os: a plain flag is read once, a volatile flag on every pass</h4></div>
+      <p class="fig-lede">The middle track is <code>flag</code> in RAM, and the ISR writes 1 partway along. Each arrow is a real load from RAM. The plain version loads once and spins on its register copy; the volatile one loads again on every pass and sees the 1.</p>
+      <div data-viz="asif"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. Hazard two: the interrupt lands mid-update (slide 5)</h4>
+    <p>"Recall from lesson 01 that touching memory is always three instructions." On a load–store machine <code>counter++</code> in <code>main()</code> is <code>ldr</code>, <code>adds</code>, <code>str</code>, and an interrupt can land between any two of them.</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>counter++ interrupted after its load: one update vanishes</h4></div>
+      <p class="fig-lede">Both contexts add 1 to a counter that holds 5. Step through the unprotected run, then compare it with the masked one, where the timer request waits until <code>cpsie i</code>.</p>
+      <div data-viz="lost-steps"></div>
+      <p class="step-note" data-role="lost-note" aria-live="polite"></p>
+      <div data-viz="lost"></div>
+    </figure>
+    <ul>
+      <li>"Two increments happened. The counter went from 5 to 6. One update vanished."</li>
+      <li><code>volatile</code> does not help: "every access did happen, in order, exactly as written. The problem is that the sequence was not indivisible."</li>
+      <li>The handler did not corrupt <code>main()</code>'s <code>r0</code>. The hardware stacked it on entry and restored it on return (section 2). <code>main()</code> carried on with a value that was already stale.</li>
+    </ul>
+    <p><b>Four standard words.</b> "These are the standard names, and they are not embedded-specific."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Term</th><th class="l">Definition</th></tr></thead>
+        <tbody>
+          <tr><td class="l">race condition</td><td class="l">the result depends on the relative timing of two contexts</td></tr>
+          <tr><td class="l">critical section</td><td class="l">the region of code that must not be interleaved</td></tr>
+          <tr><td class="l">mutual exclusion</td><td class="l">the guarantee you need over it: at most one context inside at a time</td></tr>
+          <tr><td class="l">atomic</td><td class="l">a sequence that cannot be observed half-done</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>"Every concurrent system in computing is built from those four words, whether the two contexts are an ISR and <code>main()</code>, two threads on a laptop, or two processes writing one file."</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. How mutual exclusion is obtained, and this chip's answer (slide 5)</h4>
+    <p>"What changes between systems is only how mutual exclusion is obtained."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Contexts</th><th class="l">How you get mutual exclusion</th></tr></thead>
+        <tbody>
+          <tr class="on"><td class="l">ISR vs <code>main()</code>, one core</td><td class="l">turn interrupts off: "the other context cannot run if it cannot start"</td></tr>
+          <tr><td class="l">two threads, one OS</td><td class="l">a mutex, "which asks the scheduler not to switch"</td></tr>
+          <tr><td class="l">two cores</td><td class="l">"neither of the above works": an atomic read-modify-write instruction is required, <code>ldrex</code>/<code>strex</code> on larger ARM cores, <code>lock cmpxchg</code> on x86</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>"Masking interrupts stops the other context on this core; it does nothing to a second core, which is still running."</li>
+      <li>"A Cortex-M0+ is single-core and has neither, which is exactly why interrupt masking is the right tool here and would be the wrong tool on a phone."</li>
+      <li>A mutex is no help against an ISR. It asks the scheduler not to switch, and the hardware starts an ISR without asking the scheduler.</li>
+    </ul>
+    <p><b>This chip's answer: a critical section by masking.</b> "Stop interrupts for the three instructions":</p>
+    <pre class="calc">__disable_irq();     /* cpsid i : PRIMASK.PM = 1 */
+counter++;           /* ldr, adds, str: now indivisible */
+__enable_irq();      /* cpsie i : PRIMASK.PM = 0 */</pre>
+    <ul>
+      <li>Each call is one instruction, and "all either one changes is a single bit, bit 0 of the core register <code>PRIMASK</code>". While PM = 1 no configurable interrupt is taken, whatever its priority. A request that arrives is held pending and taken right after <code>cpsie i</code>.</li>
+      <li>"Keep it short. Every cycle spent with interrupts off is a cycle in which the chip cannot respond to anything."</li>
+      <li><code>__enable_irq()</code> re-enables unconditionally. Code that may already run masked saves <code>__get_PRIMASK()</code> first and restores it with <code>__set_PRIMASK()</code> (notes, textbook context).</li>
+    </ul>
+    <p class="formula">volatile makes accesses real · a critical section makes a sequence indivisible</p>
+    <p>"The two fixes are not interchangeable. Most concurrency bugs in this course come from using the first where the second was needed."</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>One guarantee, a different tool for each kind of contention</h4></div>
+      <p class="fig-lede">Each case runs one increment of a shared counter that holds 5 in each of two contexts, so the right answer is 7. Pick a case to see how the second context is kept out, or fails to be.</p>
+      <div data-viz="mutex-steps"></div>
+      <div data-viz="mutex"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. A bug that only appears sometimes (slide 6)</h4>
+    <p>The lost update needs the interrupt to land in a two-instruction window. "On a 48 MHz chip that window is about 40 nanoseconds wide."</p>
+    <pre class="calc">one cycle at 48 MHz = 1 / 48 000 000 s = 20.8 ns
+window = 2 cycles × 20.8 ns = 41.7 ns, about 40 ns
+
+1 000 interrupts/s  → roughly once every 7 hours:     1 000 × 3 600 × 7 = 25.2 million interrupts
+10 000 interrupts/s → roughly once every 40 minutes: 10 000 × 60 × 40 = 24 million interrupts
+ten times the rate, ten times as often:               7 h / 10 = 42 min</pre>
+    <ul>
+      <li>Each interrupt is one more draw on where <code>main()</code> happens to be. Only a draw inside the window loses an update, about one in 25 million here, so the failure rate is in step with the interrupt rate.</li>
+      <li>"They survive your testing, they survive the demo, and they appear in the field. You cannot find them by running the program more." More running only resamples the timing. "You find them by reasoning about which variables are shared, and protecting those."</li>
+      <li>"A useful discipline: for every global, write down which contexts touch it. If the answer is more than one, it needs <code>volatile</code>, and probably a critical section too."</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>One day of running at three interrupt rates</h4></div>
+      <p class="fig-lede">Each red line is one lost update. The shaded strip is a one-hour bench test. The positions are one random sample; only the average spacing follows from the rate. Pick a rate.</p>
+      <div data-viz="rare-steps"></div>
+      <div data-viz="rare"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. Not everything needs protecting; tearing (slide 7)</h4>
+    <p>"Turning interrupts off has a cost, so be precise about when it is needed."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Situation</th><th class="l">Safe?</th><th class="l">Why</th></tr></thead>
+        <tbody>
+          <tr><td class="l">ISR writes a <code>uint8_t</code>, main only reads it</td><td class="l"><b>Yes</b></td><td class="l">single aligned access, one writer</td></tr>
+          <tr><td class="l">ISR sets a flag, main reads and clears it</td><td class="l"><b>Usually</b></td><td class="l">but the clear is read-modify-write</td></tr>
+          <tr><td class="l">main does <code>counter++</code>, ISR also increments</td><td class="l"><b>No</b></td><td class="l">the lost update of section 5</td></tr>
+          <tr><td class="l">main reads a <code>uint64_t</code> the ISR writes</td><td class="l"><b>No</b></td><td class="l">more than one bus access; you can read half</td></tr>
+          <tr><td class="l">Either side touches a multi-field struct</td><td class="l"><b>No</b></td><td class="l">the reader can see it half-updated</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>"The pattern: a single aligned word written by exactly one context is safe. Everything else needs thought." Such a word still needs <code>volatile</code>, so that <code>main()</code> really reads it each time (guide P12).</li>
+      <li><b>Tearing</b> is the failure in rows four and five. "A reader that needs two bus accesses to collect one logical value can be interrupted between them and walk away with half of the old value and half of the new: a number that was never stored by anybody."</li>
+      <li>The same hazard makes a 64-bit counter unsafe on a 32-bit machine "in any language, on any operating system", and makes a shared struct need protecting even when each field is small.</li>
+      <li>Even <code>volatile uint64_t</code> compiles to two separate <code>ldr</code>s. The fix is to copy the value inside a critical section.</li>
+    </ul>
+    <pre class="calc">uint64_t ticks goes 0x00000000_FFFFFFFF → 0x00000001_00000000 in the ISR
+low word first:  low = 0xFFFFFFFF (old), ISR runs, high = 0x00000001 (new)
+                 → 0x00000001_FFFFFFFF = 8 589 934 591, about double the real count
+high word first: high = 0x00000000 (old), ISR runs, low = 0x00000000 (new)
+                 → 0x00000000_00000000, the counter seems to jump back to 0
+masked copy:     0x00000000_FFFFFFFF or 0x00000001_00000000, both real values</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 8</span><h4>Slide 7 row by row: where the interrupt lands, and what main() ends up with</h4></div>
+      <p class="fig-lede">In every row <code>main()</code> makes one access, the ISR runs, and <code>main()</code> carries on. The bottom track is the shared data in RAM after each step. Pick a row.</p>
+      <div data-viz="rows-steps"></div>
+      <div data-viz="rows"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Priority: which interrupt wins (slide 8)</h4>
+    <p>"Several peripherals can want attention at once. The NVIC decides, by priority, and it can also let a more urgent interrupt preempt a handler already running."</p>
+    <ul>
+      <li>Each interrupt's priority is one byte in the NVIC's <code>IPR</code> registers, four to a word. "This chip implements only the top two bits of each byte, so there are just four levels (0 is the most urgent)."</li>
+      <li>IRQ n lives in <code>IPR[n / 4]</code>, byte n mod 4, bits 8(n mod 4)+7 : 8(n mod 4)+6. The byte is the level shifted left by 6: 0x00, 0x40, 0x80, 0xC0.</li>
+      <li>Equal priorities do not preempt each other. A second request at the same level waits until the running handler returns (lesson 06).</li>
+      <li><b>Handlers must be short.</b> "Anything slow in a handler delays every interrupt of equal or lower priority." The usual shape is to set a flag or push to a buffer, return, and let <code>main()</code> do the work.</li>
+      <li><b>Preemption multiplies the sharing problem.</b> "It is not only main-versus-ISR any more; it is ISR-versus-ISR."</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 9</span><h4>Preemption, an equal-priority wait, and a wait behind a masked region</h4></div>
+      <p class="fig-lede">Three contexts on one timeline: solid bars run, dashed lines are suspended, a dashed box is a request held pending. The red bracket is the uart's interrupt latency. Pick a case.</p>
+      <div data-viz="prio-steps"></div>
+      <div data-viz="prio"></div>
+    </figure>
+    <p>"The vocabulary here is shared with operating-system scheduling, because it is the same problem."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">Term</th><th class="l">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="l">preemption</td><td class="l">one runnable context displacing another mid-execution</td></tr>
+          <tr><td class="l">interrupt latency</td><td class="l">the gap between the hardware event and the first instruction of your handler; "the longest critical section anywhere in your program sets its worst case"</td></tr>
+          <tr><td class="l">priority inversion</td><td class="l">a high-priority task waits on something a low-priority one holds; Mars Pathfinder kept resetting on the surface in 1997 for this reason (lesson 07)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 10</span><h4>One priority byte per IRQ, only its top two bits implemented</h4></div>
+      <p class="fig-lede">An <code>IPR</code> word holds four IRQs. The six low bits of each byte read as 0, so the byte can only be 0x00, 0x40, 0x80 or 0xC0. Pick an IRQ and a level.</p>
+      <div data-viz="ipr-steps"></div>
+      <div data-viz="ipr"></div>
+      <pre class="calc" data-role="ipr-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. The model, complete (slide 9)</h4>
+    <p>"Four lessons, one picture."</p>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th class="l">The machine (L00)</th><th class="l">The program (L01, L02)</th></tr></thead>
+        <tbody>
+          <tr><td class="l">one bus, one address space</td><td class="l">load, modify, store</td></tr>
+          <tr><td class="l">peripherals = control / status / data</td><td class="l">sections placed by a linker</td></tr>
+          <tr><td class="l">guarded by a clock gate and a mux</td><td class="l">startup code before <code>main()</code></td></tr>
+          <tr class="on"><td class="l" colspan="2">And they meet asynchronously (L03): volatile makes accesses real · critical sections make them indivisible</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>"Everything from here is an instance of this." From lesson 04 on, every lesson has code and follows three beats, <b>Model → Map → Measure</b>. Model asks which part of Part 0 this is. Map puts it onto this chip's registers by reading the reference manual. Measure is to write it, run it, and watch it work. The first is <code>04_Startup_And_Linker</code>, where you write the <code>startup.c</code> and <code>link.ld</code> that lesson 02 described.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>What you should be able to say (slide 10)</h4>
+    <ul>
+      <li><b>1. The three ways to meet hardware, and a case for polling.</b> Polling, interrupt, DMA. Polling is right whenever the wait is shorter than the cost of being interrupted, for example the few cycles until <code>FLASH-&gt;ACR</code> reads back a new wait state.</li>
+      <li><b>2. Why an ISR here is an ordinary C function.</b> On entry the hardware itself stacks <code>R0</code>–<code>R3</code>, <code>R12</code>, <code>LR</code>, <code>PC</code>, <code>xPSR</code>, exactly the registers AAPCS lets a function clobber, and the prologue saves any <code>R4</code>–<code>R11</code> it uses. The correct name puts the address in the vector table, and <code>bx lr</code> with <code>EXC_RETURN</code> unstacks the frame.</li>
+      <li><b>3. What <code>volatile</code> prevents, and one thing it does not do.</b> It stops the compiler caching, merging, deleting or reordering the accesses you wrote: every access happens, in order. It does not make anything atomic and it is not a lock, so it cannot stop a lost update.</li>
+      <li><b>4. The sequence that loses an update.</b> <code>main()</code>: <code>ldr</code> reads 5. Interrupt: the handler's <code>ldr</code> reads 5, <code>adds</code> gives 6, <code>str</code> writes 6. Back in <code>main()</code>: <code>adds</code> gives 6, <code>str</code> writes 6. Two increments, and the counter went from 5 to 6.</li>
+      <li><b>5. A single aligned <code>uint8_t</code>, written only by the ISR, read by main: critical section?</b> No. It is one indivisible access with one writer, so a read returns the old value or the new one, never a mix. It still needs <code>volatile</code> so that main really reads it.</li>
+      <li><b>6. Why handlers must be short.</b> Anything slow in a handler delays every interrupt of equal or lower priority and adds to its latency. Set a flag or push to a buffer, return, and let <code>main()</code> do the work.</li>
+      <li><b>7. Works for hours, then misbehaves once.</b> A race condition. The interrupt must hit a window of about 40 ns, so a failure is a rare timing coincidence, and running more only resamples the timing. Find it by listing which contexts touch each global and protecting the shared ones.</li>
+      <li><b>8. The as-if rule, and why hardware breaks its assumption.</b> The compiler need only produce a program that behaves as if it did what you wrote, judged by the observable behaviour C defines. Hardware is an observer C does not know about: a changing pin, a status bit that clears when read, an ISR writing a variable.</li>
+      <li><b>9. Four definitions without ARM.</b> Race condition: the result depends on the relative timing of two contexts. Critical section: a region of code that must not be interleaved. Mutual exclusion: at most one context inside it at a time. Atomic: cannot be observed half-done.</li>
+      <li><b>10. <code>__disable_irq()</code> on a dual-core chip.</b> It masks interrupts on its own core only; the second core keeps running its own <code>ldr</code>, <code>adds</code>, <code>str</code> at the same time. An atomic read-modify-write instruction replaces it: <code>ldrex</code>/<code>strex</code> on larger ARM cores, <code>lock cmpxchg</code> on x86.</li>
+      <li><b>11. Tearing, and its two rows.</b> A reader that needs two accesses for one value is interrupted between them and gets half old, half new, a value nobody stored. Rows 4 (main reads a <code>uint64_t</code> the ISR writes) and 5 (a multi-field struct).</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>General idea vs this chip</h4>
+    <p class="fig-lede">Shaded rows are the key contrasts that guide §2 and §7 assign to this lesson. The other rows are the deck's own "general idea / this chip's answer" sections.</p>
+    <div data-viz="contrast"></div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Polling wins when the wait is shorter than the cost of being interrupted: the four-instruction <code>FLASH-&gt;ACR</code> <code>LATENCY</code> wait. A rare or must-not-miss event needs an interrupt; a 2 KB stream needs DMA.</li>
+      <li>Entry stacks 8 registers, <code>R0</code>–<code>R3</code>, <code>R12</code>, <code>LR</code>, <code>PC</code>, <code>xPSR</code> = 32 bytes: the AAPCS caller-saved set plus <code>PC</code> and <code>xPSR</code>. <code>LR</code> = <code>0xFFFFFFF9</code>; <code>bx lr</code> unstacks. In the TIM3 handler (IRQ 16) IPSR = 32 = <code>0x20</code>. A misspelt handler name compiles, links and does nothing.</li>
+      <li>A plain <code>uint8_t</code> flag in <code>while (flag == 0) { }</code> works at <code>-O0</code> and hangs at <code>-Os</code>: read once, by the as-if rule. Fix: <code>volatile</code>, which is not a lock and not atomic.</li>
+      <li>Lost update: counter 5, the ISR increments between main's <code>ldr</code> and <code>str</code>, result 6 (should be 7). From 40 with an ISR doing <code>+= 3</code>: 41, not 44. The fix is <code>__disable_irq(); counter++; __enable_irq();</code> = <code>cpsid i</code> / <code>cpsie i</code> = PRIMASK bit 0.</li>
+      <li>Mutual exclusion by contexts: ISR vs main on one core, mask; two threads, a mutex; two cores, <code>ldrex</code>/<code>strex</code> or <code>lock cmpxchg</code>. The M0+ is single-core and has neither instruction.</li>
+      <li>Window = 2 cycles at 48 MHz = 41.7 ns. 1 000 interrupts/s gives roughly once every 7 h; 10 000/s about every 40 min (ten times the rate, ten times as often). It is a race condition, and more testing will not find it.</li>
+      <li>Safe without a critical section: one aligned word or byte with one writer (still <code>volatile</code>). Tearing: a <code>uint64_t</code> read low then high across an increment from <code>0x00000000_FFFFFFFF</code> gives <code>0x00000001_FFFFFFFF</code>; high first gives 0.</li>
+      <li>Priority: 4 levels from the top 2 bits of each <code>IPR</code> byte, 0 most urgent, byte = level &lt;&lt; 6. IRQ 1 is in <code>IPR[0]</code> bits 15:14; level 2 is <code>0x80</code>. PRIMASK holds back every level, 0 included, so the longest critical section sets the worst-case latency.</li>
+    </ul>
+    <p class="source">Slides: L03 slides 1–10 · Notes: 05_Week4_L03_Execution_Concurrency.md · Guide: §3 Lesson 03</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lesson</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

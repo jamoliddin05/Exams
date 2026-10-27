@@ -1,0 +1,421 @@
+<article class="q" id="topic6" data-part="tp" data-num="6" data-topic="Time and timers">
+  <div class="q-head">
+    <p class="eyebrow">Lesson 06 · Week 5 · 4 of 33 exam questions</p>
+    <h3 class="q-title">Time and Timers: Letting the Hardware Keep Time</h3>
+    <p class="fig-lede">Lesson 05 kept time by polling SysTick, and every printf quietly stole milliseconds. This lesson hands time to the hardware. SysTick becomes a 1 ms interrupt, TIM3 draws a servo pulse with no CPU at all, and TIM14 writes down when an echo edge happened, to the microsecond. The project is a parking sensor: an HC-SR04 ranger, a servo gauge and an 8-LED bar, run from a loop that never waits.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>0. This lesson's pins (the two pin-map pages)</h4>
+    <p>The board page shows each wire at its header position on the Nucleo-C031C6. The chip page shows the same pins as bit positions in their port's registers: pin n of GPIOA is bit n of IDR, bits 2n+1:2n of MODER, and so on (lesson 05, slide 4).</p>
+    <div data-viz="pins"></div>
+    <ul>
+      <li>The two outer double rows are ST's morpho headers, which reach every pin. The inner single rows are the Arduino headers; PA5 is also D13.</li>
+      <li>Two timer pins, two AF numbers: PA6 = AF1 (TIM3_CH1) and PA7 = AF4 (TIM14_CH1). Slide 10 explains why the number depends on the pin.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. The millisecond that lied (slide 1)</h4>
+    <p>Lesson 05's clock was a loop asking SysTick whether it had wrapped:</p>
+    <pre class="calc">while (!(SysTick-&gt;CTRL &amp; SysTick_CTRL_COUNTFLAG_Msk)) { }
+ms_now++;</pre>
+    <ul>
+      <li><code>COUNTFLAG</code> remembers <b>one</b> wrap. A printf of 90 characters at 115200 baud holds the loop for about 8 ms (90 × 10 bits × 8.68 µs = 7.8 ms).</li>
+      <li>Seven wraps happen while nobody is asking, and seven milliseconds vanish. "Time that depends on the loop coming back is only as good as the loop."</li>
+      <li>The fix is lesson 03's second rendezvous, an <b>interrupt</b> instead of a poll. Each wrap forces a one-line function to run, whatever main() is doing.</li>
+    </ul>
+    <pre class="calc">static volatile uint32_t ms_ticks;
+
+void SysTick_Handler(void) { ms_ticks++; }
+
+SysTick_Config(SystemCoreClock / 1000u);      /* in main(), once */</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>A busy loop misses wraps, an interrupt counts every one</h4></div>
+      <p class="fig-lede">Twelve milliseconds of SysTick, one wrap per millisecond, drawn to scale. A printf holds the loop from 2.4 ms to 10.2 ms. Switch between lesson 05's polled clock and this lesson's interrupt and compare the count at the right.</p>
+      <div data-viz="poll-steps"></div>
+      <p class="step-note" data-role="poll-note" aria-live="polite"></p>
+      <div data-viz="poll"></div>
+      <div class="legend">
+        <span><i class="sw-ok"></i>wrap counted on time</span>
+        <span><i class="sw-ter"></i>counted late, remembered by COUNTFLAG</span>
+        <span><i class="sw-bad"></i>wrap lost</span>
+        <span><i class="sw-pri"></i>SysTick_Handler runs</span>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. SysTick and SysTick_Config() (slides 1–2)</h4>
+    <p>SysTick is part of the ARM core: four registers at <b>0xE000E010</b>, the same four on every Cortex-M (<code>SysTick_Type</code> in <code>core_cm0plus.h</code>). It is a <b>24-bit counter that counts down</b>, so the longest period is 2²⁴ clocks, 350 ms at 48 MHz.</p>
+    <div data-viz="systick-regs"></div>
+    <p><code>SysTick_Config()</code> is CMSIS and hides nothing. These are its five lines:</p>
+    <pre class="calc">if ((ticks - 1UL) &gt; SysTick_LOAD_RELOAD_Msk) return 1;           /* 24 bits only */
+SysTick-&gt;LOAD  = ticks - 1UL;                                     /* 47999        */
+NVIC_SetPriority(SysTick_IRQn, (1UL &lt;&lt; __NVIC_PRIO_BITS) - 1UL);  /* 3            */
+SysTick-&gt;VAL   = 0UL;
+SysTick-&gt;CTRL  = CLKSOURCE | TICKINT | ENABLE;                    /* 0x00000007   */</pre>
+    <ul>
+      <li>For 1 ms at 48 MHz, ticks = 48 000 000 / 1000 = 48 000, so <code>LOAD</code> = 47 999 = <code>0xBB7F</code>. VAL counts 47 999 down to 0, which is 48 000 clocks.</li>
+      <li><code>CTRL</code> = <code>0x7</code>: bit 2 CLKSOURCE (core clock), bit 1 TICKINT (interrupt on each wrap), bit 0 ENABLE.</li>
+      <li>Priority (1 &lt;&lt; 2) − 1 = <b>3, the lowest</b>. "A late tick is caught up, a missed capture is gone" (slide 15).</li>
+      <li>SysTick is part of the core, not ST's silicon. Every Cortex-M has it at the same address with the same registers, which is why every RTOS uses it as its heartbeat. Lesson 07 does.</li>
+      <li><code>SysTick_Handler</code> has <b>no flag to clear</b>, unlike every other handler in the course. Its request is the wrap itself, and taking the exception acknowledges it.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>LOAD = ticks − 1 has to fit in 24 bits</h4></div>
+      <p class="fig-lede">Pick a tick period. LOAD is drawn bit by bit at 48 MHz, with its hex digit under each group of four bits. SysTick has no bits 31:24. From 350 ms up, ticks − 1 needs bit 24, and SysTick_Config returns 1 without touching a register.</p>
+      <div data-viz="load-slider"></div>
+      <div data-viz="load"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">ticks</span><span class="v" data-role="ticks">48 000</span><span class="sub">48 000 000 × period</span></div>
+        <div class="stat"><span class="label">LOAD = ticks − 1</span><span class="v pri" data-role="loadv">0xBB7F</span><span class="sub" data-role="loadd">47 999</span></div>
+        <div class="stat"><span class="label">SysTick_Config returns</span><span class="v ok" data-role="ret">0</span><span class="sub" data-role="rets">configured</span></div>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. millis() and the wrap that does not matter (slide 3)</h4>
+    <p><code>ms_ticks</code> is a <code>uint32_t</code>. It wraps after 2³² ms, <b>49.7 days</b>, and code that compares absolute times breaks on day 50.</p>
+    <pre class="calc">if (millis() &gt;= deadline) ...          /* WRONG at the wrap */
+if (millis() - start &gt;= period) ...    /* right, always     */</pre>
+    <ul>
+      <li>Unsigned subtraction is modulo 2³², so <code>now - start</code> is the true elapsed time even when <code>now</code> has wrapped past zero and <code>start</code> has not. Every timeout in this lesson is written that way.</li>
+      <li>Reading <code>ms_ticks</code> needs no lock: one aligned word, one writer (lesson 03, slide 7). <code>volatile</code> is what forces each millis() to actually load it.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>Elapsed time is the forward distance on a ring of numbers</h4></div>
+      <p class="fig-lede">After the largest value the counter comes back to 0, so its values form a ring. Here the ring is cut open around the wrap and drawn to scale. now − start is the distance going forward from start to now, wherever the wrap falls. The last step is the same trick in 16 bits, for TIM14's echo (slide 13).</p>
+      <div data-viz="ring-steps"></div>
+      <p class="step-note" data-role="ring-note" aria-live="polite"></p>
+      <div data-viz="ring"></div>
+      <pre class="calc" data-role="ring-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. Doing several things at once without waiting (slide 4)</h4>
+    <p>With a real clock the loop never blocks. Each job checks whether its time has come, and if not, gets out of the way:</p>
+    <pre class="calc">for (;;) {
+    uint32_t now = millis();
+    if (now - ping_at   &gt;= 100)  { ping_at   += 100;  ranger_ping(); }
+    if (now - report_at &gt;= 1000) { report_at += 1000; printf(...);   }
+    if (now - beat_at   &gt;= 500)  { beat_at   += 500;  toggle LD4;    }
+}</pre>
+    <ul>
+      <li>Three jobs at three rates, none aware of the others. This is <b>cooperative scheduling</b> in its smallest form, and "most small products ship exactly this". A job gives up the CPU only by returning.</li>
+      <li>Advance the schedule with <code>ping_at += 100</code>. With <code>ping_at = now</code>, a pass that runs 3 ms late shifts every later ping by 3 ms, and the error accumulates. <code>+=</code> keeps the schedule on a 100 ms grid and absorbs the lateness.</li>
+      <li>Every job must be quick. One job that takes 50 ms delays all the others by 50 ms. Lesson 07 removes that limit with a preemptive kernel.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>One loop, three jobs: the schedule holds while every job is short</h4></div>
+      <p class="fig-lede">Each lane is one job of the loop above, on a time axis drawn to scale. Dashed lines are the times a job is due; the numbers under a run say how late it started. Step 2 compares the two ways to advance ping_at, step 3 lets one report take 50 ms.</p>
+      <div data-viz="loop-steps"></div>
+      <p class="step-note" data-role="loop-note" aria-live="polite"></p>
+      <div data-viz="loop"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. The timer: every register on one page (slide 5)</h4>
+    <p>TIM3 at <b>0x40000400</b> and TIM14 at <b>0x40002000</b> are built from the same register set, <code>TIM_TypeDef</code>. The offsets are the same for every timer on the chip, and a simple timer like TIM14 just leaves most of them unimplemented. An address is base + offset: <code>TIM3-&gt;CCR1</code> is 0x40000400 + 0x34 = 0x40000434.</p>
+    <div data-viz="timregs"></div>
+    <ul>
+      <li><b>Nine registers out of twenty-five</b> do all of this lesson's work. They fall into four groups, the same four in every timer.</li>
+      <li><b>Time base</b> (PSC, ARR, CNT): how fast it counts and how far. <b>Events</b> (EGR, DIER, SR): what happens when it gets there, and who is told. <b>Channel</b> (CCMR1, CCER, CCR1): compare to make a waveform, or capture to take a timestamp. <b>Control</b> (CR1): preload on, then run.</li>
+      <li><code>CCMR1</code> is one register with <b>two layouts</b>. Bits 1:0, <code>CC1S</code>, decide which one the rest of it means: 00 = output compare (TIM3), 01 = input capture from TI1 (TIM14).</li>
+      <li>TIM3 and TIM14 are <b>16-bit</b> timers: ARR, CCR1 and the count in CNT use bits 15:0. The header's masks are 32 bits wide because they also serve the 32-bit TIM2 of other STM32s. CNT bit 31, UIFCPY, is a copy of UIF, readable in the same load as the count when UIFREMAP is set.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. A timer is a counter with three registers (slide 5b)</h4>
+    <p>Every STM32 timer, from the 16-bit TIM14 to the advanced TIM1, is built on the same core. The timer clock passes through the prescaler into CNT. When CNT reaches ARR, an <b>update event</b> sets CNT back to 0 and raises UIF.</p>
+    <p class="formula">count rate = f_clk / (PSC + 1) &nbsp;&nbsp;&nbsp; update rate = f_clk / ((PSC + 1) × (ARR + 1))</p>
+    <pre class="calc">TIM3, 1 µs per count and a 20 ms frame, at 48 MHz
+PSC + 1 = 48 MHz / 1 MHz  = 48       → PSC = 47      (0x002F)
+ARR + 1 = 20 ms / 1 µs    = 20 000   → ARR = 19999   (0x4E1F)
+update  = 48 000 000 / (48 × 20 000) = 50 Hz
+
+Both registers hold N − 1: a count of N steps runs from 0 to N − 1.
+PSC = 2 → CNT steps once every 3 clocks
+ARR = 3 → CNT runs 0 1 2 3 0 1 …, 4 counts per update</pre>
+    <ul>
+      <li>The −1 is the classic off-by-one. PSC = 48 divides by 49 and gives 48.98 Hz, and nothing complains. Only the report line's count of TIM3 updates against SysTick notices (slide 16, Lab Part 2).</li>
+      <li>More to work by hand: PSC 47 with ARR 999 updates every 1 ms (1 kHz). PSC 23 counts at 2 MHz. TIM14 runs PSC 47 with ARR 0xFFFF and wraps every 65.536 ms.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>CNT climbs to ARR and drops to 0: one update event per ramp</h4></div>
+      <p class="fig-lede">CNT against time at 48 MHz, to scale over 140 ms. Each green dot is an update event. PSC sets the slope (how long one count lasts) and ARR the height, and together they set the period. The faint ramp is TIM3's correct setting, for comparison.</p>
+      <div data-viz="tbase-steps"></div>
+      <p class="step-note" data-role="tbase-note" aria-live="polite"></p>
+      <div data-viz="tbase"></div>
+      <div class="legend">
+        <span><i class="sw-pri"></i>CNT</span>
+        <span><i class="sw-ok"></i>update event: CNT → 0, UIF = 1</span>
+        <span><i class="sw-seg"></i>faint: TIM3's correct ramp</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><span class="label">one count</span><span class="v" data-role="tb-step">1 µs</span><span class="sub">(PSC + 1) / 48 MHz</span></div>
+        <div class="stat"><span class="label">period</span><span class="v" data-role="tb-per">20 ms</span><span class="sub">(PSC + 1)(ARR + 1) / 48 MHz</span></div>
+        <div class="stat"><span class="label">update rate</span><span class="v pri" data-role="tb-f">50 Hz</span><span class="sub">1 / period</span></div>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Shadow registers, and why UG comes first (slide 6)</h4>
+    <p><code>PSC</code>, <code>ARR</code> and <code>CCR1</code> are <b>double-buffered</b>. What you write lands in a <i>preload</i> register. The counter keeps using the <i>shadow</i> copy until the next update event, when the preload is copied across.</p>
+    <pre class="calc">TIM3-&gt;PSC  = 47;              /* sits in preload...                          */
+TIM3-&gt;ARR  = 19999;
+TIM3-&gt;EGR  = TIM_EGR_UG;      /* ...until this forces an update right now    */
+TIM3-&gt;SR   = ~TIM_SR_UIF;     /* UG also raised UIF - clear it, or the first */
+TIM3-&gt;DIER |= TIM_DIER_UIE;   /* interrupt is a phantom                      */</pre>
+    <ul>
+      <li>Buffering is what lets you change a PWM duty cycle mid-flight without ever producing a malformed pulse. It is also why a freshly configured timer can ignore you.</li>
+      <li>Skip UG and the prescaler is still 0 for the first period: 20 000 counts at 48 MHz, about <b>0.4 ms instead of 20 ms</b> (20 000 / 48 MHz = 0.42 ms). ARR took effect at once only because it was written before ARPE switched its preload on.</li>
+      <li>On a timer that runs once, that is a bug you will see. On one that runs forever, it is a glitch you probably will not.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>Writes wait in preload until an update event copies them</h4></div>
+      <p class="fig-lede">Left, the five lines; middle, the preload registers the code writes; right, what the counter actually uses, and the flags. The bottom lane shows the first periods once the timer runs. The last two buttons each leave one line out.</p>
+      <div data-viz="shadow-steps"></div>
+      <p class="step-note" data-role="shadow-note" aria-live="polite"></p>
+      <div data-viz="shadow"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. TIM3_IRQHandler and the opposite convention (slide 7)</h4>
+    <pre class="calc">void TIM3_IRQHandler(void)
+{
+    if (TIM3-&gt;SR &amp; TIM_SR_UIF) {
+        TIM3-&gt;SR = ~TIM_SR_UIF;       /* write 0 to clear */
+        ...</pre>
+    <ul>
+      <li>The name works because it replaces the weak alias in the vector table (lesson 04). TIM3 is IRQ 16, vector 16 + 16 = 32, at 0x08000000 + 32 × 4 = 0x08000080.</li>
+      <li><b>Timer flags clear by writing 0. EXTI flags clear by writing 1.</b> Same chip, same vendor, opposite conventions. ST's own LL driver shows both: <code>WRITE_REG(TIMx-&gt;SR, ~(TIM_SR_UIF))</code> and <code>WRITE_REG(EXTI-&gt;FPR1, ExtiLine)</code>.</li>
+      <li>The compiler builds <code>~TIM_SR_UIF</code> as <code>movs r2, #2 ; negs r2, r2</code>, which is 0xFFFFFFFE, and one <code>str</code>. Writing 1s to every other flag leaves them alone, so the clear touches only UIF and needs no read.</li>
+      <li>Written the EXTI way, <code>TIM3-&gt;SR = TIM_SR_UIF</code> clears <b>every other</b> flag and leaves UIF set. The handler re-enters forever, and it builds with zero warnings. In Lab Part 1 the banner stops part-way, SysTick (priority 3) starves so time stops, and the servo holds its position, because the PWM is hardware.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>A 0 clears a timer flag, a 1 leaves it alone</h4></div>
+      <p class="fig-lede">TIM3's SR with two flags pending: UIF, and CC1IF, which the channel sets when CNT matches CCR1. Plum cells in the middle row are the bits that act. Compare the right write, the EXTI-style write, and EXTI's own rule.</p>
+      <div data-viz="sr-steps"></div>
+      <p class="step-note" data-role="sr-note" aria-live="polite"></p>
+      <div data-viz="sr"></div>
+    </figure>
+    <p>How every flag in lessons 05 and 06 clears:</p>
+    <div data-viz="clears"></div>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Output compare: the timer draws a waveform (slides 8–9)</h4>
+    <p>Add a fourth register, <code>CCR1</code>, and the counter drives a pin by itself. In <b>PWM mode 1</b> (<code>OC1M = 110</code>) the pin is high while <code>CNT &lt; CCR1</code> and low after, until the counter reaches ARR and the next frame starts.</p>
+    <ul>
+      <li>With the counter ticking once per microsecond, <b>CCR1 is the pulse width in microseconds</b>. CCR1 = 1500 means exactly 1.5 ms.</li>
+      <li>No CPU is involved in a single edge. The ISR is only there to change CCR1, and <code>OC1PE</code> (preload) makes every change wait for the next frame boundary, so a pulse is never cut in half.</li>
+      <li>Four writes turn the channel on: CCMR1 (mode and preload), CCER.CC1E (connect to the pin), CR1.ARPE, and the pin's alternate function.</li>
+    </ul>
+    <div data-viz="pwmregs"></div>
+    <ul>
+      <li>A hobby servo reads <b>the width of a pulse, repeated every 20 ms</b>: nominally 1.0 ms at one end, 1.5 ms at the centre and 2.0 ms at the other end.</li>
+      <li>"Nominal" is doing real work there. Real servos differ, Arduino's Servo library uses 544–2400 µs for its 0–180°, and Wokwi documents no range at all, so Lab Part 4 measures it.</li>
+      <li>The frame rate is not critical; servos accept a wide range around 50 Hz. The pulse width is the whole message, which is why this lesson counts in microseconds.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 8</span><h4>CCR1 is the pulse width</h4></div>
+      <p class="fig-lede">Left, two 20 ms frames of TIM3 to scale; the pulse is a thin sliver of each frame. Middle, the first 2.5 ms of a frame, where CNT climbs one count per microsecond and crosses CCR1. Drag CCR1: PA6 falls at the crossing, and the servo horn follows the width.</p>
+      <div data-viz="pwm-slider"></div>
+      <div data-viz="pwm"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">pulse width</span><span class="v pri" data-role="pw-w">1.5 ms</span><span class="sub">CCR1 × 1 µs</span></div>
+        <div class="stat"><span class="label">duty cycle</span><span class="v" data-role="pw-d">7.5 %</span><span class="sub">CCR1 / (ARR + 1)</span></div>
+        <div class="stat"><span class="label">frame</span><span class="v">20 ms</span><span class="sub">fixed by PSC and ARR</span></div>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Getting the signal out: the AF table (slide 10)</h4>
+    <p>The timer channel is inside the chip. <code>pin_af()</code> connects it to a pin, and the number it needs comes from a table in the <b>datasheet</b>. The reference manual does not list it.</p>
+    <div data-viz="aftable"></div>
+    <ul>
+      <li>The same signal has <b>different AF numbers on different pins</b>. This lesson's second timer shows it too: TIM14_CH1 is AF4 on PA7 and AF0 on PB1.</li>
+      <li>PA6's number lives in <code>GPIOA-&gt;AFR[0]</code>, bits 27:24 (pin n below 8: bits 4n+3:4n), and its MODER field must be 10.</li>
+      <li>A wrong AF number gives a pin that is electrically fine, driven by some other peripheral or by nothing. The timer still counts, the interrupt still fires, the report still says 50 updates a second, and the servo does not move. Lab Part 5: "the timer works, the pin doesn't."</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 9</span><h4>The AF number picks which signal drives the pin</h4></div>
+      <p class="fig-lede">Each pin has a selector with sixteen inputs, AF0 to AF15 (the first eight drawn). The 4-bit field for PA6 in AFR[0] picks one. With the right number TIM3's channel reaches the pin; with a wrong one everything inside the timer still works.</p>
+      <div data-viz="af-steps"></div>
+      <p class="step-note" data-role="af-note" aria-live="polite"></p>
+      <div data-viz="af"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. The smallest control loop (slide 11)</h4>
+    <pre class="calc">uint32_t now  = TIM3-&gt;CCR1;
+uint32_t want = servo_target_us;
+if      (want &gt; now + SLEW) now += SLEW;
+else if (want + SLEW &lt; now) now -= SLEW;
+else                        now  = want;
+TIM3-&gt;CCR1 = now;                 /* preloaded: takes effect next frame */</pre>
+    <ul>
+      <li>The update interrupt runs once per frame and moves the pulse <b>towards</b> the target, never more than SLEW = 20 µs a frame. 20 µs × 50 frames a second = 1000 µs per second of travel, so the servo glides instead of snapping.</li>
+      <li>That is a <b>rate limiter</b>, the smallest possible piece of control code: measure, compare, correct, once per period. It runs in the right place, an interrupt tied to the exact rate at which the output is consumed.</li>
+      <li>Every controller in Part 3 of the course, from the line follower to the drone's attitude loop, has this shape with better arithmetic inside.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 10</span><h4>SLEW trades smoothness against speed</h4></div>
+      <p class="fig-lede">At t = 0 the target jumps from 1000 µs to 2000 µs. Each point is CCR1 for one 20 ms frame, to scale. Lab Part 3 tries SLEW = 1000 and SLEW = 2; the faint lines are the other settings.</p>
+      <div data-viz="slew-steps"></div>
+      <div data-viz="slew"></div>
+      <div class="stats">
+        <div class="stat"><span class="label">frames to arrive</span><span class="v" data-role="sl-n">50</span><span class="sub">1000 µs / SLEW</span></div>
+        <div class="stat"><span class="label">time to arrive</span><span class="v pri" data-role="sl-t">1 s</span><span class="sub">frames × 20 ms</span></div>
+        <div class="stat"><span class="label">fastest travel</span><span class="v" data-role="sl-r">1000 µs/s</span><span class="sub">SLEW × 50 frames/s</span></div>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. Input capture: the hardware takes the timestamp (slide 12)</h4>
+    <p>Output compare makes an edge at a chosen time. Input capture answers the reverse question: what time was this edge?</p>
+    <ul>
+      <li>At the edge on PA7 the hardware copies <b>CCR1 ← CNT</b>, then raises CC1IF, and only then does the ISR run and read CCR1.</li>
+      <li>"The timestamp is taken before the interrupt is even requested." ISR latency, 1 µs or 100 µs, "changes when you READ it, not what it SAYS."</li>
+      <li>Measuring a pulse with an EXTI interrupt and millis() would include the interrupt's latency, and the latency varies with whatever else is running. Input capture removes the CPU from the measurement entirely. The ISR is a courier, not a stopwatch.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. Measuring the echo, and what Wokwi showed (slides 13, 13b)</h4>
+    <p>The HC-SR04 answers a 10 µs trigger on PA8 with a high pulse whose width is the round-trip time of the sound, <b>58 µs per centimetre</b>. TIM14 free-runs at 1 MHz (PSC 47, ARR 0xFFFF) and captures <b>both</b> edges, <code>CC1P = CC1NP = 1</code>.</p>
+    <div data-viz="capregs"></div>
+    <pre class="calc">uint16_t t = (uint16_t)TIM14-&gt;CCR1;          /* reading CCR1 clears CC1IF */
+if (pin_read(GPIOA, ECHO_PIN)) echo_rise = t;           /* rising  */
+else { echo_us = (uint16_t)(t - echo_rise); ... }       /* falling */</pre>
+    <ul>
+      <li><b>The 16-bit subtraction is correct across a wrap.</b> TIM14 wraps every 65.5 ms and the longest echo, 400 cm, is 23.2 ms. Rise 60000, fall 17664: (uint16_t)(17664 − 60000) = 23 200 µs = 400 cm. Figure 3's last step draws it.</li>
+      <li><b>Reading CCR1 clears CC1IF</b>, a third clearing convention and the only one that needs no write at all.</li>
+      <li>The trigger pulse uses TIM14 too. CNT is already counting microseconds, so it is the stopwatch for the 10 µs.</li>
+      <li><b>Wokwi does not implement timer input capture</b>; its STM32 timers do PWM output only. Every report line of the first run read <code>echo 0 us = 0 cm</code>, because CC1IF never set.</li>
+      <li>So the firmware also listens on PA7 through <b>EXTI line 7</b> on both edges (lesson 05), and that handler reads <code>TIM14-&gt;CNT</code> itself, already late. Capture is used whenever it has produced a pulse, EXTI otherwise, and every report line names its source.</li>
+    </ul>
+    <pre class="calc">t=  9000 ms  TIM3 50/s  echo  5882 us = 101 cm (EXTI)  servo 1495 us  edges cap 0 exti 161
+
+cap 0, exti +20 a second    2 edges per ping × 10 pings a second
+5882 us, slider 100 cm      58.8 us per cm, sound at 340 m/s;  5882 / 58 = 101 cm
+servo 1495 us               2000 − 101 × 1000 / 200 = 2000 − 505
+3 LEDs                      (200 − 101) × 8 / 200 = 3.96 → 3 (integer division)</pre>
+    <p>The EXTI timestamp is late by the interrupt latency, and both edges are late by about the same amount, so the width is still right to within a microsecond or two. That only holds while nothing else delays one of the two interrupts. On silicon, slide 12's argument for capture still stands.</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 11</span><h4>Capture stamps the edge, EXTI stamps the moment its handler runs</h4></div>
+      <p class="fig-lede">Top, one echo of 5800 µs (100 cm), to scale. Below, 80 µs around each edge, magnified. The blue mark is where the hardware copies CNT into CCR1; the plum mark is where an EXTI handler reads CNT. In the last step another handler holds the rising edge's interrupt for 40 µs.</p>
+      <div data-viz="cap-steps"></div>
+      <p class="step-note" data-role="cap-note" aria-live="polite"></p>
+      <div data-viz="cap"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>14. Two variables from one interrupt: tearing (slide 14)</h4>
+    <p>The capture ISR writes two things together, the width and a count. main() wants a consistent pair, so it reads both with interrupts off:</p>
+    <pre class="calc">__disable_irq();
+uint32_t n  = echo_count;
+uint32_t us = echo_us;
+__enable_irq();</pre>
+    <p>Without the critical section, a capture can land between the two loads:</p>
+    <pre class="calc">main()                          capture ISR
+n  = echo_count;    → 41
+                                echo_us = 5882;      the width of capture 42
+                                echo_count++;        → 42
+us = echo_us;       → 5882
+n = 41 sits with the width of capture 42: a torn pair</pre>
+    <ul>
+      <li>This is lesson 03, slide 7's <b>tearing</b>, now in real code. The slide words it as a new count with an old width; in this code order the halves come out the other way round, and the bug is the same.</li>
+      <li>With the critical section, the window is two load instructions long, a fraction of a microsecond with interrupts off. The capture itself is not delayed at all, because the hardware already took the timestamp (slide 12). The interrupt is merely held pending until <code>__enable_irq()</code>.</li>
+      <li>One variable alone, like <code>ms_ticks</code>, needs no lock (slide 3). A single aligned word with one writer cannot tear.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>15. Three interrupts, three priorities (slide 15)</h4>
+    <div data-viz="priotable"></div>
+    <ul>
+      <li>On a Cortex-M0+ a higher-priority interrupt <b>preempts</b> a running lower-priority handler. Equal priorities never preempt each other; they queue, and the NVIC takes the higher priority first, then the lower IRQ number.</li>
+      <li>NVIC numbering: <b>0 is the most urgent</b>. This chip keeps 2 priority bits, the top two of each priority byte, so priority p is stored as p &lt;&lt; 6.</li>
+      <li>The table is not based on importance to the user. The servo matters more than the clock to someone watching, but it has 20 ms of slack. <b>Priority follows deadline</b>. That rule has a name, <i>deadline-monotonic</i>, or <i>rate-monotonic</i> when each deadline is the job's own period, and lesson 07 builds a scheduler on it.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 12</span><h4>Where the three priorities live: one byte each, top two bits</h4></div>
+      <p class="fig-lede">IRQ n's priority is byte n mod 4 of NVIC IPR[n / 4]. SysTick is a system exception, so its byte is in the SCB's SHPR3 instead. Pick a source to see its byte and value.</p>
+      <div data-viz="prio-steps"></div>
+      <p class="step-note" data-role="prio-note" aria-live="polite"></p>
+      <div data-viz="prio"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>16. Two clocks checking each other (slide 16)</h4>
+    <pre class="calc">t=  5000 ms  TIM3 50/s  echo  5800 us = 100 cm  servo 1500 us  (last line took 8 ms)
+
+SysTick path   48 MHz / 48 000         = 1000 ticks a second
+TIM3 path      48 MHz / 48 / 20 000    = 50 updates a second
+self-test      TIM3 updates per 1000 SysTick ticks = 50, every second
+PSC = 48       48 MHz / 49 / 20 000    = 48.98 a second → reads 48 or 49
+took           88 chars × 86.8 µs      = 7.6 ms, and t= still advances by 1000</pre>
+    <ul>
+      <li>Both counts come from the same 48 MHz through completely different dividers. If PSC and ARR are right, the answer is exactly 50 every second. It is a <b>self-test</b>: arithmetic in two independent places that must agree.</li>
+      <li>The <code>took</code> figure is the other half of the story. The clock kept counting through 7 or 8 ms of printf; lesson 05 would have lost seven of those milliseconds.</li>
+      <li><code>TIM3 50/s</code> was measured in Renode, whose platform file clocks its timers at 10 MHz. The first run read <code>TIM3 10/s</code> (10 MHz / 48 / 20 000 = 10.4). The self-test caught the simulator.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>17. The silent-failure checklist, timer edition (slide 17)</h4>
+    <p>Every row builds with zero warnings and then misbehaves. The third column is the chain of cause and effect that a prediction question asks for.</p>
+    <div data-viz="checklist"></div>
+    <p>The banner prints PSC, ARR, the computed rate, both AF fields, the capture polarity bits and whether each of the three handlers is installed, all read back from the hardware, as in lesson 05.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>18. What carries forward (slide 18)</h4>
+    <ul>
+      <li><b>Time is now an interrupt</b>, and <code>now - then</code> is the only comparison you write.</li>
+      <li><b>Timers are one model, many instances.</b> TIM3 made a waveform and TIM14 measured one. TIM1, TIM16 and TIM17 are the same registers with more features, and need no new lesson.</li>
+      <li><b>The superloop has a ceiling.</b> Every job in slide 4's loop must finish quickly, or it delays all the others. Lesson 07 lifts the ceiling: SysTick becomes the heartbeat of a scheduler that can interrupt a job and run another, and delay_ms() comes back without stopping anything else.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>General idea vs this chip</h4>
+    <div data-viz="contrast"></div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>PSC and ARR at 48 MHz: 1 µs counts and a 20 ms frame give PSC 47, ARR 19999, 50 Hz. A 1 ms update: PSC 47, ARR 999. A 2 MHz count: PSC 23.</li>
+      <li>Forgot the −1: PSC 48 gives 48.98 Hz and a 1500-count pulse of 1531 µs. Only the TIM3-against-SysTick count notices.</li>
+      <li>SysTick at 1 ms: LOAD 47999 (0xBB7F), CTRL 0x7, priority 3, no flag to clear. Longest period 2²⁴ clocks ≈ 350 ms; asking for 1 s makes SysTick_Config return 1.</li>
+      <li>millis() wraps after 49.7 days. start 0xFFFFFF00, now 0x00000100: now − start = 0x200 = 512 ms. <code>millis() &gt;= start + 500</code> fires 484 ms early there.</li>
+      <li>Flags: TIM SR write 0 (<code>SR = ~TIM_SR_UIF</code> = 0xFFFFFFFE), EXTI write 1, CC1IF by reading CCR1, SysTick nothing. <code>SR = TIM_SR_UIF</code>: the handler re-enters forever, SysTick starves, the PWM keeps running.</li>
+      <li>No EGR = UG: the first period runs at prescaler 0, 0.42 ms. UG without clearing UIF: a phantom first interrupt.</li>
+      <li>PWM mode 1: high while CNT &lt; CCR1, so at 1 µs a count CCR1 is the width in µs. Servo: 20 ms frame, 1.0 / 1.5 / 2.0 ms. TIM3 CCMR1 0x68, CR1 0x81, CCER 0x1.</li>
+      <li>Wrong AF or no CC1E: the timer runs, the report says 50/s, the pin is dead. PA6 AF1, PA7 AF4, GPIOA AFR[0] = 0x41001100.</li>
+      <li>Capture: CCR1 ← CNT at the edge, so latency does not change the value. Both edges: TIM14 CCER 0xB. Rising only (0x1): no widths, ever. (uint16_t)(17664 − 60000) = 23 200 µs = 400 cm.</li>
+      <li>Priorities follow deadlines: TIM14 1, TIM3 2, SysTick 3. IPR4 = 0x40000080, SHPR3 = 0xC0000000. Equal priorities queue, lower IRQ number first.</li>
+      <li>Superloop: <code>ping_at += 100</code> holds the grid, <code>= now</code> drifts. Cooperative: one 50 ms job delays every other job by 50 ms.</li>
+    </ul>
+    <p class="source">Slides: L06 slides 1–18 with 5b, 13b and the two pin-map pages · Notes: 07_Week5_L06_Time_Timers.md · Guide: §3 Lesson 06, §2 key contrasts</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lesson</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

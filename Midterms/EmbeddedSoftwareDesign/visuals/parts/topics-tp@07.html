@@ -1,0 +1,426 @@
+<article class="q" id="topic7" data-part="tp" data-num="7" data-topic="RTOS">
+  <div class="q-head">
+    <p class="eyebrow">Lesson 07 · Week 6 · 4 of 33 exam questions</p>
+    <h3 class="q-title">RTOS: Writing the Thing That Runs Your Tasks</h3>
+    <p class="fig-lede">Lesson 06 ended at the superloop's ceiling: every job must be short, or it delays all the others. This lesson lifts that limit with a preemptive kernel of about 300 lines: SysTick decides, PendSV switches, and every task runs on its own stack through a second stack pointer, PSP. The same kernel then shows priority inversion, a stack overflow that does not crash, and a HardFault that names its line.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>1. The job that never yields (pin maps, slide 1)</h4>
+    <p>A <b>CPU hog</b> is a job that keeps the CPU and never gives it back, like the prime search <code>for (;;)</code>. Put it in lesson 06's superloop and nothing else ever runs again: the LED bar freezes, the buttons die, the report stops.</p>
+    <ul>
+      <li>"<b>Cooperative scheduler</b> → one CPU hog can stop the whole system." The superloop is one: each job runs until it chooses to return, so the system works only while every job agrees to be short. The job itself decides when it stops.</li>
+      <li>"<b>Preemptive scheduler</b> → the RTOS can forcibly stop (<b>preempt</b>) the CPU hog." The kernel decides, on a timer interrupt, and later carries the hog on from exactly where it was.</li>
+      <li>On a Cortex-M, preemption takes one interrupt (SysTick), one exception (PendSV) and a second stack pointer (PSP).</li>
+      <li>Pins: PA0 button A (bar speed) and PA1 button B (hog on or off), inputs with pull-ups; PA2 and PA3 USART2 TX and RX (AF1) for the serial monitor; PB0–PB7 the LED bar, one output per LED.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 1</span><h4>One hog, two schedulers</h4></div>
+      <p class="fig-lede">The button task is due every 5 ms and the LED bar every 60 ms (triangles). Button B is pressed at 12 ms, and the button job sees it at 15 ms and turns the hog on. Pick a scheduler.</p>
+      <div data-viz="coop-steps"></div>
+      <p class="step-note" data-role="coop-note" aria-live="polite"></p>
+      <div data-viz="coop"></div>
+      <div class="legend">
+        <span><i class="sw-pri"></i>button task</span>
+        <span><i class="sw-sec"></i>LED bar task</span>
+        <span><i class="sw-ter"></i>hog</span>
+        <span><i class="sw-seg"></i>loop checking, or idle</span>
+        <span><i class="sw-bad"></i>due time missed</span>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>2. A task is a stack and nine numbers (slide 2)</h4>
+    <p>A C function that is running is, at any instant, its <b>stack</b>, its <b>registers</b> (<code>r0</code>–<code>r12</code>, <code>lr</code>, <code>pc</code>, <code>xPSR</code>) and its <b>stack pointer</b>. Save all of that and the function can be put away. Restore it and it continues as if nothing happened.</p>
+    <pre class="calc">typedef struct os_task {
+    uint32_t   *sp;          /* MUST be first - the assembly reads [tcb + 0] */
+    const char *name;
+    uint8_t     prio, base_prio, state;
+    uint32_t    wake;
+    ...
+} os_task_t;</pre>
+    <div data-viz="terms"></div>
+    <p>The registers live on the task's own stack while it is switched out, so the TCB only has to remember one number: where the stack pointer was.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>3. The core's own registers and two stack pointers (slides 3, 3b)</h4>
+    <p>These registers have <b>no address</b>. They live inside the core, and only two instructions reach them: <code>MRS</code> (special register to <code>rN</code>) and <code>MSR</code> (<code>rN</code> to special register). CMSIS wraps each one in an inline function.</p>
+    <div data-viz="special"></div>
+    <ul>
+      <li><b>MSP</b> serves every exception handler, and <code>main()</code> after reset. <b>PSP</b> serves Thread mode when <code>CONTROL.SPSEL</code> = 1: in this kernel, every task, each on its own stack.</li>
+      <li>Handlers always run on MSP, a stack no task owns. So a task's stack only has to hold that task, plus the 8 words the hardware pushes on entry.</li>
+      <li><b>EXC_RETURN</b> is not a register. It is the number in <code>lr</code> while a handler runs. <code>0xFFFFFFFD</code> means "return to Thread mode, restore from PSP, keep using PSP", and every switch in this kernel returns with exactly that value.</li>
+      <li>While a task runs, <code>CONTROL</code> = 0x00000002: SPSEL = 1 (PSP), nPRIV = 0 (privileged). The kernel never writes <code>CONTROL</code>; the exception return sets SPSEL.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 2</span><h4>EXC_RETURN: bit 3 picks the mode, bit 2 picks the stack</h4></div>
+      <p class="fig-lede">Bits 31:4 are all ones in every value, so only the last hex digit differs. Pick a value to decode it.</p>
+      <div data-viz="exc-steps"></div>
+      <p class="step-note" data-role="exc-note" aria-live="polite"></p>
+      <div data-viz="exc"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>4. The System Control Block: ICSR and SHPR3 (slide 4)</h4>
+    <p>The SCB (<code>SCB_Type</code> in <code>core_cm0plus.h</code>) is memory-mapped at <b>0xE000ED00</b>, <code>SCS_BASE</code> 0xE000E000 + 0xD00. Like SysTick it is part of the core, so it is the same on every Cortex-M0+. The kernel writes two of its nine registers.</p>
+    <pre class="calc">+0x00 CPUID   +0x04 ICSR (written)   +0x08 VTOR   +0x0C AIRCR   +0x10 SCR
++0x14 CCR     +0x18 reserved         +0x1C SHPR2 (SVCall)          +0x20 SHPR3 (written)
++0x24 SHCSR</pre>
+    <ul>
+      <li><b>ICSR is write-1-to-act.</b> Writing <code>PENDSVSET</code> pends PendSV, writing <code>PENDSVCLR</code> cancels a pending one, and zeros do nothing. So the kernel writes the bit alone with <code>=</code>, never <code>|=</code>.</li>
+      <li><b>SHPR2 and SHPR3 hold one byte per system exception.</b> This chip implements only the top two bits of each byte (<code>__NVIC_PRIO_BITS</code> = 2), so there are four levels, 0–3, and a priority p is written as <code>p &lt;&lt; 6</code>.</li>
+      <li><code>NVIC_SetPriority(PendSV_IRQn, 3)</code> writes the SCB, not the NVIC. CMSIS picks the word and the byte from the exception number.</li>
+      <li>SysTick (0xE000E010) is the kernel's third core block, used as in lesson 06. <code>SysTick_Config(48000000 / 1000)</code> loads 47999 for a 1 ms tick and also leaves SysTick at priority 3.</li>
+    </ul>
+    <pre class="calc">pend PendSV    ICSR = 1 &lt;&lt; 28                    = 0x10000000
+cancel it      ICSR = 1 &lt;&lt; 27                    = 0x08000000
+priority 3     byte = 3 &lt;&lt; (8 − 2)               = 0xC0
+SHPR3          SysTick in byte 3 (bits 31:24), PendSV in byte 2 (bits 23:16)
+               0xC0 &lt;&lt; 24 | 0xC0 &lt;&lt; 16          = 0xC0C00000</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 3</span><h4>The values the kernel writes to ICSR and SHPR3, bit by bit</h4></div>
+      <p class="fig-lede">Each row is one 32-bit write, bit 31 on the left. Blue cells are the bits that act; outlined cells in SHPR3 are the only priority bits that exist. The hex digit under each group of four bits is the value you write in code. The last row is a common mistake.</p>
+      <div data-viz="scb-bits"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>5. PendSV: deciding vs switching (slide 4b)</h4>
+    <p>A switch must never happen inside another interrupt handler. That handler's frame is on MSP, half-finished, and swapping the task beneath it would return it into the wrong world. So switches happen in one place only, <b>PendSV</b>, a system exception with two properties.</p>
+    <ul>
+      <li><b>It is triggered by software.</b> <code>SCB-&gt;ICSR = SCB_ICSR_PENDSVSET_Msk</code> sets its pending bit. Nothing else ever raises it.</li>
+      <li><b>This kernel gives it the lowest priority, 3.</b> So it runs only when no other handler is active, after every other interrupt has finished, on the way back to a task (tail-chained).</li>
+    </ul>
+    <pre class="calc">static void schedule(void) {        /* called with interrupts masked */
+    os_task_t *n = pick();  os_next = n;
+    SCB-&gt;ICSR = (n != os_current) ? SCB_ICSR_PENDSVSET_Msk : SCB_ICSR_PENDSVCLR_Msk;
+}</pre>
+    <div data-viz="decide"></div>
+    <p>Why <code>PENDSVCLR</code>: if the current task should keep running after all, the cancel stops a switch requested earlier, which was chosen from information that is now stale.</p>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 4</span><h4>Deciding happens anywhere; switching waits for the calm</h4></div>
+      <p class="fig-lede">Execution over time, one lane per context, not to scale. A handler with a lower NVIC number preempts one with a higher number; equal numbers never preempt each other. Pick a case.</p>
+      <div data-viz="pend-steps"></div>
+      <p class="step-note" data-role="pend-note" aria-live="polite"></p>
+      <div data-viz="pend"></div>
+      <div class="legend">
+        <span><i class="sw-pri-soft"></i>task A</span>
+        <span><i class="sw-sec-soft"></i>task B, the next task</span>
+        <span><i class="sw-seg"></i>handler running</span>
+        <span><i class="sw-pri"></i>PendSV, the switch</span>
+      </div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>6. One switch, step by step (slides 4c, 5, 6)</h4>
+    <div data-viz="flow"></div>
+    <ul>
+      <li><b>Deciding and switching are different steps.</b> Steps 3 to 5 can happen anywhere; steps 7 and 8 happen only in PendSV. Steps 2 to 9 run in Handler mode on MSP.</li>
+      <li><b>SysTick is only one way in.</b> <code>os_delay()</code>, a mutex unlock and a queue put also call <code>schedule()</code> and join at step 4, so a task that sleeps does not wait for the tick to be switched out.</li>
+      <li><b>The hardware does half the work.</b> Every exception entry stacks the same 8 words (r0–r3, r12, lr, pc, xPSR). PendSV's own code saves the other 8, r4–r11.</li>
+      <li>A switched-out task is "sixteen words and one pointer". <code>tcb-&gt;sp</code> points at its <code>r4</code>, and its hardware frame starts 32 bytes on, at <code>r0</code>. From <code>tcb-&gt;sp</code>: r4–r7 at +0, r8–r11 at +16, r0–r3 at +32, r12, lr, pc, xPSR at +48. The saved pc is at +56, word 6 of the hardware frame.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 5</span><h4>PendSV switches task A out and task B in, instruction group by instruction group</h4></div>
+      <p class="fig-lede">Both stacks with low addresses at the top, as on slides 5 and 6. The step numbers are slide 6's. Addresses are an example: A's hardware frame sits at 0x20000460, and B was switched out earlier with its saved sp at 0x20000640. Watch r4–r7: they carry r8–r11 through the store and the load.</p>
+      <div data-viz="sw-steps"></div>
+      <p class="step-note" data-role="sw-note" aria-live="polite"></p>
+      <div data-viz="sw"></div>
+      <div class="legend">
+        <span><i class="sw-pri-soft"></i>saved by PendSV (r4–r11)</span>
+        <span><i class="sw-sec-soft"></i>saved by the hardware</span>
+        <span><i class="sw-pri"></i>written in this step</span>
+        <span><i class="sw-ok"></i>read back in this step</span>
+        <span><i class="sw-seg"></i>already restored, a stale copy</span>
+      </div>
+      <pre class="calc" data-role="sw-calc"></pre>
+    </figure>
+    <p><code>PendSV_Handler</code> is a <code>naked</code> function (no compiler prologue), at 0x08000700 in <code>Main.elf</code>: <b>34 instructions, 88 bytes</b> with its literal pool. "That is the whole of multitasking."</p>
+    <pre class="calc">    cpsid i
+    ldr   r3, =os_current
+    ldr   r1, [r3]           @ r1 = the task being left
+    cmp   r1, #0
+    beq   1f                 @ the very first switch has nothing to save
+    mrs   r0, psp            @ 1  r0 -&gt; A's hardware frame
+    subs  r0, #32            @ 2  reserve 8 words ...
+    str   r0, [r1]           @    ... tcb-&gt;sp = psp - 32
+    stmia r0!, {r4-r7}       @ 3  r4-r7 at +0, r0 -&gt; +16
+    mov   r4, r8             @ 4  (and r5,r9 / r6,r10 / r7,r11: 4 movs)
+    stmia r0!, {r4-r7}       @    r8-r11 at +16: A fully saved
+1:  ldr   r2, =os_next
+    ldr   r1, [r2]
+    str   r1, [r3]           @    os_current = os_next
+    ldr   r2, =os_switch_count  @ ldr / adds #1 / str: count++
+    ldr   r0, [r1]           @ 5  r0 = B's saved sp, at B's r4
+    adds  r0, #16            @ 6  skip to B's r8-r11 ...
+    ldmia r0!, {r4-r7}       @    ... load them, r0 -&gt; +32
+    mov   r8, r4             @    (and r9,r5 / r10,r6 / r11,r7)
+    msr   psp, r0            @ 7  PSP -&gt; B's hardware frame
+    subs  r0, #32            @ 8  back to B's r4 ...
+    ldmia r0!, {r4-r7}       @    ... r4-r7 restored last
+    cpsie i
+    ldr   r0, =0xFFFFFFFD    @ 9  EXC_RETURN: Thread mode, PSP
+    bx    r0                 @    hardware pops B's 8 words, B's pc included</pre>
+    <ul>
+      <li><code>sp</code> must be the TCB's first field, because <code>ldr r0, [r1]</code> reads <code>[tcb + 0]</code>. <code>os_current</code> and <code>os_next</code> are not <code>static</code>, because the assembly reads them by name.</li>
+      <li>Why <code>mrs r0, psp</code> and <code>stmia</code>, not <code>push</code>: PendSV runs in Handler mode, where <code>push</code> would use MSP. <code>stmia</code> only counts upward, so the code steps down 32 bytes first.</li>
+    </ul>
+    <p>A desktop OS switch has the same shape: decide in one place, switch later in a deferred low-priority step, save half the registers on entry and the other half in the switch. Much more state moves.</p>
+    <div data-viz="desktop"></div>
+    <p>"What makes the RTOS switch cheap is what it leaves out": no address space, no FPU state, no privilege change to undo. That is also why one bad pointer in any task can overwrite every other task.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>7. Why r8–r11 go the long way round (slide 7)</h4>
+    <ul>
+      <li><code>stmia r0!, {r4-r11}</code> would do it in one instruction on a Cortex-M3. On this core it does not exist. The M0+ runs Thumb-1 plus six (lesson 01), and its <code>stm</code> and <code>ldm</code> have an 8-bit register list that reaches only <code>r0</code>–<code>r7</code>. <code>push</code> and <code>str</code> are limited to the low registers too.</li>
+      <li>So <code>r8</code>–<code>r11</code> are copied into <code>r4</code>–<code>r7</code>, which are already saved and free, and stored from there. Restoring runs the trick backwards: <code>r8</code>–<code>r11</code> first, <code>r4</code>–<code>r7</code> last, so the copy is not overwritten.</li>
+      <li><code>mov r4, r8</code> is legal: <code>mov</code> between low and high registers is one of the few Thumb-1 instructions that reach <code>r8</code>–<code>r12</code>. In the disassembly, <code>sl</code> and <code>fp</code> are <code>r10</code> and <code>r11</code>, their old APCS names.</li>
+      <li>The first draft did not assemble: GCC's default inline-assembly syntax rejects <code>subs r0, #32</code> on this core. One line, <code>.syntax unified</code>, fixed it.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 6</span><h4>The encodings: stmia has one bit per low register, mov has a 4-bit Rm</h4></div>
+      <p class="fig-lede">Two halfwords from this lesson's <code>PendSV_Handler</code>, bit 15 on the left. In <code>stmia</code> the register list is bits 7:0, one bit for each of r0 to r7, with no room for r8. In <code>mov</code> the source field Rm has four bits and reaches r8 to r15.</p>
+      <div data-viz="enc"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>8. The first switch: forging a frame (slide 8)</h4>
+    <p>A new task has never run, so it has never been preempted, so there is no saved context to restore. <code>os_task_create()</code> builds one: the stack the task would have if it had just been interrupted at its first instruction.</p>
+    <pre class="calc">*--sp = 0x01000000u;                   /* xPSR: only the Thumb bit         */
+*--sp = (uint32_t)fn &amp; ~1u;            /* pc:   the function's start       */
+*--sp = (uint32_t)task_exit;           /* lr:   where it goes if it returns */
+*--sp = 0u; *--sp = 0u; *--sp = 0u; *--sp = 0u;   /* r12, r3, r2, r1      */
+*--sp = (uint32_t)arg;                 /* r0:   its argument (AAPCS)       */
+for (int i = 0; i &lt; 8; i++) *--sp = 0u;           /* r11..r4              */</pre>
+    <ul>
+      <li><b>xPSR's T bit (24) must be 1.</b> Returning with it clear asks for ARM state, which the M0+ does not have: a HardFault at the task's first instruction, on the first switch into it. The flags N, Z, C, V can be anything. The stack is chosen by EXC_RETURN, not by xPSR.</li>
+      <li><b><code>arg</code> goes in the r0 slot</b>, because AAPCS passes a function's first argument in <code>r0</code>. The task receives it as a normal parameter.</li>
+      <li><b><code>lr</code> is <code>task_exit</code></b>, so a task function that returns is parked for good instead of wandering off into memory.</li>
+      <li><code>os_start()</code> pends the very first switch from <code>main()</code>, which runs on MSP. PendSV returns with 0xFFFFFFFD, so execution never comes back to <code>main()</code>.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 7</span><h4>A forged frame and a preempted frame have the same shape</h4></div>
+      <p class="fig-lede">Left: the 16 words <code>os_task_create()</code> writes for the button task, numbered in the order the <code>*--sp</code> lines write them. The function pointer is 0x08000229 (Thumb bit set), so the pc slot gets 0x08000228. Right: task A after a real switch. "To the switch, a brand-new task and a task preempted a second ago look identical."</p>
+      <div data-viz="forge"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>9. Who runs next: pick() (slide 9)</h4>
+    <pre class="calc">static os_task_t *pick(void)
+{
+    uint32_t cur = os_current ? (uint32_t)(os_current - tasks) : 0u;
+    os_task_t *best = 0;
+    for (uint32_t i = 1; i &lt;= n_tasks; i++) {
+        os_task_t *t = &amp;tasks[(cur + i) % n_tasks];
+        if (t-&gt;state == OS_READY &amp;&amp; (best == 0 || t-&gt;prio &gt; best-&gt;prio)) best = t;
+    }
+    return best;
+}</pre>
+    <ul>
+      <li><b>Fixed-priority preemptive:</b> the highest-priority <code>READY</code> task runs, always.</li>
+      <li><b>Round-robin among equals:</b> the search starts after the current task, and only a strictly higher priority replaces a find, so tasks of equal priority take turns, one tick each.</li>
+      <li><b>Idle</b>, priority 0, is always ready, so there is always an answer.</li>
+    </ul>
+    <div data-viz="policies"></div>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 8</span><h4>pick() walks the task array once, starting after the current task</h4></div>
+      <p class="fig-lede">Scenario 1's five tasks in array order. Idle is created last by <code>os_start()</code>. The circled numbers are the order <code>pick()</code> visits them. Pick a moment.</p>
+      <div data-viz="pick-steps"></div>
+      <p class="step-note" data-role="pick-note" aria-live="polite"></p>
+      <div data-viz="pick"></div>
+      <pre class="calc" data-role="pick-calc"></pre>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>10. Which priority numbering? Kernel vs NVIC (slide 9)</h4>
+    <p>"Priority numbers here run the other way from the NVIC." In this kernel, as in FreeRTOS, a higher number is more urgent. In the NVIC, 0 is most urgent. Two numbering schemes on one chip: always say which one you mean.</p>
+    <div data-viz="prio"></div>
+    <ul>
+      <li>The kernel's numbers are just a <code>uint8_t</code> compared by <code>pick()</code>. <code>__NVIC_PRIO_BITS</code> = 2 limits interrupt priorities, not task priorities: a task at 4 is legal, and it outranks every other task.</li>
+      <li>Thinking "low number = urgent" for a task backfires. Created at 4 to make it the least urgent, the hog becomes the most urgent task and, always <code>READY</code>, starves everything (Figure 1, last case).</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 9</span><h4>One urgency scale, two numberings</h4></div>
+      <p class="fig-lede">Most urgent at the top. Every exception sits above every task: tasks run in Thread mode, so any enabled interrupt preempts any task, whatever its task priority. Inside each group the numbers run in opposite directions.</p>
+      <div data-viz="ladder"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>11. The tick, sleeping, and a hog that does not hurt (slides 10–11)</h4>
+    <pre class="calc">ticks++;
+if (os_current) os_current-&gt;ticks++;           /* who was running: CPU use */
+for each task: if SLEEPING and (int32_t)(ticks - wake) &gt;= 0 -&gt; READY;
+schedule();                                     /* pend PendSV if needed    */</pre>
+    <ul>
+      <li><code>os_delay(ms)</code> marks the task <code>SLEEPING</code>, asks for a switch, and the task is gone until the tick wakes it. The CPU is not waiting for it: someone else runs.</li>
+      <li><code>os_delay_until(&amp;last, period)</code> is lesson 06's <code>at += period</code> as a call. The task wakes on a fixed grid however long its own work took, so the bar's frames stay 60 ms apart while the hog runs flat out.</li>
+      <li><b>Busy-waiting</b> (lesson 05) spins at 100% CPU, and nobody else runs meanwhile. <b>Sleeping</b> costs no CPU, and every other <code>READY</code> task runs.</li>
+      <li>The per-task <code>ticks</code> counter is <b>statistical profiling</b>: each tick charges one millisecond to whoever was running. Over a second, that is each task's CPU share.</li>
+    </ul>
+    <div data-viz="states"></div>
+    <p>Measured, scenario 1 (Figure 1, middle case): with the hog on, it takes every spare cycle (100%), yet bar and button, at higher priority, are serviced on time. Each wakes, preempts the hog within a tick, works a few microseconds and sleeps again, so they show 0% and still work. Press B and the hog's share passes, whole, to idle. About 420 switches a second: the button wakes 200 times a second and the bar about 17, and each visit is two switches, in and out.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>12. Sharing: the mutex (slide 12)</h4>
+    <p>Two tasks that touch the same thing need <b>mutual exclusion</b>, as in lesson 03. Masking interrupts works, but for a long critical section it freezes the whole system. A <b>mutex</b> blocks only the tasks that want this resource.</p>
+    <pre class="calc">void os_mutex_lock(os_mutex_t *m)
+{
+    uint32_t pm = enter();                       /* PRIMASK, as always   */
+    while (m-&gt;owner != 0) {
+        os_current-&gt;state      = OS_BLOCKED;     /* wait - off the CPU   */
+        os_current-&gt;waiting_on = m;
+        schedule(); leave(pm);  pm = enter();    /* switched out here    */
+    }
+    m-&gt;owner = os_current;
+    leave(pm);
+}</pre>
+    <ul>
+      <li>The kernel's own bookkeeping is protected by masking interrupts for a few instructions, lesson 03's tool unchanged. <code>enter()</code> saves PRIMASK and masks; <code>leave(pm)</code> restores the saved value, so critical sections nest and stay correct inside a handler.</li>
+      <li>The switch happens at <code>leave(pm)</code>: PendSV is pending and waits only for the mask to lift.</li>
+      <li>A busy flag instead (<code>while (busy) { }</code>) spins on the CPU. If the waiter has the higher priority, the holder never runs again to clear the flag.</li>
+      <li>"The mutex is a way to make a long critical section cheap for everyone who does not need it."</li>
+    </ul>
+    <div data-viz="mutex"></div>
+  </div>
+
+  <div class="sol-part">
+    <h4>13. Priority inversion and priority inheritance (slides 13–14)</h4>
+    <p>Three tasks. <b>High</b> needs the mutex briefly every 100 ms. <b>Low</b> holds it for 30 ms at a time. <b>Mid</b> never touches it, but computes for 120 ms. High blocked by low is legitimate: low holds what high needs. Then mid preempts low, low cannot finish and release the mutex, and <b>high is now waiting for mid</b>, a task it outranks that shares nothing with it.</p>
+    <div data-viz="inv"></div>
+    <ul>
+      <li>Mars Pathfinder, 1997: the lander kept resetting because a high-priority bus task was starved through exactly this pattern. Engineers reproduced it on the ground and fixed it by turning on one flag, remotely.</li>
+      <li><b>The fix, priority inheritance:</b> while low holds a mutex that high is waiting for, low borrows high's priority. Mid can no longer preempt it. Low finishes, unlocks, drops back to <code>base_prio</code>, and high goes. The kernel raises the holder; it never lowers a third task.</li>
+    </ul>
+    <pre class="calc">#if OS_PRIORITY_INHERIT
+    if (m-&gt;owner-&gt;prio &lt; os_current-&gt;prio) m-&gt;owner-&gt;prio = os_current-&gt;prio;
+#endif
+/* os_mutex_unlock() restores base_prio */</pre>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 10</span><h4>Where high's wait goes, without and with inheritance</h4></div>
+      <p class="fig-lede">Example times: low locks at 0 ms and needs 30 ms inside the mutex, high asks for it at 10 ms, mid wakes at 20 ms and computes for 120 ms. Mid gets its 120 ms either way; inheritance only changes when.</p>
+      <div data-viz="inv-steps"></div>
+      <p class="step-note" data-role="inv-note" aria-live="polite"></p>
+      <div data-viz="invfig"></div>
+      <div class="legend">
+        <span><i class="sw-pri"></i>high, p3</span>
+        <span><i class="sw-sec"></i>mid, p2</span>
+        <span><i class="sw-sec-soft"></i>mid READY, not picked</span>
+        <span><i class="sw-ter"></i>low, p1, holding the mutex</span>
+        <span><i class="sw-seg"></i>high blocked, waiting for low</span>
+        <span><i class="sw-bad"></i>high blocked, waiting for mid</span>
+      </div>
+    </figure>
+    <p>Measured, scenario 2, five seconds each: with <code>OS_PRIORITY_INHERIT</code> 1, high's worst wait is 10 ms and no wait is over 40 ms; with 0, the worst wait is 110 ms and 6 of 49 waits are over 40 ms. Same tasks, same code, one <code>#define</code>. Low's critical section is 30 ms, so any wait over 40 ms is time high spent waiting for mid.</p>
+    <p>Limitation, stated plainly on the slide: this inheritance is right for one mutex at a time. A task holding two, with different waiters, needs a real implementation; FreeRTOS's is several hundred lines.</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>14. Queues: data between tasks, and from interrupts (slide 15)</h4>
+    <p>A mutex protects shared data. Often the better design is not to share it: give it to someone. A queue copies items in and out, and blocks a reader while it is empty and a writer while it is full.</p>
+    <pre class="calc">os_queue_put(&amp;q, &amp;item);            /* task: blocks if full   */
+os_queue_get(&amp;q, &amp;item);            /* task: blocks if empty  */
+os_queue_put_from_isr(&amp;q, &amp;item);   /* ISR: never blocks - returns 0 if full */</pre>
+    <ul>
+      <li>An interrupt handler <b>must never block</b>: there is no task to put to sleep, only a handler on MSP. So the ISR version reports "full" and lets the handler decide. Neither <code>os_queue_put()</code> nor <code>os_mutex_lock()</code> belongs in a handler.</li>
+      <li>It calls <code>schedule()</code>, so a task waiting on the queue can be made ready inside the interrupt. The switch to it happens the moment the last handler returns.</li>
+      <li>This is lesson 08's design: the UART receive interrupt puts bytes in a queue, and a protocol task blocks on it, using no CPU until a byte arrives.</li>
+    </ul>
+    <div data-viz="queue"></div>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 11</span><h4>A UART interrupt feeds a queue, a task blocks on it</h4></div>
+      <p class="fig-lede">A four-slot queue between the USART2 receive handler and a protocol task. Step through one byte, then a full queue, then the tempting wrong fix.</p>
+      <div data-viz="q-steps"></div>
+      <p class="step-note" data-role="q-note" aria-live="polite"></p>
+      <div data-viz="qfig"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>15. Sizing a stack, and an overflow that does not crash (slides 16–17)</h4>
+    <ul>
+      <li><code>os_task_create()</code> fills each stack with <code>0xDEADBEEF</code>. The stack grows down, so the words at the bottom that still say <code>0xDEADBEEF</code> were never reached. Counting them gives the <b>high-water mark</b>, the deepest the stack has ever been.</li>
+      <li>Measured, used / size in words: bar 24 / 128, button 30 / 128, hog 20 / 128, idle 16 / 64, report 115 / 512. <code>printf</code> is the expensive one: 115 words, 460 bytes.</li>
+      <li>"The method matters more than the numbers": run the program, exercise every path, read the high-water mark, add a margin. "A stack sized by guessing is wrong in one of two directions, and only one of them is visible."</li>
+      <li>Too small, measured: the report task gets 96 words and needs 115. <b>Nothing crashed.</b> It wrote 115 − 96 = 19 words below its stack, where the linker had put <code>primes</code>, the hog's counter. The counter then read 536 871 010 = 0x20000062, a stack address.</li>
+      <li>What people expect is a crash at the guilty task. What it usually is on an MCU is <b>another task's data quietly wrong</b>, so the bug looks like it is in the victim (the hog). The high-water mark catches it; bigger cores use an MPU guard region, and FreeRTOS can check on every switch. Nothing on this core checks the stack pointer, and the linker cannot know how deep a stack will go at run time.</li>
+    </ul>
+    <figure class="fig">
+      <div class="fig-head"><span class="fig-no">Figure 12</span><h4>The high-water mark, and what 19 words too many overwrite</h4></div>
+      <p class="fig-lede">The top of the report task's stack as a strip of words, lower addresses on the left. The stack starts at the right end and grows to the left. One cell is one word.</p>
+      <div data-viz="hw-steps"></div>
+      <p class="step-note" data-role="hw-note" aria-live="polite"></p>
+      <div data-viz="hw"></div>
+    </figure>
+  </div>
+
+  <div class="sol-part">
+    <h4>16. A HardFault that says where (slide 18)</h4>
+    <ul>
+      <li>On a fault the hardware stacks the usual eight words and enters <code>HardFault_Handler</code>, on PSP's stack if a task was running. <b>Bit 2 of <code>lr</code></b> (EXC_RETURN) says which stack: 1 = PSP (0xFFFFFFFD, a task faulted), 0 = MSP (0xFFFFFFF1, a handler faulted). See Figure 2.</li>
+      <li><b>Word 6 of the frame is the <code>pc</code> that faulted</b>, word 5 is <code>lr</code>, word 7 is <code>xPSR</code>. <code>arm-none-eabi-addr2line -e Main.elf 0x08000422</code> answers with the exact line of <code>Main.c</code>. The instruction there is <code>udf #255</code>, undefined on purpose (<code>__builtin_trap()</code> in the hog).</li>
+      <li>The M0+ has one fault handler and no fault-status registers, so you learn where and not why. On the Cortex-M4 in lesson 11, <code>CFSR</code> says why as well.</li>
+    </ul>
+    <pre class="calc">    movs r0, #4               @ HardFault_Handler, naked
+    mov  r1, lr
+    tst  r0, r1               @ EXC_RETURN bit 2: which stack?
+    beq  1f
+    mrs  r0, psp              @ a task faulted
+    b    2f
+1:  mrs  r0, msp              @ a handler faulted
+2:  ldr  r1, =fault_report    @ r0 = the frame = first argument
+    bx   r1</pre>
+    <pre class="calc">*** HardFault in task 'hog'
+    pc   = 0x08000422   &lt;- the instruction that faulted   (frame word 6)
+    lr   = 0x08000415   &lt;- where it would have returned to (frame word 5)
+    xPSR = 0x61000000 = 0110 0001 0000 ... 0000
+           bit 30 Z = 1, bit 29 C = 1, bit 24 T = 1, ISR (5:0) = 0: Thread mode, a task</pre>
+  </div>
+
+  <div class="sol-part">
+    <h4>17. What you built, what a real RTOS adds, and how it was measured (slides 19–20)</h4>
+    <div data-viz="adds"></div>
+    <ul>
+      <li>"The core is the same, instruction for instruction." <code>xTaskCreate</code>, <code>vTaskDelayUntil</code> and <code>xQueueSendFromISR</code> are this kernel's <code>os_task_create</code>, <code>os_delay_until</code> and <code>os_queue_put_from_isr</code>. From here on, lessons are written as tasks.</li>
+      <li>The measurements ran in Renode 1.17.0 on its STM32F072 platform, a Cortex-M0 with the same ARMv6-M architecture, with <code>os.c</code> and <code>Main.c</code> unchanged. A test-only <code>startup.c</code> skipped the C0's clock waits, and the C0's GPIO was mapped as plain memory for button presses.</li>
+      <li>Renode does not fault on an unaligned word access; ARMv6-M silicon does. So the lab faults with <code>__builtin_trap()</code>, which faults everywhere.</li>
+    </ul>
+  </div>
+
+  <div class="sol-part">
+    <h4>General idea vs this chip</h4>
+    <div data-viz="contrast"></div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam focus</span>
+    <ul>
+      <li>Cooperative: a job stops only when it returns, so one CPU hog freezes everything. Preemptive: the kernel's tick takes the CPU away. A hog at the highest priority still starves everyone, because the highest-priority <code>READY</code> task always runs.</li>
+      <li>Priority numbering: kernel and FreeRTOS, higher number = more urgent (idle 0, button 3). NVIC, 0 = most urgent; PendSV and SysTick sit at 3, the least urgent. Any interrupt preempts any task.</li>
+      <li>Switched-out stack from <code>tcb-&gt;sp</code> up: r4–r7 (+0), r8–r11 (+16), r0–r3 (+32), r12, lr, pc, xPSR (+48), 64 bytes. pc at +56: <code>tcb-&gt;sp</code> = 0x20000440 puts it at 0x20000478. PendSV saves r4–r11; the hardware saves the rest. After the return, PSP = <code>tcb-&gt;sp</code> + 64.</li>
+      <li>Pend PendSV: <code>SCB-&gt;ICSR = 0x10000000</code> with <code>=</code>, never <code>|=</code>; cancel with 0x08000000. Priority 3 = byte 0xC0, so SHPR3 = 0xC0C00000.</li>
+      <li>Switch in PendSV, not in <code>SysTick_Handler</code>: at priority 3 it runs only when no handler is active. Deciding happens anywhere, even in an ISR; switching only in PendSV.</li>
+      <li>EXC_RETURN 0xFFFFFFFD = Thread mode, PSP (every switch). Bit 2 = 1 means PSP, so a HardFault with <code>lr</code> = 0xFFFFFFFD came from a task, and 0xFFFFFFF1 from a handler; frame word 6 is the faulting pc.</li>
+      <li>Forged frame: xPSR 0x01000000 (T bit), pc = <code>fn &amp; ~1</code>, lr = <code>task_exit</code>, r0 = <code>arg</code>, zeros elsewhere. xPSR = 0 HardFaults at the task's first instruction.</li>
+      <li>r8–r11 go through r4–r7 because Thumb-1 <code>stm</code>/<code>ldm</code> list only r0–r7; on restore r8–r11 come first.</li>
+      <li><code>pick()</code>: with hog (p1) current and report (p1) ready, report runs next (round-robin); if bar (p2) wakes, bar preempts.</li>
+      <li>An ISR cannot lock a mutex or call <code>os_queue_put()</code>: both may block. It uses <code>os_queue_put_from_isr()</code>, which returns 0 when full, and the handler drops and counts the item.</li>
+      <li>Priority inversion: high waits for mid through low's mutex. Inheritance lends high's priority to low until it unlocks. A stack overflow usually corrupts another task's data instead of crashing; the <code>0xDEADBEEF</code> high-water mark catches it.</li>
+    </ul>
+    <p class="source">Slides: L07 slides 1–20 and the two pin-map slides · Notes: 08_Week6_L07_RTOS.md · Guide: §3 Lesson 07</p>
+  </div>
+
+  <div class="sol-part">
+    <h4>Sample questions on this lesson</h4>
+    <div data-role="related"></div>
+  </div>
+</article>

@@ -1,0 +1,133 @@
+<article class="q" id="s2-mc5" data-part="mc" data-num="5" data-topic="Flags" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 5 · L01, Condition codes vs compare-and-branch</p>
+    <h3 class="q-title">With signed <code>int</code>s, <code>if (a &lt; b) goto L;</code> compiles to one instruction on RISC-V, <code>blt a0, a1, L</code>, but to two on the Cortex-M0+, <code>cmp r0, r1</code> and then <code>blt L</code>. What is the reason?</h3>
+  </div>
+  <ol class="options">
+    <li class="right"><span class="key">A</span><span>The Cortex-M0+ is a condition-code machine: <code>cmp</code> subtracts, throws the result away and sets N Z C V in APSR, and the next branch reads those flags; RISC-V has no flags register and compares inside the branch</span><span class="why">Correct. Compare sets the flags, a later branch reads them.</span></li>
+    <li><span class="key">B</span><span>The Cortex-M0+ is a register–memory machine, so <code>cmp</code> must first fetch <code>a</code> and <code>b</code> from memory</span><span class="why">No. Both machines are load–store, and <code>cmp r0, r1</code> compares two registers.</span></li>
+    <li><span class="key">C</span><span><code>cmp</code> writes <code>a − b</code> into <code>r0</code>, and <code>blt</code> then tests whether <code>r0</code> is negative</span><span class="why">No. <code>cmp</code> discards the difference. <code>r0</code> still holds <code>a</code>; only the flags change.</span></li>
+    <li><span class="key">D</span><span>ARM flags can feed only one branch, so a <code>cmp</code> must come before every conditional branch</span><span class="why">No. It is the other way round: one <code>cmp</code> can feed several branches. That density is what flags buy.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: A.</strong> This chip remembers a comparison in four flag bits at the top of APSR. <code>cmp</code> is a subtraction that throws the answer away and keeps the flags, and a later branch reads them. RISC-V is a compare-and-branch machine: it has no flags register, so <code>blt a0, a1, L</code> compares and branches in one instruction.</p>
+    <p>Flags buy density, because one <code>cmp</code> can feed several branches. They cost a hidden link between two instructions that everything in between must preserve, which is why newer designs such as RISC-V dropped them.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>One cmp sets the flags, and two branches read them</h4></div>
+    <p class="fig-lede">A three-way test, <code>a &lt; b</code>, then <code>a == b</code>, on both machines. RISC-V compares inside each branch. The Cortex-M0+ compares once, and both branches read N Z C V from APSR. Pick the values.</p>
+    <div data-viz="flags-steps"></div>
+    <p class="step-note" data-role="flags-note" aria-live="polite"></p>
+    <div data-viz="flags"></div>
+    <pre class="calc" data-role="flags-calc"></pre>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>This chip is a condition-code machine: <code>cmp</code> sets N Z C V in APSR and the next branch reads them. RISC-V and MIPS compare and branch in one instruction and have no flags. Flags buy density: one <code>cmp</code> feeds several branches.</p>
+    <p class="source">Source: L01 slide 7 · Guide §2 key contrasts · Notes: L01 › 7. Flags and conditional branches</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc6" data-part="mc" data-num="6" data-topic="Saving LR" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 6 · L01, Link register</p>
+    <h3 class="q-title"><code>main</code> calls this hand-written function with <code>bl log_value</code>. <code>uart_send</code> is a leaf function that returns with <code>bx lr</code>. What happens when <code>log_value</code> runs?</h3>
+    <pre class="calc">08000300 &lt;log_value&gt;:
+ 8000300:  movs  r0, #65
+ 8000302:  bl    8000400 &lt;uart_send&gt;
+ 8000306:  bx    lr</pre>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span>It returns to <code>main</code> normally, because <code>bl log_value</code> pushed <code>main</code>'s return address onto the stack</span><span class="why">No. That is a stack-based machine such as the AVR. Here <code>bl</code> writes the return address into <code>LR</code> only.</span></li>
+    <li class="right"><span class="key">B</span><span>It never returns: <code>bl uart_send</code> overwrote <code>LR</code> with <code>0x08000307</code>, so <code>bx lr</code> keeps branching to itself</span><span class="why">Correct. <code>LR</code> holds one return address, and the inner <code>bl</code> replaced it.</span></li>
+    <li><span class="key">C</span><span>It returns to <code>main</code> normally, because <code>uart_send</code> restores <code>main</code>'s return address in <code>LR</code> before it returns</span><span class="why">No. <code>uart_send</code> never saw <code>main</code>'s address. Nothing writes it back.</span></li>
+    <li><span class="key">D</span><span>It HardFaults at <code>bx lr</code>, because <code>LR</code> holds an even address</span><span class="why">No. <code>bl</code> always sets bit 0, so <code>LR</code> is <code>0x08000307</code>, odd.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: B.</strong> This chip keeps a return address in one link register. <code>bl log_value</code> put the way back to <code>main</code> in <code>LR</code>. <code>bl uart_send</code> at <code>0x08000302</code> is 4 bytes long, so it replaced <code>LR</code> with <code>0x08000306 | 1 = 0x08000307</code>.</p>
+    <p>After <code>uart_send</code> returns, <code>bx lr</code> branches to <code>0x08000306</code>, which is the <code>bx lr</code> itself. The board hangs with no error. A function that calls another must save <code>LR</code> first with <code>push {lr}</code> and return with <code>pop {pc}</code>.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>The second bl overwrites LR, and bx lr lands on itself</h4></div>
+    <p class="fig-lede">Three functions in flash and the one <code>LR</code> they share. Step through the calls and watch <code>LR</code>.</p>
+    <div data-viz="calls-steps"></div>
+    <p class="step-note" data-role="calls-note" aria-live="polite"></p>
+    <div data-viz="calls"></div>
+    <p class="fig-lede">The fix is what gcc puts in every non-leaf prologue. The saved copy on the stack survives the inner <code>bl</code>, and popping it into <code>PC</code> is the return.</p>
+    <pre class="calc">08000300 &lt;log_value&gt;:
+  push  {lr}          ; SP −= 4, stack word = 0x08000205 (back to main)
+  movs  r0, #65
+  bl    uart_send     ; LR = 0x08000309 now, but the stack copy is safe
+  pop   {pc}          ; PC = 0x08000205 &amp; ~1 = 0x08000204: back in main</pre>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>This chip is a link-register machine: <code>bl</code> writes the return address into <code>LR</code>, not to the stack. <code>LR</code> holds only one, so a function that calls another must <code>push {lr}</code> first; that is what the push in every non-leaf prologue is for.</p>
+    <p class="source">Source: L01 slides 8, 20 · Guide §2 key contrasts · Notes: L01 › 8. Branches, calls and returns</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc7" data-part="mc" data-num="7" data-topic="Read-modify-write" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 7 · L01, Read-modify-write on a load–store machine</p>
+    <h3 class="q-title"><code>r1</code> holds the GPIOA base address, <code>ODR</code> is at offset <code>0x14</code>, and <code>r0</code> holds <code>0x20</code>. Which instruction sequence does the Cortex-M0+ execute for <code>GPIOA-&gt;ODR |= (1u &lt;&lt; 5);</code>?</h3>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span><code>orrs [r1, #0x14], r0</code></span><span class="why">No. An ALU operand in memory is the register–memory model. The M0+ is load–store and has no such instruction, nor an AVR-style <code>sbi</code>.</span></li>
+    <li><span class="key">B</span><span><code>ldr r2, [r1, #0x14]</code>, then <code>bics r2, r0</code>, then <code>str r2, [r1, #0x14]</code></span><span class="why">No. <code>bics</code> is <code>&amp;= ~</code>: this clears PA5.</span></li>
+    <li><span class="key">C</span><span><code>str r0, [r1, #0x14]</code></span><span class="why">No. That is <code>ODR = 0x20</code>: it switches off every other pin of port A.</span></li>
+    <li class="right"><span class="key">D</span><span><code>ldr r2, [r1, #0x14]</code>, then <code>orrs r2, r0</code>, then <code>str r2, [r1, #0x14]</code></span><span class="why">Correct. Read, modify, write: three instructions, two bus accesses.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: D.</strong> The M0+ is load–store: the ALU takes registers only. So <code>|=</code> on a register in memory is a read (<code>ldr</code>), a modify (<code>orrs</code>, the <code>|</code>) and a write (<code>str</code>). That is three instructions, two bus accesses, and a gap between the read and the write that belongs to whatever runs next.</p>
+    <p>The AVR could set a bit with one <code>sbi</code>. The M0+ has no such instruction; the convenience comes back as hardware, the GPIO <code>BSRR</code> register of lesson 05.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>ODR |= 1 &lt;&lt; 5 as a load, an OR in a register, and a store</h4></div>
+    <p class="fig-lede">The low 16 bits of <code>ODR</code>, starting with PA0 and PA8 high (<code>0x0101</code>). Bit 5 is outlined. Step through the three instructions of option D.</p>
+    <div data-viz="rmw-steps"></div>
+    <p class="step-note" data-role="rmw-note" aria-live="polite"></p>
+    <div data-viz="rmw"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>1 bit</span>
+      <span><i class="sw-ok"></i>bit set by orrs</span>
+      <span><i class="sw-seg"></i>0 bit</span>
+    </div>
+    <p class="fig-lede">What each option leaves in <code>ODR</code>, starting from <code>0x0101</code>.</p>
+    <div data-viz="opts"></div>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Load–store: setting one bit in a peripheral register is never one instruction here. It is <code>ldr</code>, <code>orrs</code> (or <code>bics</code> to clear), <code>str</code>: three instructions, two bus accesses, and a gap. The M0+ has no <code>sbi</code>.</p>
+    <p class="source">Source: L01 slides 4, 5, 11 · Notes: L01 › 4. Load and store: the two machine models</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc8" data-part="mc" data-num="8" data-topic="Offset range" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 8 · L01, Immediate offset range</p>
+    <h3 class="q-title"><code>r4</code> holds the base address of a peripheral with 32-bit registers. On the Cortex-M0+, which of these loads cannot be encoded as one 16-bit <code>ldr</code>, so the compiler must first add to the base (a Cortex-M4 does it in one instruction)?</h3>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span><code>ldr r0, [r4, #0x1C]</code></span><span class="why">No. 28 bytes = 7 words, fits the 5-bit field. This is <code>USART2-&gt;ISR</code> on slide 10.</span></li>
+    <li><span class="key">B</span><span><code>ldr r0, [r4, #0x7C]</code></span><span class="why">No. 124 bytes = 31 words, the largest value that fits in 5 bits.</span></li>
+    <li class="right"><span class="key">C</span><span><code>ldr r0, [r4, #0x80]</code></span><span class="why">Correct. 128 bytes = 32 words, which needs 6 bits.</span></li>
+    <li><span class="key">D</span><span><code>ldr r0, [r4, #0x40]</code></span><span class="why">No. 64 bytes = 16 words, fits.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: C.</strong> The 16-bit <code>ldr Rt, [Rn, #imm]</code> keeps its offset in a 5-bit field counted in words. It reaches 0 to 31 × 4 = 124 bytes. <code>0x80</code> = 128 bytes = 32 words, one past the limit, so the compiler first moves the base with an add.</p>
+    <p>The other three fit: <code>0x1C</code> = 28 (field 7), <code>0x7C</code> = 124 (field 31) and <code>0x40</code> = 64 (field 16). A Cortex-M3 or M4 has a 32-bit <code>ldr</code> that reaches ±4095 bytes.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Five bits of word offset reach 124 bytes, and 0x80 is one word too far</h4></div>
+    <p class="fig-lede">The 16-bit encoding <code>01101 imm5 Rn Rt</code>, with <code>Rn = r4</code> and <code>Rt = r0</code>. Pick an option to fill in its offset field. The line below shows every offset a 16-bit <code>ldr</code> can reach.</p>
+    <div data-viz="enc-steps"></div>
+    <p class="step-note" data-role="enc-note" aria-live="polite"></p>
+    <div data-viz="enc"></div>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>16-bit <code>ldr</code>: 5-bit offset × 4, so 0 to 124 bytes, positive only (<code>ldrh</code> 0–62, <code>ldrb</code> 0–31, <code>[sp, #n]</code> 0–1020). A field beyond that costs an extra add. Cortex-M3/M4 reach ±4095.</p>
+    <p class="source">Source: L01 slides 10, 16 · Notes: L01 › 10. Offsets are small, and you can see when they run out</p>
+  </div>
+</article>

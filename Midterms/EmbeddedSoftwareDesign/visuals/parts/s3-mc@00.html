@@ -1,0 +1,275 @@
+<article class="q" id="s3-mc1" data-part="mc" data-num="1" data-topic="Network byte order" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 1 · L00, Little-endian load of network bytes</p>
+    <h3 class="q-title">A sensor sends a 32-bit count most significant byte first, in network byte order: <code>00 01 86 A0</code>, which is <code>0x000186A0</code> = 100000. The bytes are stored in arrival order in a 4-byte-aligned buffer <code>buf</code>, and the STM32C031 reads them with <code>uint32_t n = *(uint32_t *)buf;</code>. What is <code>n</code>?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>0x000186A0</code></span>
+      <span class="why">No. That needs a big-endian machine or a byte swap such as ntohl().</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Nothing: the load raises a HardFault</span>
+      <span class="why">No. buf is 4-byte aligned, so the word load is legal on the M0+.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0x0A681000</code></span>
+      <span class="why">No. That reverses the hex digits. Byte order moves whole bytes.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>0xA0860100</code></span>
+      <span class="why">Correct. buf[0] = 0x00 lands in bits 7:0 and buf[3] = 0xA0 in bits 31:24.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> The load is aligned, so it works. Every STM32 is little-endian, so the byte at the lowest address becomes the least significant. <code>buf[0] = 0x00</code> lands in bits 7:0 and <code>buf[3] = 0xA0</code> in bits 31:24, which gives <code>0xA0860100</code>, about 2.69 billion instead of 100000.</p>
+    <p>A needs a big-endian machine or a byte swap, which is what <code>ntohl()</code> does. C reverses the hex digits instead of the bytes. "The other convention reaches you only when bytes arrive from somewhere else", and a sensor on a wire is exactly that case.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Bytes that arrived big-endian, loaded little-endian</h4>
+    </div>
+    <p class="fig-lede">Top: <code>buf</code> in memory, in arrival order, lowest address on the left. Bottom: <code>n</code> as the CPU holds it, bit 31 on the left. Step through the four bytes, then see what a byte swap gives.</p>
+    <div data-viz="nb-steps"></div>
+    <p class="step-note" data-role="nb-note" aria-live="polite"></p>
+    <div data-viz="nb"></div>
+    <div data-viz="nb-table"></div>
+  </figure>
+
+  <div class="q-head">
+    <h4>Why the other options are wrong</h4>
+    <div class="why-grid">
+      <div class="mini">
+        <span class="label">Option A</span>
+        <h5>The sender's value, not the load's</h5>
+        <p>0x000186A0 is what the sensor meant. Getting it back takes a byte swap, which is what <code>ntohl()</code> is for. A plain load on a little-endian chip does no swap.</p>
+        <div class="chips"><span>A0860100</span><span class="arrow">ntohl()</span><span class="out">000186A0</span></div>
+      </div>
+      <div class="mini">
+        <span class="label">Option B</span>
+        <h5>Aligned, so no fault</h5>
+        <p>The M0+ faults only when a word load's address is not a multiple of 4. <code>buf</code> is 4-byte aligned, so this load is legal.</p>
+        <div class="chips"><span>buf % 4 = 0</span><span class="arrow">→</span><span class="out">load works</span></div>
+      </div>
+      <div class="mini">
+        <span class="label">Option C</span>
+        <h5>Digits reversed, not bytes</h5>
+        <p>Reading the hex string backwards splits every byte. The two digits of a byte always travel together.</p>
+        <div class="chips"><span>000186A0</span><span class="arrow">reversed</span><span class="out">0A681000</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Every STM32 is little-endian, so the byte at the lowest address becomes bits 7:0. Bytes that arrive in network byte order (big-endian) read back reversed, so <code>00 01 86 A0</code> loads as <code>0xA0860100</code> until a byte swap such as <code>ntohl()</code> fixes it.</p>
+    <p class="source">Source: L00 slide 10 · Notes: L00 › 11. The data model: width, alignment, byte order</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc2" data-part="mc" data-num="2" data-topic="Stray pointer" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 2 · L00, Privilege without virtual memory</p>
+    <h3 class="q-title">On a desktop, a store through a corrupted pointer usually ends in a segmentation fault. On the STM32C031, the program drives PB3 as an output that enables a motor driver, and a corrupted pointer <code>p</code> now holds <code>0x50000414</code>, the address of GPIOB's <code>ODR</code>. The code runs <code>*p = 0x08;</code>. The MPU is not configured. What happens?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>A segmentation fault: the MMU traps the store, because <code>0x50000414</code> is outside the program's virtual address space</span>
+      <span class="why">No. This chip has no MMU, so nothing translates the address or traps the store.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Nothing: peripherals sit in a separate I/O space, so an ordinary store cannot reach them</span>
+      <span class="why">No. That is port-mapped I/O. Here peripherals sit at ordinary addresses.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>A HardFault: the MPU gives each program a private map of memory, and <code>0x50000414</code> is not in it</span>
+      <span class="why">No. An MPU only sets permission rules over real addresses, and this one is not configured.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span>The store goes through and PB3 goes high: there is no MMU and one real address space, so the pointer reaches a peripheral</span>
+      <span class="why">Correct. The store is an ordinary str to GPIOB's ODR, and 0x08 is bit 3.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> The hardware that turns a bad pointer into a segmentation fault is the MMU, which gives each desktop program a private virtual map. This chip has the two privilege levels "and none of the virtual memory". There is one real address space, shared by everything, with peripherals at ordinary addresses.</p>
+    <p>So the store is an ordinary <code>str</code> to GPIOB's <code>ODR</code>. <code>0x08</code> is bit 3, PB3 goes high and the motor turns, with no error. An MPU only sets permission rules over the real addresses, and only once software programs it. It never builds a private map.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The same store on a desktop, on this chip, and under an MPU rule</h4>
+    </div>
+    <p class="fig-lede">A desktop translates every address through the MMU, and an unmapped one faults. This chip sends the number straight into its one real map. Step through the three cases.</p>
+    <div data-viz="mmu-steps"></div>
+    <p class="step-note" data-role="mmu-note" aria-live="polite"></p>
+    <div data-viz="mmu"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>0x50000414 is GPIOB's ODR, and 0x08 sets bit 3</h4>
+    </div>
+    <p class="fig-lede">The address splits into the IOPORT base, the GPIOB block and the ODR offset. The value replaces all sixteen output bits at once, so PB3 goes high and every other port B output goes low.</p>
+    <div data-viz="odr"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>A desktop stops a bad pointer with the MMU (segmentation fault). This chip has two privilege levels and no virtual memory. It has one real address space and at most an MPU of permission rules, so a stray pointer quietly reaches a peripheral, with no error.</p>
+    <p class="source">Source: L00 slide 8, slide 5, slide 17 item 14 · Notes: L00 › 9. Modes and stacks: Thread, Handler, MSP, PSP</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc3" data-part="mc" data-num="3" data-topic="xPSR" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 3 · L00, xPSR and the exception number</p>
+    <h3 class="q-title">A breakpoint stops the STM32C031 inside an interrupt handler, and the debugger shows <code>xPSR = 0x01000020</code>. Which IRQ is being serviced, and which vector-table slot holds its handler's address?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>IRQ 4, slot 20</span>
+      <span class="why">No. That reads 0x20 as decimal 20.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>IRQ 32, slot 48</span>
+      <span class="why">No. 32 is already the slot. Adding 16 again counts ARM's slots twice.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>IRQ 16, slot 32</span>
+      <span class="why">Correct. ISR = 0x20 = 32 is the slot, and 32 − 16 = 16 is the IRQ, TIM3.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>IRQ 20, slot 36</span>
+      <span class="why">No. That reads 0x20 as decimal 20 and treats it as the IRQ.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> The bottom of <code>xPSR</code>, the IPSR view in bits 5:0, holds the exception number, which is the slot the hardware took. <code>0x20</code> is 32. Bit 24 is the Thumb bit T, always 1, and the flags N Z C V are all 0.</p>
+    <p>The first 16 slots are ARM's, so the vendor IRQ is 32 − 16 = 16, which is TIM3. Its handler's address sits at <code>0x08000000 + 4 × 32 = 0x08000080</code>. A and D read <code>0x20</code> as decimal 20, and B adds the 16 a second time.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>0x01000020 bit by bit, one word read three ways</h4>
+    </div>
+    <p class="fig-lede">All 32 bits of <code>xPSR</code>, bit 31 on the left, with the hex digit each group of four makes. Pick a view to see the bits it shows.</p>
+    <div data-viz="psr-steps"></div>
+    <p class="step-note" data-role="psr-note" aria-live="polite"></p>
+    <div data-viz="psr"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Exception 32 is IRQ 16, and its vector is at 0x08000080</h4>
+    </div>
+    <p class="fig-lede">The first 49 slots of the vector table. Slots 0 to 15 are ARM's, and vendor IRQs start at slot 16. Pick an option to see where its reading lands.</p>
+    <div data-viz="slot-steps"></div>
+    <p class="step-note" data-role="slot-note" aria-live="polite"></p>
+    <div data-viz="slot"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>xPSR</code> is one word read three ways: flags N Z C V in bits 31:28, the Thumb bit in bit 24, and the IPSR exception number in bits 5:0. Inside a handler that number is the slot. IRQ = slot − 16, and the vector sits at <code>0x08000000 + 4 × slot</code>.</p>
+    <p class="source">Source: L00 slide 9, slide 3b · Notes: L00 › 3. Every core register and the special registers</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc4" data-part="mc" data-num="4" data-topic="volatile" data-ref="topic0">
+  <div class="q-head">
+    <p class="eyebrow">Question 4 · L00, A register is not a variable</p>
+    <h3 class="q-title">GPIOA's output data register <code>ODR</code> is at <code>0x50000014</code>, and PA5 is an output. The two lines below must drive PA5 high and then low. Which definition of <code>GPIOA_ODR</code> guarantees that both stores reach the pin?</h3>
+    <pre class="calc">GPIOA_ODR = 1u &lt;&lt; 5;   /* PA5 high */
+GPIOA_ODR = 0;         /* PA5 low  */</pre>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span><code>#define GPIOA_ODR (*(volatile uint32_t *)0x50000014u)</code></span>
+      <span class="why">Correct. An object at 0x50000014 that the compiler must access exactly as written.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>#define GPIOA_ODR (*(uint32_t *)0x50000014u)</code></span>
+      <span class="why">No. Right address, but the first store is dead to the compiler and may be deleted.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>uint32_t GPIOA_ODR = 0x50000014u;</code></span>
+      <span class="why">No. That is a RAM variable that holds the number 0x50000014. The pin never moves.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>volatile uint32_t GPIOA_ODR = 0x50000014u;</code></span>
+      <span class="why">No. volatile makes both stores happen, and they still go to RAM.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> A register is an address. A turns that address into an object the compiler must access "exactly as written", so both stores go to <code>0x50000014</code> in order and PA5 goes high, then low.</p>
+    <p>B reaches the right address, but without <code>volatile</code> the compiler may cache, reorder or delete accesses. The second store overwrites the first, so the first is dead and may vanish. C and D declare variables in RAM that merely hold the number <code>0x50000014</code>. Their stores change RAM, and the pin never moves.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Where each definition sends the two stores, and what PA5 does</h4>
+    </div>
+    <p class="fig-lede">Left: the stores the compiler may emit for the two lines. Right: where they land, a variable in SRAM or the ODR register. Bottom: PA5 over time, not to scale. Pick a definition.</p>
+    <div data-viz="vol-steps"></div>
+    <p class="step-note" data-role="vol-note" aria-live="polite"></p>
+    <div data-viz="vol"></div>
+  </figure>
+
+  <div class="q-head">
+    <h4>Why the other options are wrong</h4>
+    <div class="why-grid">
+      <div class="mini">
+        <span class="label">Option B</span>
+        <h5>Right address, no promise</h5>
+        <p>Without <code>volatile</code> the compiler treats ODR like memory. Nothing reads the value 0x20 before it is overwritten, so the first store may be removed.</p>
+      </div>
+      <div class="mini">
+        <span class="label">Option C</span>
+        <h5>A number in a variable</h5>
+        <p><code>0x50000014</code> becomes the initial value of a RAM variable. The two lines overwrite that variable and never touch the register.</p>
+      </div>
+      <div class="mini">
+        <span class="label">Option D</span>
+        <h5>volatile on the wrong object</h5>
+        <p><code>volatile</code> makes every access to the variable happen. The accesses still go to the variable's own RAM address.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>A register is an address, reached through a <code>volatile</code> pointer such as <code>(*(volatile uint32_t *)0x50000014u)</code>. Without <code>volatile</code> the compiler may cache, reorder or delete accesses; for a register, every access must happen exactly as written.</p>
+    <p class="source">Source: L00 slide 5, slide 4, slide 17 item 4 · Notes: L00 › 6. A register is not a variable</p>
+  </div>
+</article>

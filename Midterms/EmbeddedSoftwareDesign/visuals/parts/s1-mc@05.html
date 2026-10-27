@@ -1,0 +1,316 @@
+<article class="q" id="s1-mc18" data-part="mc" data-num="18" data-topic="Clear-then-set" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 18 · L05, Clear-then-set on MODER</p>
+    <h3 class="q-title"><code>GPIOA-&gt;MODER</code> holds its reset value <code>0xEBFFFFFF</code>. The program runs the line below to make PA6 an output. What does <code>GPIOA-&gt;MODER</code> read afterwards?</h3>
+    <pre class="calc">GPIOA-&gt;MODER = (GPIOA-&gt;MODER &amp; ~(3u &lt;&lt; 12)) | (1u &lt;&lt; 12);</pre>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span><code>0xEBFFDFFF</code></span>
+      <span class="why">Correct. Bits 13:12 go from 11 to 01, and no other bit changes.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>0x00001000</code></span>
+      <span class="why">No. That is <code>MODER = 1u &lt;&lt; 12</code>, which also makes the other 15 pins inputs, the debug pins included.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0xEBFFFFFF</code></span>
+      <span class="why">No. That is what <code>MODER |= 1u &lt;&lt; 12</code> alone leaves. OR turns 11 into 11, still analog.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>0xEBFFEFFF</code></span>
+      <span class="why">No. Its bits 13:12 read 10, alternate function.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> PA6's field is bits 13:12 (2n = 12). The mask <code>3u &lt;&lt; 12</code> = <code>0x00003000</code> clears it, giving <code>0xEBFFCFFF</code>, and OR-ing <code>1u &lt;&lt; 12</code> = <code>0x00001000</code> writes <code>01</code> there.</p>
+    <p>The hex digit that holds pins 7 and 6 goes from F (<code>11 11</code>) to D (<code>11 01</code>), so the result is <code>0xEBFFDFFF</code>. A plain <code>=</code> (B) rewrites all 16 pins, an OR alone (C) cannot clear the <code>11</code>, and D writes <code>10</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Clear-then-set changes only PA6's two bits</h4>
+    </div>
+    <p class="fig-lede">MODER bit by bit, bit 31 on the left, cut into 2-bit fields with the pin number above each. The small hex digit over each group of four bits is the value's digit. PA6's field is shaded. Step through the five values the line computes.</p>
+    <div data-viz="cts-steps"></div>
+    <p class="step-note" data-role="cts-note" aria-live="polite"></p>
+    <div data-viz="cts"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>What each option leaves in the 16 pin fields</h4>
+    </div>
+    <p class="fig-lede">Each value decoded two bits at a time, as on slide 16: in = 00, out = 01, AF = 10, an = 11 (analog). Red cells changed and should not have, or PA6 did not become an output.</p>
+    <div data-viz="decode"></div>
+    <div class="legend">
+      <span><i class="sw-ok"></i>PA6 now an output</span>
+      <span><i class="sw-bad"></i>wrong field</span>
+      <span><i class="sw-seg"></i>as at reset</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Pin n's <code>MODER</code> field is bits 2n+1 : 2n. Clear it with <code>&amp; ~(3u &lt;&lt; 2n)</code>, then set it with <code>| (mode &lt;&lt; 2n)</code>, and only that field changes. <code>|=</code> alone cannot clear an <code>11</code>, and a plain <code>=</code> rewrites every pin.</p>
+    <p class="source">Source: L05 slides 4, 5, 15 · Notes: L05 › 9. The helpers pin mode and pin pull, traced</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc19" data-part="mc" data-num="19" data-topic="BSRR value" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 19 · L05, One BSRR write</p>
+    <h3 class="q-title">One write must turn PB2 on (high) and PB7 off (low) and leave every other pin of port B as it is. Which line does that?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>GPIOB-&gt;BSRR = 0x00000084;</code></span>
+      <span class="why">No. Bits 7 and 2 are both in the set half, so PB7 goes high as well.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span><code>GPIOB-&gt;BSRR = 0x00800004;</code></span>
+      <span class="why">Correct. Bit 2 sets PB2, bit 23 = 7 + 16 resets PB7, and every 0 leaves its pin alone.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>GPIOB-&gt;BSRR = 0x00040080;</code></span>
+      <span class="why">No. The halves are swapped, so it resets PB2 and sets PB7.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>GPIOB-&gt;ODR = 0x00000004;</code></span>
+      <span class="why">No. It is one store and gets PB2 and PB7 right, and it also forces every other port-B pin low.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> In <code>BSRR</code>, bit n sets pin n and bit n + 16 resets it. PB2 needs bit 2 (<code>0x00000004</code>) and PB7 needs bit 23 (<code>0x00800000</code>), so the value is <code>0x00800004</code>.</p>
+    <p>A 0 bit in either half means leave this pin alone, so one store sets some pins, resets others and ignores the rest. Writing <code>ODR</code> (D) gives every pin a level, so the pins that were on go off.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>0x00800004 is two bits, one in each half</h4>
+    </div>
+    <p class="fig-lede">BSRR bit by bit. Bits 15:0 set pins 15 to 0, bits 31:16 reset them; the pin number of each bit is printed above it. Step through the two bits and their OR.</p>
+    <div data-viz="bsrr-steps"></div>
+    <p class="step-note" data-role="bsrr-note" aria-live="polite"></p>
+    <div data-viz="bsrr"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>PB7 to PB0 after each option</h4>
+    </div>
+    <p class="fig-lede">The same port before the write, with PB7, PB5, PB1 and PB0 on (<code>ODR</code> low byte <code>0xA3</code>). Each row shows the pins after one option. The target is PB2 on, PB7 off, the rest unchanged.</p>
+    <div data-viz="effect"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>pin high</span>
+      <span><i class="sw-seg"></i>pin low</span>
+      <span><i class="sw-ok"></i>changed as asked</span>
+      <span><i class="sw-bad"></i>wrong level</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>BSRR</code>: a 1 at bit n sets pin n high, a 1 at bit n + 16 sets it low, a 0 changes nothing. PB2 high and PB7 low is <code>(1u &lt;&lt; 2) | (1u &lt;&lt; 23)</code> = <code>0x00800004</code>.</p>
+    <p class="source">Source: L05 slides 4, 12 · Notes: L05 › 7. BSRR, the safe one</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc20" data-part="mc" data-num="20" data-topic="Vector address" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 20 · L05, IRQ to vector address</p>
+    <h3 class="q-title">A button on PB3 is to raise an interrupt through EXTI. On this chip EXTI lines 0–1 share IRQ 5, lines 2–3 share IRQ 6, and lines 4–15 share IRQ 7. Which IRQ fires, what is its vector number, and at which address is its vector?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>IRQ 3, vector 19, address <code>0x0800004C</code></span>
+      <span class="why">No. 3 is the line number. Line 3 arrives as IRQ 6.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>IRQ 6, vector 22, address <code>0x08000016</code></span>
+      <span class="why">No. It adds 22 bytes instead of 22 vectors of 4 bytes each.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>IRQ 6, vector 22, address <code>0x08000058</code></span>
+      <span class="why">Correct. 16 + 6 = 22, and 22 × 4 = 88 = 0x58.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>IRQ 6, vector 6, address <code>0x08000018</code></span>
+      <span class="why">No. It forgets the 16 core vectors in front of the IRQs.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> PB3 is pin 3, so it feeds EXTI line 3 once <code>EXTICR</code> selects port B, and line 3 reaches the NVIC as IRQ 6.</p>
+    <p>The first 16 vectors belong to the core, so IRQ 6 is vector 16 + 6 = 22. Each vector is a 4-byte address, so it sits at <code>0x08000000 + 22 × 4</code> = <code>0x08000000 + 0x58</code> = <code>0x08000058</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>From PB3 to vector 22</h4>
+    </div>
+    <p class="fig-lede">The 16 EXTI lines reach the NVIC as only three IRQs. Line 3, fed by PB3, shares IRQ 6 with line 2, and the vector number adds the 16 core entries.</p>
+    <div data-viz="path"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>The vector table, one 4-byte slot per vector</h4>
+    </div>
+    <p class="fig-lede">The start of flash, drawn to scale: slot k sits at byte k × 4. Each option's address is marked. Only C lands on the start of slot 22. B lands two bytes into slot 5.</p>
+    <div data-viz="table"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Vector number = 16 + IRQ, vector address = <code>0x08000000</code> + (16 + IRQ) × 4. EXTI lines 2–3 share IRQ 6, so PB3's vector is 22, at <code>0x08000058</code>.</p>
+    <p class="source">Source: L05 slides 24, 26, 27 · Notes: L05 › 17. The vector table and the handler · L05 › 16. Hop 3: NVIC enable and priority</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc21" data-part="mc" data-num="21" data-topic="Analog reset" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 21 · L05, Silent failure: input mode not written</p>
+    <h3 class="q-title">Button A (PA0, wired to GND, internal pull-up on) is polled every 1 ms through the debouncer, and it works. A student deletes the line below and rebuilds. The build has zero warnings. What does the program see from button A now?</h3>
+    <pre class="calc">pin_mode(GPIOA, 0, MODE_INPUT);</pre>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>A button that is always pressed, because PA0 stays analog and an analog pin reads 0 in <code>IDR</code></span>
+      <span class="why">Correct. Slide 33, row 2. Analog reads 0, and 0 means pressed for an active-low button.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Random presses nobody made, because the released pin now floats</span>
+      <span class="why">No. That is a missing pull-up (row 3), and <code>PUPDR</code> is still written.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>Nothing at all, because writes to port A now vanish and reads return 0</span>
+      <span class="why">No. That is a missing <code>IOPENR</code> clock gate (row 1), which this change does not touch.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The same as before, because input is the mode every pin has after reset</span>
+      <span class="why">No. Every pin except PA13 and PA14 resets to 11, analog.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> <code>MODER</code> resets to <code>0xEBFFFFFF</code>, so PA0's field stays <code>11</code>, analog. An analog pin is disconnected from the digital logic and reads 0 in <code>IDR</code> whatever the voltage on it.</p>
+    <p>Button A is active low, so <code>button_down()</code> returns true from the first sample. The debouncer accepts one press about 20 ms after reset that nobody made, and after that the level never moves again. Input mode is written, never assumed.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>In analog mode the digital input is cut off, so IDR reads 0</h4>
+    </div>
+    <p class="fig-lede">PA0's input path from the button to <code>button_down()</code>. Choose the mode PA0 is left in and whether the button is pressed, and follow the values along the path.</p>
+    <div data-viz="mode-steps"></div>
+    <div data-viz="btn-steps"></div>
+    <p class="step-note" data-role="path-note" aria-live="polite"></p>
+    <div data-viz="path"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>The first 200 ms after reset, with and without the line</h4>
+    </div>
+    <p class="fig-lede">The button is pressed from 80 ms to 140 ms. With input mode, <code>IDR</code> follows the pin and the debouncer reports the press and the release 20 ms after each settles. Left analog, <code>IDR</code> is 0 from the start: one press at about 20 ms that nobody made, then nothing.</p>
+    <div data-viz="time"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Every pin wakes up analog (<code>11</code>) except PA13 and PA14. An analog pin reads 0 in <code>IDR</code>, so a forgotten input mode makes an active-low button read pressed forever, with zero warnings.</p>
+    <p class="source">Source: L05 slides 6, 19, 33 · Notes: L05 › 4. MODER reset and the analog trap · L05 › 20. Seven ways to get silence, and the debugger</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc22" data-part="mc" data-num="22" data-topic="Polling vs interrupt" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 22 · L05, Polling vs interrupt</p>
+    <h3 class="q-title">Both buttons bounce. For one press, polled button A (sampled every 1 ms) reports one level change, now and then three, while button B's EXTI handler counts tens of edges. Why do the counts differ?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>EXTI records each edge twice, once in <code>RPR1</code> and once in <code>FPR1</code></span>
+      <span class="why">No. Each edge sets one bit, a rising edge in <code>RPR1</code> and a falling edge in <code>FPR1</code>.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>debounce_step()</code> removes button A's bounce before the level changes are counted</span>
+      <span class="why">No. <code>changes</code> counts every move of the raw sample, before the debouncer accepts anything.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>A 1 kHz poll sees only the level at each sample, so most bounce transitions, microseconds apart, fall between samples, while EXTI latches every edge</span>
+      <span class="why">Correct. Polling at 1 kHz is a filter; the interrupt sees what actually happened.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Button B bounces more, because a pin used for an interrupt has no pull-up</span>
+      <span class="why">No. Both buttons have the same pull-up and the same bounce.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> A press bounces for about a millisecond, with transitions microseconds apart. Button A is looked at once per millisecond, so most transitions fall between two samples and are never seen. Polling is a filter.</p>
+    <p>EXTI latches every edge in hardware, and with both <code>RTSR1</code> and <code>FTSR1</code> set, button B's handler runs once per bounce edge. Neither count is wrong. The poll sees a sampled summary, the interrupt sees every edge.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>One bouncing press, seen by EXTI and by a 1 kHz poll</h4>
+    </div>
+    <p class="fig-lede">A drawn press. The pin falls, bounces for about 1.3 ms and settles low. EXTI latches every transition. The poll reads the level once per millisecond and counts how often that reading changes. Drag the moment the samples are taken.</p>
+    <div data-viz="slider"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">EXTI edges</span><span class="v sec" data-role="edges">13</span><span class="sub">one handler run each</span></div>
+      <div class="stat"><span class="label">Poll level changes</span><span class="v pri" data-role="changes">1</span><span class="sub">readings that differ from the last</span></div>
+    </div>
+    <p class="verdict" data-role="verdict"></p>
+    <div data-viz="wave"></div>
+    <div class="legend">
+      <span><i class="sw-sec"></i>edge latched by EXTI</span>
+      <span><i class="sw-pri"></i>poll sample, every 1 ms</span>
+      <span><i class="sw-ter"></i>poll reading that changed</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Polling at 1 kHz is a filter. Bounce transitions are microseconds apart, and most fall between samples. An interrupt latches every edge, wanted or not, so the same press gives 1 poll change and tens of EXTI edges.</p>
+    <p class="source">Source: L05 slides 20, 22, 32 · Notes: L05 › 12. Button A: the polled debouncer · L05 › 19. Count in the handler, decide in main</p>
+  </div>
+</article>

@@ -1,0 +1,188 @@
+<article class="q" id="s3-mc12" data-part="mc" data-num="12" data-topic="Race condition" data-ref="topic3">
+  <div class="q-head">
+    <p class="eyebrow">Question 12 · L03, a bug that only appears sometimes</p>
+    <h3 class="q-title"><code>main()</code> and a 1 kHz timer ISR both do <code>count++</code> on a shared global. Every bench test passes, but in the field the count comes out wrong roughly once every 7 hours. The timer is then changed to 10 kHz. Which statement is right?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>It is a compiler optimisation problem; declaring <code>count</code> as <code>volatile</code> fixes it at any interrupt rate.</span>
+      <span class="why">No. <code>volatile</code> makes accesses real. The ldr, adds, str can still be split by the interrupt.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>It is a stack overflow that builds up with uptime; at 10 kHz it appears about 10 times less often.</span>
+      <span class="why">No. Nothing accumulates; each interrupt is an independent chance to hit the window.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>It is a race condition; at 10 kHz it appears about 10 times as often, roughly every 40 minutes, and running more tests will not find it.</span>
+      <span class="why">Correct. Ten times the interrupts, ten times the hits: 7 h / 10 ≈ 42 min.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>It is tearing of a 32-bit value; at 10 kHz the window closes and the bug disappears.</span>
+      <span class="why">No. An aligned 32-bit word is read in one access, and the window's width does not depend on the rate.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> An update is lost only when the interrupt lands in <code>main()</code>'s two-instruction window between <code>ldr</code> and <code>str</code>, about 40 ns at 48 MHz (2 × 20.8 ns = 41.7 ns). Each interrupt has the same small chance of landing there, so ten times as many interrupts give about ten times as many failures: 7 h / 10 ≈ 42 min, the slide's "roughly once every 40 minutes".</p>
+    <p>The result depends on the relative timing of two contexts, which is the definition of a race condition. Running the program more only resamples the timing. You find it by listing which variables more than one context touches, and protecting those.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The failure rate grows in step with the interrupt rate</h4>
+    </div>
+    <p class="fig-lede">Slide 6's two rows both work out to about one lost update per 25 million interrupts: 7 h × 3600 s × 1000 = 25.2 million, and 40 min × 60 s × 10 000 = 24 million. Drag the rate and read the time between failures.</p>
+    <div data-viz="slider"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">Interrupts</span><span class="v pri" data-role="rate">1000</span><span class="sub">per second</span></div>
+      <div class="stat"><span class="label">Per lost update</span><span class="v">≈ 25.2 M</span><span class="sub">interrupts, fixed by the window</span></div>
+      <div class="stat"><span class="label">Time between failures</span><span class="v ok" data-role="mtbf">7 h</span><span class="sub">25.2 M / rate</span></div>
+    </div>
+    <div data-viz="curve"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Why it is rare: a 41.7 ns window inside a millisecond</h4>
+    </div>
+    <p class="fig-lede">Top: one millisecond of <code>main()</code> at 48 MHz, the gap between two interrupts at 1 kHz. Bottom: the three instructions of <code>count++</code>, enlarged. Only an interrupt taken inside the red window loses an update.</p>
+    <div data-viz="window"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Works for hours, then fails once: a race condition. The interrupt must land in a two-instruction window, about 40 ns at 48 MHz. You cannot find it by running the program more; you find it by reasoning about which variables are shared, and protecting those.</p>
+    <p class="source">Source: L03 slide 6 · L03 slide 10 item 7 · Notes: L03 › 6. A bug that only appears sometimes</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc13" data-part="mc" data-num="13" data-topic="Polling" data-ref="topic3">
+  <div class="q-head">
+    <p class="eyebrow">Question 13 · L03, polling, interrupt or DMA</p>
+    <h3 class="q-title">In which of these situations is polling the right choice?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Waiting for a user to press a button, which may take minutes, while <code>main()</code> has other work to do.</span>
+      <span class="why">No. A rare, long wait: polling would burn every cycle. Use an interrupt.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Moving a 2 KB block of received UART data into a buffer while the CPU runs a control loop.</span>
+      <span class="why">No. A stream of data is the job of DMA: the hardware moves the bytes and the CPU is not involved.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>Waiting, after writing a new wait state into <code>FLASH-&gt;ACR</code>, until its <code>LATENCY</code> field reads back the new value, a wait of a few cycles.</span>
+      <span class="why">Correct. The wait is shorter than the cost of being interrupted.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Catching every edge of a signal that can arrive at any moment while <code>main()</code> is busy elsewhere.</span>
+      <span class="why">No. Polling only sees the signal when the loop comes back; an interrupt sees every edge.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> Polling is not the beginner option. It is the right answer whenever the wait is shorter than the cost of being interrupted. An interrupt costs an entry (push 8 registers, read the vector table) and an exit (pop 8), and in a few cycles there is no other work to do anyway.</p>
+    <p>The flash controller acknowledges the new latency within a few cycles, so L01's four-instruction loop (read <code>FLASH-&gt;ACR</code>, isolate <code>LATENCY</code>, compare, branch back) is both simpler and faster.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>What the CPU does while it waits, three ways</h4>
+    </div>
+    <p class="fig-lede">Each lane is the CPU's time under one method, drawn so that one unit is about one instruction or one register moved. Pick the situation from each option and see which lane wastes the least.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="lanes"></div>
+    <div class="legend">
+      <span><i class="sw-pri-soft"></i>polling: read, test, branch</span>
+      <span><i class="sw-sec"></i>interrupt entry and exit</span>
+      <span><i class="sw-sec-soft"></i>handler</span>
+      <span><i class="sw-ok"></i>useful work</span>
+      <span><i class="sw-ter-soft"></i>DMA hardware moves bytes</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Three ways to meet the hardware: polling (CPU does nothing else), interrupt (CPU works until told), DMA (CPU not involved). Polling is the right answer whenever the wait is shorter than the cost of being interrupted, for example the <code>FLASH-&gt;ACR</code> latency wait.</p>
+    <p class="source">Source: L03 slide 1 · L01 slide 13 · Notes: L03 › 1. Three ways to meet the hardware</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc14" data-part="mc" data-num="14" data-topic="Interrupt latency" data-ref="topic3">
+  <div class="q-head">
+    <p class="eyebrow">Question 14 · L03, keep the critical section short</p>
+    <h3 class="q-title">To protect a shared counter, a student writes this in <code>main()</code>. A UART receive interrupt with NVIC priority 0 is enabled. What does this code do to that interrupt?</h3>
+    <pre class="calc">__disable_irq();
+counter++;
+print_count(counter);    /* takes about 5 ms */
+__enable_irq();</pre>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>A request that arrives inside the region waits until <code>__enable_irq()</code>, up to about 5 ms. The longest critical section sets the worst-case interrupt latency, so only <code>counter++</code> belongs inside.</span>
+      <span class="why">Correct. PRIMASK holds back every configurable interrupt until <code>cpsie i</code>.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Nothing: priority 0 is the most urgent level, so the UART interrupt still preempts <code>main()</code> inside the region.</span>
+      <span class="why">No. Priority ranks interrupts against each other. PRIMASK = 1 blocks all configurable interrupts, priority 0 included.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The request is discarded, so that byte is lost, but the latency of later interrupts is unchanged.</span>
+      <span class="why">No. The NVIC holds the request pending and takes it at <code>cpsie i</code>. What grows is the latency.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Nothing: <code>__disable_irq()</code> only asks the scheduler not to switch threads, like a mutex.</span>
+      <span class="why">No. That describes a mutex. <code>__disable_irq()</code> is <code>cpsid i</code>, a hardware mask.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> <code>__disable_irq()</code> is <code>cpsid i</code>. It sets PRIMASK bit 0, and while that bit is set no configurable interrupt is taken, whatever its priority. The NVIC keeps the UART request pending, and the handler runs right after <code>cpsie i</code>. A request that arrives just after <code>cpsid i</code> waits the whole 5 ms.</p>
+    <p>Interrupt latency is the gap between the hardware event and the first instruction of the handler, and the longest critical section anywhere in the program sets its worst case. The shared counter needs only its three instructions protected; <code>print_count()</code> can run with interrupts on.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The UART request waits for the whole masked region</h4>
+    </div>
+    <p class="fig-lede">Six milliseconds of <code>main()</code>. The critical section starts at 0.5 ms and the UART request arrives at 1 ms. Compare the student's code with the region cut down to <code>counter++</code>.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="timeline"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>PRIMASK sits in front of every priority level</h4>
+    </div>
+    <p class="fig-lede">The NVIC picks the most urgent pending request (0 is the most urgent of the four levels). PRIMASK bit 0 decides whether the core takes any of them at all.</p>
+    <div data-viz="gate"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Keep critical sections short: every cycle with interrupts off is a cycle in which the chip cannot respond to anything. Interrupt latency is the gap from the hardware event to the handler's first instruction, and the longest critical section anywhere sets its worst case.</p>
+    <p class="source">Source: L03 slide 5 · L03 slide 8 · Notes: L03 › 5. Hazard two: the interrupt lands mid-update · L03 › 8. Priority: which interrupt wins</p>
+  </div>
+</article>

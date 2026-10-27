@@ -1,0 +1,268 @@
+<article class="q" id="s3-mc18" data-part="mc" data-num="18" data-topic="IDR bit" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 18 · L05, Reading one IDR bit</p>
+    <h3 class="q-title">Button C is wired from PA9 to GND, and PA9 is an input with the internal pull-up. <code>GPIOA-&gt;IDR</code> reads <code>0x0000A5F3</code>. What does <code>(GPIOA-&gt;IDR &gt;&gt; 9) &amp; 1u</code> give, and is button C pressed?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>1, so button C is released</span>
+      <span class="why">No. Bits 10 and 8 are 1. Bit 9, between them, is 0.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>0, so button C is released</span>
+      <span class="why">No. With a pull-up and a switch to GND the button is active low, so 0 is pressed.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0x52</code>, so button C is released</span>
+      <span class="why">No. <code>0x52</code> is <code>IDR &gt;&gt; 9</code> without the mask. <code>&amp; 1u</code> keeps only bit 0.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span>0, so button C is pressed</span>
+      <span class="why">Correct. Bits 11:8 are the digit 5 = <code>0101</code>, so bit 9 is 0, and 0 means pressed.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> One hex digit is four bits, so <code>0xA5F3</code> is <code>1010 0101 1111 0011</code>, and the digit 5 holds bits 11:8 = <code>0101</code>. Bit 9 is 0. Shifting right by 9 brings bit 9 down to bit 0, and <code>&amp; 1u</code> clears every other bit, so the expression is 0.</p>
+    <p>Released, the pull-up holds PA9 at 3.3 V and the bit reads 1. Pressed, the switch pulls PA9 to GND and the bit reads 0, so 0 means pressed.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Shift bit 9 down, then mask</h4>
+    </div>
+    <p class="fig-lede">The low 16 bits of <code>IDR</code>, one per pin, with the hex digit over each group of four. Step through the shift and the mask.</p>
+    <div data-viz="shift-steps"></div>
+    <p class="step-note" data-role="shift-note" aria-live="polite"></p>
+    <div data-viz="shift"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Read pin n with <code>(IDR &gt;&gt; n) &amp; 1u</code>. With a pull-up and a switch to GND the button is active low, so 0 means pressed. <code>0xA5F3</code> has bit 9 = 0 (digit 5 = <code>0101</code>).</p>
+    <p class="source">Source: L05 slides 2, 10, 19 · Notes: L05 › 6. IDR, ODR and read-modify-write · L05 › 11. Buttons: pull-up, active low, bounce</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc19" data-part="mc" data-num="19" data-topic="BSRR atomic" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 19 · L05, Why BSRR is the safe one</p>
+    <h3 class="q-title"><code>main()</code> used to turn PA5 on and PA4 off with the two lines below, and now and then PA6, which an interrupt handler turns on, went off again. It now runs <code>GPIOA-&gt;BSRR = 0x00100020;</code> instead. What does that write do, and why can the handler's change no longer be lost?</h3>
+    <pre class="calc">GPIOA-&gt;ODR |= 1u &lt;&lt; 5;
+GPIOA-&gt;ODR &amp;= ~(1u &lt;&lt; 4);</pre>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>PA5 goes high and PA4 goes low in one store that reads nothing, so there is no stale copy of the port to write back</span>
+      <span class="why">Correct. Bit 5 sets PA5, bit 20 = 4 + 16 resets PA4, and with no load there is no stale copy.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>PA5 goes high and PA4 goes low, and the handler's change is kept because <code>BSRR</code> is <code>volatile</code> and <code>ODR</code> is not</span>
+      <span class="why">No. <code>volatile</code> only makes every access happen. It cannot stop an interrupt between a load and a store.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>PA5 goes high and every other pin of port A goes low, so PA6 still turns off</span>
+      <span class="why">No. That treats a 0 bit as low. In <code>BSRR</code> a 0 leaves its pin alone.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>PA4 goes high and PA5 goes low, in one store that an interrupt cannot split</span>
+      <span class="why">No. The halves are swapped. Bit 5 is in the set half, bits 15:0.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> In <code>0x00100020</code> the set half (bits 15:0) is <code>0x0020</code>, bit 5, so PA5 goes high, and the reset half (bits 31:16) is <code>0x0010</code>, bit 20 = 4 + 16, so PA4 goes low. Every 0 bit leaves its pin alone, PA6 included.</p>
+    <p>Each <code>ODR</code> line is a load, a change and a store. A handler that runs between <code>main()</code>'s load and store sets PA6, and <code>main()</code> then stores its stale copy without PA6. <code>BSRR</code> needs no load, so the write is one store, and an interrupt lands before it or after it.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Where the interrupt lands decides whether PA6 survives</h4>
+    </div>
+    <p class="fig-lede">Top, the two <code>ODR</code> lines as six instructions, starting from <code>ODR</code> = <code>0x10</code> (PA4 on). Choose where the handler (<code>ODR |= 1u &lt;&lt; 6</code>) lands and follow <code>r1</code> and <code>ODR</code>. Bottom, the <code>BSRR</code> line, one store.</p>
+    <div data-viz="race-steps"></div>
+    <p class="step-note" data-role="race-note" aria-live="polite"></p>
+    <div data-viz="race"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>ODR |=</code> and <code>ODR &amp;=</code> are load, change, store, and an interrupt between the load and the store is undone by the stale copy. <code>BSRR</code> is one store with no read, so it is atomic. <code>0x00100020</code> sets PA5 (bit 5) and resets PA4 (bit 20 = 4 + 16).</p>
+    <p class="source">Source: L05 slides 11, 12, 13 · Notes: L05 › 7. BSRR, the safe one · L05 › 6. IDR, ODR and read-modify-write</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc20" data-part="mc" data-num="20" data-topic="Vector decode" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 20 · L05, Vector address to IRQ</p>
+    <h3 class="q-title">The vector table starts at <code>0x08000000</code>. The word at address <code>0x08000070</code> reads <code>0x08000A1D</code>. Which IRQ is this vector for, and where does its handler's first instruction sit?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>IRQ 12; the handler starts at <code>0x08000A1C</code></span>
+      <span class="why">Correct. 0x70 / 4 = 28, 28 − 16 = 12, and bit 0 of the word is the Thumb bit.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>IRQ 28; the handler starts at <code>0x08000A1C</code></span>
+      <span class="why">No. 28 is the vector number. The first 16 vectors are the core's, so the IRQ is 28 − 16.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>IRQ 12; the handler starts at <code>0x08000A1D</code></span>
+      <span class="why">No. Bit 0 is the Thumb bit. Thumb instructions sit at even addresses.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>IRQ 12; the handler starts at <code>0x08000070</code></span>
+      <span class="why">No. That is where the vector is stored. The handler's address is the word stored there.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> <code>0x08000070</code> is <code>0x70</code> = 112 bytes into the table, and each vector is 4 bytes, so this is vector 112 / 4 = 28. The first 16 vectors belong to the core, so vector 28 is IRQ 28 − 16 = 12.</p>
+    <p>The word stored there is the handler's address with bit 0 set, the Thumb bit. The last hex digit D = <code>1101</code> loses its bit 0 and becomes C = <code>1100</code>, so the handler's first instruction is at <code>0x08000A1C</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>From 0x08000070 back to IRQ 12, and from the word to the handler</h4>
+    </div>
+    <p class="fig-lede">The hand calculation in four steps. Each wrong option stops a step early or takes the wrong number, shown at the bottom.</p>
+    <div data-viz="calc-steps"></div>
+    <p class="step-note" data-role="calc-note" aria-live="polite"></p>
+    <div data-viz="calc"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Vector number = (address − <code>0x08000000</code>) / 4 and IRQ = vector − 16, so <code>0x08000070</code> is vector 28, IRQ 12. The stored word has bit 0 set (Thumb), so the handler starts at <code>0x08000A1C</code>.</p>
+    <p class="source">Source: L05 slide 27 · Notes: L05 › 17. The vector table and the handler</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc21" data-part="mc" data-num="21" data-topic="EXTICR port" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 21 · L05, Silent failure: EXTICR</p>
+    <h3 class="q-title">A third button is wired from PB9 to GND. It is set up with the lines below, and <code>EXTI4_15_IRQHandler</code> checks and clears bit 9 correctly. <code>EXTICR</code> is never written. The build has zero warnings. What happens when the PB9 button is pressed?</h3>
+    <pre class="calc">RCC-&gt;IOPENR |= RCC_IOPENR_GPIOBEN;
+pin_mode(GPIOB, 9, MODE_INPUT);
+pin_pull(GPIOB, 9, PULL_UP);
+EXTI-&gt;FTSR1 |= 1u &lt;&lt; 9;
+EXTI-&gt;FPR1   = 1u &lt;&lt; 9;
+EXTI-&gt;IMR1  |= 1u &lt;&lt; 9;
+NVIC_EnableIRQ(EXTI4_15_IRQn);</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>It works, because the reset value of <code>EXTICR</code> lets every port's pin 9 into line 9</span>
+      <span class="why">No. Each line is a multiplexer and passes one port's pin at a time. Code 0 picks port A.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>The first press jumps to <code>Default_Handler</code> and the board hangs</span>
+      <span class="why">No. That is a misspelt handler name (slide 33, row 7). The name here is right.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The edge latches in <code>FPR1</code> bit 9 but never reaches the NVIC</span>
+      <span class="why">No. That is a missing <code>IMR1</code> (row 5). Here no edge reaches EXTI, so <code>FPR1</code> bit 9 stays 0.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span>Nothing happens, because line 9 still selects port A and watches PA9</span>
+      <span class="why">Correct. <code>EXTICR[2]</code> bits 15:8 reset to 0, port A, so PB9's edges never reach line 9.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> EXTI line 9 watches pin 9 of one port, chosen by line 9's field in <code>EXTICR[9 / 4]</code> = <code>EXTICR[2]</code>, bits 8 × 1 + 7 : 8 × 1 = 15:8. That field resets to 0, port A, so the line watches PA9. PB9's edge never reaches EXTI, <code>FPR1</code> bit 9 stays 0, and the handler never runs.</p>
+    <p>The fix is port code 1 in that field, <code>EXTICR[2]</code> = <code>0x00000100</code>. A port-A button works without it, by luck, because port A's code is the reset value.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Line 9 is a multiplexer, and EXTICR picks the port</h4>
+    </div>
+    <p class="fig-lede">Pin 9 of each port goes into line 9's multiplexer, and line 9's field of <code>EXTICR[2]</code> selects one. Switch between the reset value and the fix, and follow the press on PB9.</p>
+    <div data-viz="mux-steps"></div>
+    <p class="step-note" data-role="mux-note" aria-live="polite"></p>
+    <div data-viz="mux"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>EXTI line n watches pin n of one port, chosen by <code>EXTICR[n / 4]</code> bits 8(n mod 4)+7 : 8(n mod 4). Code 0, port A, is the reset value, so a forgotten <code>EXTICR</code> works on port A by luck and is dead on any other port.</p>
+    <p class="source">Source: L05 slides 24, 33 · Notes: L05 › 14. Hop 1: EXTICR, which port feeds this line · L05 › 20. Seven ways to get silence, and the debugger</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc22" data-part="mc" data-num="22" data-topic="Write 1 to clear" data-ref="topic5">
+  <div class="q-head">
+    <p class="eyebrow">Question 22 · L05, Write 1 to clear</p>
+    <h3 class="q-title"><code>EXTI4_15_IRQHandler</code> serves lines 4 to 15. After it has handled line 9's falling edge, it must clear line 9's pending bit and leave every other line's pending edge for the next call. Which line does that?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>EXTI-&gt;FPR1 |= 1u &lt;&lt; 9;</code></span>
+      <span class="why">No. <code>|=</code> reads <code>FPR1</code> first and writes every pending 1 back, which clears those lines too.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span><code>EXTI-&gt;FPR1 = 1u &lt;&lt; 9;</code></span>
+      <span class="why">Correct. The 1 clears bit 9, and the 0s leave every other line pending.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>EXTI-&gt;FPR1 &amp;= ~(1u &lt;&lt; 9);</code></span>
+      <span class="why">No. It writes 0 to bit 9, which clears nothing, and 1 to every other pending line, which clears them.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>EXTI-&gt;FPR1 = 0;</code></span>
+      <span class="why">No. Zeros clear nothing. Line 9 stays pending and the handler runs forever.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> <code>FPR1</code> is write 1 to clear. A 1 written to a bit clears that line's pending flag and a 0 does nothing, so the plain store <code>1u &lt;&lt; 9</code> clears line 9 and nothing else.</p>
+    <p>Both compound assignments read <code>FPR1</code> first. A writes back every pending 1 and clears edges nobody has handled. C writes 0 to bit 9, so line 9 stays pending and the handler is entered again and again, and it clears the other lines as well. D writes only zeros and clears nothing.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>What each option writes, and what stays pending</h4>
+    </div>
+    <p class="fig-lede"><code>FPR1</code> lines 15 to 0, with line 9 (just handled) and line 12 (another edge, not yet handled) pending: <code>0x00001200</code>. Choose an option to see the value it writes and what is left. A 1 written clears that line.</p>
+    <div data-viz="w1c-steps"></div>
+    <p class="step-note" data-role="w1c-note" aria-live="polite"></p>
+    <div data-viz="w1c"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Pending registers are write 1 to clear. Clear with a plain store, <code>EXTI-&gt;FPR1 = 1u &lt;&lt; n;</code>. <code>|=</code> and <code>&amp;= ~</code> read the register first and write the other lines' pending 1s back, which clears them.</p>
+    <p class="source">Source: L05 slides 25, 26, 29 · Notes: L05 › 15. Hop 2: edges, pending, mask · L05 › 18. Write 1 to clear, and the handler name</p>
+  </div>
+</article>

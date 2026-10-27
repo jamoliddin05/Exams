@@ -1,0 +1,182 @@
+<article class="q" id="s2-mc12" data-part="mc" data-num="12" data-topic="ISR as C function" data-ref="topic3">
+  <div class="q-head">
+    <p class="eyebrow">Question 12 · L03, why an ISR is an ordinary C function</p>
+    <h3 class="q-title">On the STM32C031 an interrupt handler is an ordinary function, <code>void TIM3_IRQHandler(void) { ... }</code>, with no special keyword or macro. Why can a plain C function safely interrupt any code?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>The compiler sees the <code>_IRQHandler</code> suffix and adds code that saves all sixteen registers.</span>
+      <span class="why">No. The name matters only to the linker, which puts the address in the vector table. A misspelt name compiles, links and does nothing.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>Handler mode has its own bank of <code>R0</code>–<code>R12</code>, so the interrupted code's registers are never touched.</span>
+      <span class="why">No. The core has one set of R0–R12. Handler mode only forces the stack pointer to MSP.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span>On entry the hardware itself stacks <code>R0</code>–<code>R3</code>, <code>R12</code>, <code>LR</code>, <code>PC</code> and <code>xPSR</code>, exactly the registers AAPCS lets a function destroy; the compiler saves any <code>R4</code>–<code>R11</code> the handler uses, as in every function.</span>
+      <span class="why">Correct. The hardware does the caller's half of AAPCS, and the handler's own prologue does the callee's half.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The startup code calls every handler through a wrapper function that saves and restores all registers.</span>
+      <span class="why">No. The hardware reads the vector table and jumps straight to the handler's address.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> AAPCS splits the registers in two. A called function may destroy the caller-saved R0–R3, R12 and LR, and must give back the callee-saved R4–R11. On interrupt entry the hardware pushes exactly the caller-saved set, plus PC and xPSR: 8 words, 32 bytes.</p>
+    <p>The callee-saved half is handled by the handler's ordinary prologue, as in every C function. So, seen from the interrupted code, the handler behaves like a function call that happened between two instructions. No keyword and no <code>ISR()</code> macro are needed.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Hardware saves the caller-saved half, the prologue saves the callee-saved half</h4>
+    </div>
+    <p class="fig-lede">Left: the core registers. Right: the stack, higher addresses at the top. Start with who saves what, then step through one interrupt from entry to return.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="regs"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>stacked by the hardware on entry</span>
+      <span><i class="sw-sec"></i>callee-saved: pushed by the prologue if used</span>
+      <span><i class="sw-seg"></i>SP: a handler always runs on MSP</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>An interrupt is a hardware-forced function call. The hardware pushes R0–R3, R12, LR, PC and xPSR (8 words, 32 bytes), exactly the set AAPCS lets a function clobber, so an ISR can be an ordinary C function. Its name puts it in the vector table.</p>
+    <p class="source">Source: L03 slide 2 · L01 slide 18 · Notes: L03 › 2. Interrupt entry and exit</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc13" data-part="mc" data-num="13" data-topic="Tearing" data-ref="topic3">
+  <div class="q-head">
+    <p class="eyebrow">Question 13 · L03, tearing</p>
+    <h3 class="q-title"><code>volatile uint64_t ticks;</code> is incremented by the SysTick handler and read in <code>main()</code> without masking. The read compiles to two 32-bit loads, low word first. <code>ticks</code> is <code>0x00000000_FFFFFFFF</code> when <code>main()</code> loads the low word, and the SysTick handler runs before <code>main()</code> loads the high word. What value does <code>main()</code> get?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>0x00000000_FFFFFFFF</code></span>
+      <span class="why">No. That is the old value. <code>main()</code> gets it only if both loads happen before the handler.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span><code>0x00000001_FFFFFFFF</code></span>
+      <span class="why">Correct. Old low word <code>0xFFFFFFFF</code>, new high word <code>0x00000001</code>.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>0x00000001_00000000</code></span>
+      <span class="why">No. That is the new value, which <code>main()</code> gets only if both loads happen after the handler.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>0x00000000_00000000</code></span>
+      <span class="why">No. That is the torn value for the other order, high word first: old high 0, new low 0.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> The low word is loaded before the increment, so it is the old <code>0xFFFFFFFF</code>. The increment carries into the high word, which becomes <code>0x00000001</code>, and <code>main()</code> loads that new high word. Half old and half new gives <code>0x00000001_FFFFFFFF</code> = 8 589 934 591.</p>
+    <p>Nobody ever stored that number. It is about twice the real count of 4 294 967 296. This is tearing: one logical value collected in two bus accesses with an interrupt between them. <code>volatile</code> does not prevent it, because both loads really happen. Copy the value inside <code>__disable_irq()</code> / <code>__enable_irq()</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Two loads, one on each side of the increment: half old, half new</h4>
+    </div>
+    <p class="fig-lede">Top: <code>ticks</code> as two 32-bit words, before and after the SysTick handler. The increment carries from the low word into the high word. Bottom: what <code>main()</code> assembles from its two loads. Switch the load order.</p>
+    <div data-viz="steps"></div>
+    <div data-viz="tear"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>old word, loaded before the handler</span>
+      <span><i class="sw-sec"></i>new word, loaded after the handler</span>
+    </div>
+    <pre class="calc" data-role="seq"></pre>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Slide 7: which shared variables are safe without a critical section</h4>
+    </div>
+    <p class="fig-lede">A single aligned word written by exactly one context is safe. A value that takes more than one bus access to read can tear. The highlighted row is this question.</p>
+    <div data-viz="table"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Tearing: a reader that needs two bus accesses for one logical value is interrupted between them and gets half old, half new, a number never stored by anybody. It hits a <code>uint64_t</code> on a 32-bit machine and a multi-field struct. Fix: a critical section around the copy.</p>
+    <p class="source">Source: L03 slide 7 · L03 slide 10 item 11 · Notes: L03 › 7. What needs protecting, and tearing</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc14" data-part="mc" data-num="14" data-topic="Critical section" data-ref="topic3">
+  <div class="q-head">
+    <p class="eyebrow">Question 14 · L03, a critical section on this chip</p>
+    <h3 class="q-title"><code>main()</code> and a timer ISR both increment <code>uint32_t counter</code> on the STM32C031, which has one Cortex-M0+ core. Which code in <code>main()</code> makes its increment safe?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>volatile uint32_t counter;</code> and a plain <code>counter++;</code></span>
+      <span class="why">No. <code>volatile</code> makes the accesses real. The ISR can still land between <code>ldr</code> and <code>str</code>.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>os_mutex_lock(&amp;m); counter++; os_mutex_unlock(&amp;m);</code></span>
+      <span class="why">No. A mutex asks the scheduler not to switch threads. The hardware starts the ISR without asking the scheduler.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>do { v = __LDREXW(&amp;counter); } while (__STREXW(v + 1, &amp;counter));</code></span>
+      <span class="why">No. That is the tool for two cores, and the Cortex-M0+ has neither <code>ldrex</code> nor <code>strex</code>.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>__disable_irq(); counter++; __enable_irq();</code></span>
+      <span class="why">Correct. <code>cpsid i</code> sets PRIMASK bit 0, so the ISR cannot start until <code>cpsie i</code>.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> Between an ISR and <code>main()</code> on one core, mutual exclusion comes from turning interrupts off: the other context cannot run if it cannot start. <code>__disable_irq()</code> is the single instruction <code>cpsid i</code>, which sets bit 0 of PRIMASK. The <code>ldr</code>, <code>adds</code>, <code>str</code> then run as one indivisible sequence, and <code>__enable_irq()</code> (<code>cpsie i</code>) clears the bit again.</p>
+    <p>An interrupt that arrives inside the region is held pending and runs right after <code>cpsie i</code>. It is delayed, not lost, and it reads the updated value.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>With PRIMASK set, the timer request waits until the increment is complete</h4>
+    </div>
+    <p class="fig-lede">Both versions get the same timer request right after <code>main()</code>'s <code>ldr</code>. <code>counter</code> starts at 5, and two increments should leave 7.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="timeline"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>Each option is a real tool, made for a different kind of contention</h4>
+    </div>
+    <p class="fig-lede">The general idea is mutual exclusion: at most one context inside the critical section at a time. Slide 5 lists how each kind of system gets it. Only one row describes this chip.</p>
+    <div data-viz="table"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>This chip's answer is a critical section by masking: <code>__disable_irq(); counter++; __enable_irq();</code>. Each call is one instruction, <code>cpsid i</code> / <code>cpsie i</code>, and changes one bit, PRIMASK bit 0. <code>volatile</code> makes accesses real; a critical section makes a sequence indivisible.</p>
+    <p class="source">Source: L03 slide 5 · Notes: L03 › 5. Hazard two: the interrupt lands mid-update</p>
+  </div>
+</article>

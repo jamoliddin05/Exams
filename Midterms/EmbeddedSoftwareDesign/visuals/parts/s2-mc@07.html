@@ -1,0 +1,234 @@
+<article class="q" id="s2-mc27" data-part="mc" data-num="27" data-topic="Priority numbering" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 27 · L07, Task priority numbering</p>
+    <h3 class="q-title">A student wants the CPU hog to be the least urgent task. Thinking of the NVIC, where 0 is most urgent, they create it with priority 4. The other tasks keep theirs: button 3, bar 2, report 1, idle 0. The hog never sleeps. What does the board do?</h3>
+  </div>
+
+  <ol class="options">
+    <li class="right">
+      <span class="key">A</span>
+      <span>The hog is now the most urgent task and is always READY, so the bar, the buttons and the report never run again</span>
+      <span class="why">Correct. In the kernel, bigger is more urgent, and pick() always takes the most urgent READY task.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span>The hog runs only when every other task is asleep, as the student intended</span>
+      <span class="why">No. That would need the smallest number, as the deck's hog has (1).</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>os_task_create()</code> rejects priority 4, because <code>__NVIC_PRIO_BITS = 2</code> allows only 0–3, so the hog never runs</span>
+      <span class="why">No. __NVIC_PRIO_BITS limits interrupt priorities. A task priority is just a number in the TCB.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Round-robin gives each of the five tasks one tick in turn, so the hog gets a fifth of the CPU</span>
+      <span class="why">No. Round-robin only shares the CPU among tasks of equal priority.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: A.</strong> In this kernel a higher number is more urgent, so 4 puts the hog above every other task. <code>pick()</code> always runs the highest-priority READY task, and the hog never leaves READY.</p>
+    <p>Nothing else is ever picked: the LED bar freezes, the buttons die and the report stops. The other tasks still wake on the tick and wait READY forever.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>pick() takes the top READY rung, and 4 puts the hog on top</h4>
+    </div>
+    <p class="fig-lede">Left, the kernel's ladder at the moment the button task wakes. Right, 20 ms of who has the CPU. The button task wakes every 5 ms and the bar's next frame falls at 8 ms (schematic times; each visit takes microseconds). Compare the deck's hog at 1 with the student's hog at 4.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="ladder"></div>
+    <div class="legend">
+      <span><i class="sw-ok"></i>the task pick() returns</span>
+      <span><i class="sw-pri-soft"></i>READY, not picked</span>
+      <span><i class="sw-seg"></i>sleeping</span>
+      <span><i class="sw-bad"></i>woke, never picked</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Fixed-priority preemptive: the highest-priority READY task runs, always. In this kernel the highest number is most urgent, so an always-READY task at the top starves everything below it.</p>
+    <p class="source">Source: L07 slide 9, slide 1 · Notes: L07 › 11. The scheduler rule: who runs next</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc28" data-part="mc" data-num="28" data-topic="PendSV" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 28 · L07, PendSV: deciding vs switching</p>
+    <h3 class="q-title">In this kernel, <code>schedule()</code> runs inside <code>SysTick_Handler</code> and inside other handlers, such as a UART receive interrupt. When it finds that another task should run, it only writes <code>SCB-&gt;ICSR = SCB_ICSR_PENDSVSET_Msk</code>. Why is the switch itself left to <code>PendSV_Handler</code>?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Handlers run unprivileged, and only PendSV is allowed to write PSP</span>
+      <span class="why">No. Handler mode is always privileged; any handler could write PSP.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>A switch must never happen inside another handler; PendSV has the lowest priority, so it runs only when no other handler is active, on the way back to a task</span>
+      <span class="why">Correct. Deciding happens anywhere, switching only in PendSV at priority 3.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>PendSV is the most urgent exception, so pending it makes the switch happen before the deciding handler's next instruction</span>
+      <span class="why">No. PendSV is at 3, the least urgent NVIC level. It waits for every other handler.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Only PendSV's entry makes the hardware stack r4–r11; other exceptions stack only 8 words</span>
+      <span class="why">No. Every exception entry stacks the same 8 words. PendSV's own code saves r4–r11.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> Deciding can happen anywhere; switching happens in one place, PendSV, which is pended by software and set to priority 3, the lowest. A handler's own frame is on MSP and half-finished, and swapping the task beneath it would return it into the wrong world.</p>
+    <p>So PendSV waits until every other handler has finished and tail-chains on the way back to a task. If the decision changes first, <code>schedule()</code> can still cancel it with <code>PENDSVCLR</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The decision is made inside a handler; the switch waits until all handlers are done</h4>
+    </div>
+    <p class="fig-lede">Rows from most urgent (top) to Thread mode (bottom); time runs to the right. A UART handler decides that task B should run while task A was running, and an EXTI interrupt nests on top of it. PendSV stays pending until both have returned. A SysTick decision works the same way.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="levels"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>handler code, on MSP</span>
+      <span><i class="sw-ter"></i>PendSV_Handler, the switch</span>
+      <span><i class="sw-seg"></i>task A</span>
+      <span><i class="sw-ok"></i>task B</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Deciding (schedule(), anywhere, can cancel with PENDSVCLR) is separate from switching (PendSV_Handler, one place). PendSV is pended by software and has the lowest priority, so the switch happens only when no other handler is active.</p>
+    <p class="source">Source: L07 slide 4b, slide 4c · Notes: L07 › 6. PendSV: deciding vs switching</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc29" data-part="mc" data-num="29" data-topic="EXC_RETURN" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 29 · L07, EXC_RETURN and the two stacks</p>
+    <h3 class="q-title">Inside <code>HardFault_Handler</code>, the <code>lr</code> register holds <code>0xFFFFFFF1</code>. The handler tests bit 2 of <code>lr</code> to find which stack holds the faulting frame. Which reading is correct?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>The frame is on PSP; a task was running in Thread mode</span>
+      <span class="why">No. That is 0xFFFFFFFD, low nibble 1101.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>The frame is on MSP; an exception handler was running</span>
+      <span class="why">Correct. Low nibble 0001: bit 2 = 0 (MSP), bit 3 = 0 (Handler mode).</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>The frame is on PSP; an exception handler was running</span>
+      <span class="why">No. Bit 2 is 0, so MSP. Handlers always run on MSP.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>The frame is on MSP; <code>main()</code> was running in Thread mode, before the first switch</span>
+      <span class="why">No. That is 0xFFFFFFF9, low nibble 1001: bit 3 = 1.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> The low nibble of <code>0xFFFFFFF1</code> is <code>0001</code>. Bit 2 = 0 selects MSP, and bit 3 = 0 means the return goes to Handler mode, so a handler faulted.</p>
+    <p>A task's fault gives <code>0xFFFFFFFD</code> (<code>1101</code>: Thread mode, PSP), the value every switch in this kernel returns with. <code>0xFFFFFFF9</code> (<code>1001</code>) is Thread mode on MSP, as <code>main()</code> runs before <code>os_start</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Bits 3 and 2 of EXC_RETURN pick the mode and the stack</h4>
+    </div>
+    <p class="fig-lede">Bits 31:4 are always ones, so only the last hex digit changes. Its bit 3 says Thread or Handler mode, its bit 2 says PSP or MSP. Below, the 8-word frame the hardware stacked, on the stack that bit 2 names. Try the three values.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="bits"></div>
+    <pre class="calc">HardFault_Handler (naked)
+    movs r0, #4          @ mask for bit 2
+    mov  r1, lr
+    tst  r0, r1          @ Z = 1 when bit 2 of lr is 0
+    beq  1f
+    mrs  r0, psp         @ bit 2 = 1: a task faulted
+    b    2f
+1:  mrs  r0, msp         @ bit 2 = 0: a handler faulted
+2:  ...                  @ r0 = the frame; frame[6] is the faulting pc</pre>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>EXC_RETURN: 0xFFFFFFFD Thread mode, PSP (every switch, a task faulted); 0xFFFFFFF9 Thread mode, MSP; 0xFFFFFFF1 Handler mode, MSP. Bit 2 = 1 means PSP.</p>
+    <p class="source">Source: L07 slide 3b, slide 18 · Notes: L07 › 4. MSP vs PSP and the EXC RETURN values</p>
+  </div>
+</article>
+
+<article class="q" id="s2-mc30" data-part="mc" data-num="30" data-topic="Mutex" data-ref="topic7">
+  <div class="q-head">
+    <p class="eyebrow">Question 30 · L07, Mutex vs masking interrupts</p>
+    <h3 class="q-title">Tasks low (priority 1) and high (priority 2) share a table. Low's update of the table takes about 30 ms; high only reads it, using the same protection as low. The button task (priority 3) never touches the table and must stay on time. Which code should surround low's update?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>__disable_irq(); update_table(); __enable_irq();</code></span>
+      <span class="why">No. For 30 ms every interrupt is held off, the tick included, so the button task cannot wake.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>while (busy) { } busy = 1; update_table(); busy = 0;</code></span>
+      <span class="why">No. High spins on busy above low's priority, so low never runs again to clear it.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>SCB-&gt;ICSR = SCB_ICSR_PENDSVCLR_Msk; update_table();</code></span>
+      <span class="why">No. It cancels only the switch pending now. The next tick pends PendSV again.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>os_mutex_lock(&amp;m); update_table(); os_mutex_unlock(&amp;m);</code></span>
+      <span class="why">Correct. Only a task that wants the table waits, BLOCKED off the CPU.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> A mutex holds up only the tasks that want this table. High, if it asks during the update, is BLOCKED off the CPU, while the button task and every interrupt carry on.</p>
+    <p>Masking interrupts is for a few instructions; for a 30 ms critical section it freezes the whole system. Slide 12: "The mutex is a way to make a long critical section cheap for everyone who does not need it."</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Forty milliseconds under each option</h4>
+    </div>
+    <p class="fig-lede">Low starts its 30 ms update at 0 ms. The button task wakes at 5, 15, 25 and 35 ms; high wakes at 10 ms and wants to read the table. The top row is the 1 ms tick. Times are schematic and the short visits are drawn wider than they are.</p>
+    <div data-viz="steps"></div>
+    <p class="step-note" data-role="note" aria-live="polite"></p>
+    <div data-viz="timeline"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>low, updating</span>
+      <span><i class="sw-sec"></i>high</span>
+      <span><i class="sw-ter"></i>button</span>
+      <span><i class="sw-bad"></i>held off or wrong</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Masking interrupts holds up everything and may last only a few instructions. A mutex holds up only the tasks that want the resource, may last as long as the work takes, and its waiters are BLOCKED off the CPU. An ISR cannot use a mutex.</p>
+    <p class="source">Source: L07 slide 12, slide 4b · Notes: L07 › 14. The mutex</p>
+  </div>
+</article>

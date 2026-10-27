@@ -1,0 +1,161 @@
+<article class="q" id="s3-mc5" data-part="mc" data-num="5" data-topic="Fixed-length encoding" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 5 · L01, What load–store buys</p>
+    <h3 class="q-title">x86 instructions are 1 to 15 bytes long. On the Cortex-M0+ every instruction is 2 or 4 bytes, and only <code>ldr</code> and <code>str</code> touch memory. What does this load–store design buy the Cortex-M0+?</h3>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span>Fewer instructions for the same C code, because each instruction does more work</span><span class="why">No. Load–store needs more instructions, three for <code>counter++</code> against one. That is the cost.</span></li>
+    <li><span class="key">B</span><span>Arithmetic instructions that take an operand straight from SRAM, so no register is needed for it</span><span class="why">No. That is the register–memory model of the x86. Here the ALU sees registers only.</span></li>
+    <li class="right"><span class="key">C</span><span>A fixed-length encoding: the decoder never has to work out how long an instruction is before it can find the next one, and every opcode goes through the same pipeline stages</span><span class="why">Correct. This is what the slide says the design buys.</span></li>
+    <li><span class="key">D</span><span>A single uninterruptible instruction that sets one bit in a peripheral register, as the AVR's <code>sbi</code> did</span><span class="why">No. The M0+ has no <code>sbi</code>. Setting a bit takes <code>ldr</code>, <code>orrs</code>, <code>str</code>.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: C.</strong> Keeping memory out of arithmetic means no instruction has to carry an address and an immediate at once. So every Thumb instruction is 2 bytes, or 4 when 16 bits cannot do the job. The decoder knows where the next instruction starts from the first halfword alone, and every opcode goes through the same pipeline stages.</p>
+    <p>A 48 MHz part with no cache is built from those properties. Option A turns the price into a gain: <code>counter++</code> takes three instructions here and one on the x86, with the same two bus accesses on both.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Where the next instruction starts, on the x86 and in Thumb</h4></div>
+    <p class="fig-lede"><code>counter++</code>, a call and a return on both machines, on one byte scale (on the Cortex-M0+, <code>r1</code> already holds <code>&amp;counter</code>). Each arc is one step of the decoder to the next instruction. Filled bytes are the ones it must read before it knows the length. Step through each decoder.</p>
+    <div data-viz="stream-steps"></div>
+    <p class="step-note" data-role="stream-note" aria-live="polite"></p>
+    <div data-viz="stream"></div>
+    <div class="legend">
+      <span><i class="sw-sec"></i>x86 byte that sets the length</span>
+      <span><i class="sw-pri"></i>Thumb step: 2 bytes, or 4 for a 32-bit instruction</span>
+    </div>
+    <p class="fig-lede">The slide's comparison of the two models, and the option each row answers.</p>
+    <div data-viz="models"></div>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Load–store costs instructions, not memory traffic. It buys a fixed-length encoding (Thumb: 2 or 4 bytes), a decoder that never has to ask how long an instruction is, and the same pipeline stages for every opcode. The x86 is register–memory, 1 to 15 bytes.</p>
+    <p class="source">Source: L01 slides 2, 4 · Guide §2 key contrasts · Notes: L01 › 4. Load and store: the two machine models</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc6" data-part="mc" data-num="6" data-topic="Missing volatile" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 6 · L01, tst and a missing volatile</p>
+    <h3 class="q-title">A driver defines its own USART register struct and forgets <code>volatile</code>. At <code>-Os</code> the wait for TXE (bit 7, mask <code>0x80</code> in <code>r0</code>) compiles to the listing below. The first read of <code>ISR</code> returns <code>0x00000000</code>; a few microseconds later the hardware sets TXE. What happens?</h3>
+    <pre class="calc">        ldr   r6, [r4, #28]    ; read USART-&gt;ISR
+loop:   tst   r6, r0
+        beq   loop
+        str   r5, [r4, #40]    ; write USART-&gt;TDR</pre>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span>It writes <code>TDR</code> as soon as TXE becomes 1, because <code>tst</code> reads <code>ISR</code> again on every pass</span><span class="why">No. <code>tst</code> compares two registers and never reads memory. The only <code>ldr</code> of <code>ISR</code> sits before the loop.</span></li>
+    <li><span class="key">B</span><span>It writes <code>TDR</code> at once, because <code>tst</code> stores <code>r6 AND r0</code> in <code>r6</code> and <code>beq</code> is taken only when that value is non-zero</span><span class="why">No, twice. <code>tst</code> keeps only the flags, and <code>beq</code> is taken when the result is zero (Z = 1).</span></li>
+    <li class="right"><span class="key">C</span><span>It hangs: the only <code>ldr</code> is outside the loop, so <code>tst</code> keeps testing the stale 0 in <code>r6</code>; Z stays 1 and <code>beq</code> is always taken</span><span class="why">Correct. The loop never reads <code>ISR</code> again.</span></li>
+    <li><span class="key">D</span><span>It HardFaults, because <code>tst</code> cannot test a value that came from a peripheral register</span><span class="why">No. Once loaded, <code>r6</code> is an ordinary register value. Nothing faults; the board just stops.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: C.</strong> <code>tst</code> is an AND that throws the result away and keeps the flags. <code>0 AND 0x80 = 0</code>, so Z = 1 and <code>beq loop</code> is taken. The branch goes back to <code>tst</code>, not to the <code>ldr</code>, so <code>r6</code> never changes and the loop spins forever on the stale 0.</p>
+    <p>Without <code>volatile</code> the compiler may read <code>ISR</code> once and keep it in a register: the slide's "works at <code>-O0</code> and hangs at <code>-Os</code>". With <code>volatile</code>, which CMSIS applies to every register as <code>__IO</code>, the <code>ldr</code> moves inside the loop, and option A becomes true.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>tst keeps testing a copy that never changes</h4></div>
+    <p class="fig-lede">The listing as the core runs it. On the right, the low byte of <code>USART-&gt;ISR</code> in memory, the copy in <code>r6</code>, the mask in <code>r0</code> and the AND that <code>tst</code> computes; bits 31:8 are 0 in all of them. TXE, bit 7, is outlined. Step through the passes.</p>
+    <div data-viz="loop-steps"></div>
+    <p class="step-note" data-role="loop-note" aria-live="polite"></p>
+    <div data-viz="loop"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>1 bit</span>
+      <span><i class="sw-seg"></i>0 bit</span>
+      <span><i class="sw-pri-soft"></i>instruction just run</span>
+    </div>
+  </figure>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 2</span><h4>One read before the loop, against one read per pass</h4></div>
+    <p class="fig-lede">Time runs left to right, one mark per pass of the loop. The top lane is TXE as the hardware sets it. Gray dots are passes that read no memory.</p>
+    <div data-viz="time"></div>
+    <div class="legend">
+      <span><i class="sw-ter"></i>bus read of ISR by ldr</span>
+      <span><i class="sw-ok"></i>the read that sees TXE = 1</span>
+    </div>
+    <p class="fig-lede">With <code>volatile</code> the compiler must read <code>ISR</code> on every pass, so the branch goes back to the load, as in the slide's polling loop:</p>
+    <pre class="calc">loop:   ldr   r6, [r4, #28]    ; read USART-&gt;ISR, every pass
+        tst   r6, r0
+        beq   loop
+        str   r5, [r4, #40]    ; write USART-&gt;TDR</pre>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>tst</code> is an AND that keeps only the flags; <code>beq</code> is taken when the result is 0 (Z = 1). Without <code>volatile</code> the compiler reads a status register once, caches it in a register and loops forever: works at <code>-O0</code>, hangs at <code>-Os</code>. CMSIS <code>__IO</code> is <code>volatile</code>.</p>
+    <p class="source">Source: L01 slides 7, 13, 21 · Notes: L01 › 20. What the compiler is allowed to do, and volatile</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc7" data-part="mc" data-num="7" data-topic="Epilogue" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 7 · L01, Prologue and epilogue</p>
+    <h3 class="q-title">A C function uses <code>r4</code> and <code>r5</code> and calls another function, so gcc gives it the prologue <code>push {r4, r5, lr}</code>. Which epilogue returns to the caller correctly?</h3>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span><code>pop {r4, r5}</code> followed by <code>bx lr</code></span><span class="why">No. The inner <code>bl</code> overwrote <code>LR</code>, so <code>bx lr</code> jumps back into this function, and the saved <code>LR</code> word stays on the stack.</span></li>
+    <li><span class="key">B</span><span><code>pop {r4, r5, lr}</code> with nothing after it</span><span class="why">No. It restores <code>LR</code> but does not branch, so the core runs on into the bytes after the function.</span></li>
+    <li><span class="key">C</span><span><code>bx lr</code> alone</span><span class="why">No. It jumps back into this function, with <code>r4</code> and <code>r5</code> not restored and <code>SP</code> 12 bytes low.</span></li>
+    <li class="right"><span class="key">D</span><span><code>pop {r4, r5, pc}</code></span><span class="why">Correct. <code>r4</code> and <code>r5</code> come back, and the saved <code>LR</code> goes straight into <code>PC</code>.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: D.</strong> The prologue saved three words: the caller's <code>r4</code> and <code>r5</code>, which AAPCS says a function must give back unchanged, and <code>LR</code>, the way back to the caller. <code>pop {r4, r5, pc}</code> loads all three in one instruction, and loading <code>PC</code> is the branch: popping into <code>PC</code> returns.</p>
+    <p>By the epilogue <code>LR</code> itself is useless, because the inner <code>bl</code> replaced it with an address inside this function. So A and C jump back into the function, and B restores <code>LR</code> but never branches. On this chip B would not even assemble: a 16-bit <code>pop</code> can name <code>r0</code>–<code>r7</code> and <code>PC</code>, not <code>LR</code>.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>Three words on the stack, and only a pop into PC uses the saved LR</h4></div>
+    <p class="fig-lede"><code>main</code> calls <code>process</code> with <code>bl</code> at <code>0x08000240</code>, and <code>process</code> calls <code>helper</code> at <code>0x08000306</code>. Left, the stack with higher addresses on top; middle, the registers; right, the code. Step through the call, then pick an epilogue.</p>
+    <div data-viz="frame-steps"></div>
+    <p class="step-note" data-role="frame-note" aria-live="polite"></p>
+    <div data-viz="frame"></div>
+    <div class="legend">
+      <span><i class="sw-pri-soft"></i>just changed</span>
+      <span><i class="sw-ok"></i>right after the return</span>
+      <span><i class="sw-bad"></i>wrong after the return</span>
+    </div>
+    <p class="fig-lede">What each epilogue leaves behind.</p>
+    <div data-viz="opts"></div>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Non-leaf prologue <code>push {r4, r5, lr}</code>, epilogue <code>pop {r4, r5, pc}</code>: popping the saved <code>LR</code> into <code>PC</code> is the return. After an inner <code>bl</code>, <code>bx lr</code> uses the overwritten <code>LR</code>. AAPCS: <code>r4</code>–<code>r11</code> are callee-saved.</p>
+    <p class="source">Source: L01 slides 8, 18 · Notes: L01 › 8. Branches, calls and returns</p>
+  </div>
+</article>
+
+<article class="q" id="s3-mc8" data-part="mc" data-num="8" data-topic="Reset vector bytes" data-ref="topic1">
+  <div class="q-head">
+    <p class="eyebrow">Question 8 · L01, Thumb bit and little-endian</p>
+    <h3 class="q-title">The linker map puts <code>Reset_Handler</code> at <code>0x08000190</code>. A student writes the vector table by hand in assembly. Which four bytes must the image hold at addresses <code>0x08000004</code> to <code>0x08000007</code>, the reset vector?</h3>
+  </div>
+  <ol class="options">
+    <li><span class="key">A</span><span><code>90 01 00 08</code></span><span class="why">No. The byte order is right, but the address is even: bit 0 = 0 asks for ARM state, and the chip faults on reset.</span></li>
+    <li><span class="key">B</span><span><code>08 00 01 91</code></span><span class="why">No. Big-endian order. The core would read <code>0x91010008</code>.</span></li>
+    <li><span class="key">C</span><span><code>08 00 01 90</code></span><span class="why">No. Big-endian and even. The core would read <code>0x90010008</code>.</span></li>
+    <li class="right"><span class="key">D</span><span><code>91 01 00 08</code></span><span class="why">Correct. <code>0x08000191</code>, lowest byte at the lowest address.</span></li>
+  </ol>
+  <div class="answer">
+    <p><strong>Answer: D.</strong> Every code address handed to the core has bit 0 set, the Thumb bit, so the vector is <code>0x08000190 | 1 = 0x08000191</code>. The Cortex-M is little-endian: the lowest byte, <code>0x91</code>, goes to the lowest address, <code>0x08000004</code>, and the image holds <code>91 01 00 08</code>.</p>
+    <p>A is the even address. Bit 0 = 0 asks for ARM state, which a Cortex-M does not have, so the chip faults immediately on reset. B and C store the bytes in big-endian order; read back little-endian they are <code>0x91010008</code> and <code>0x90010008</code>, both even and nowhere near the code.</p>
+  </div>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 1</span><h4>0x08000190 | 1, then the lowest byte at the lowest address</h4></div>
+    <p class="fig-lede">The two rules, one after the other. The first four bytes of the image are the initial stack pointer, <code>0x20003000</code>, the top of the 12 KB SRAM, stored by the same rule. Step through.</p>
+    <div data-viz="build-steps"></div>
+    <p class="step-note" data-role="build-note" aria-live="polite"></p>
+    <div data-viz="build"></div>
+    <pre class="calc">Reset_Handler | 1        = 0x08000190 | 1 = 0x08000191    bit 0 = 1, Thumb
+0x08000191, MSB first    = 08 00 01 91
+0x08000004 … 0x08000007  = 91 01 00 08                    lowest byte first</pre>
+  </figure>
+  <figure class="fig">
+    <div class="fig-head"><span class="fig-no">Figure 2</span><h4>What the core makes of each option at reset</h4></div>
+    <p class="fig-lede">At reset the core reads the word at <code>0x08000004</code>, with the byte at <code>0x08000007</code> on top. Bits 31:1 become <code>PC</code>, and bit 0 must be 1. Pick an option.</p>
+    <div data-viz="read-steps"></div>
+    <p class="step-note" data-role="read-note" aria-live="polite"></p>
+    <div data-viz="read"></div>
+  </figure>
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>A vector or function pointer is the address | 1, the Thumb bit: <code>Reset_Handler</code> at <code>0x08000190</code> gives the vector <code>0x08000191</code>, stored little-endian as <code>91 01 00 08</code>. An even vector faults on reset.</p>
+    <p class="source">Source: L01 slides 19, 2 · Notes: L01 › 18. The Thumb bit in the vector table</p>
+  </div>
+</article>

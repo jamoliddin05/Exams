@@ -1,0 +1,222 @@
+<article class="q" id="s1-mc31" data-part="mc" data-num="31" data-topic="BRR and byte time" data-ref="topic8">
+  <div class="q-head">
+    <p class="eyebrow">Question 31 · L08, BRR and byte time</p>
+    <h3 class="q-title">USART2 is clocked at 48 MHz and must run at 38 400 baud, 8N1. Which <code>BRR</code> value is right, and how long does the receive handler have to read <code>RDR</code> after a byte arrives, before the next byte overwrites it?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>BRR</code> = 1250; about 208 µs</span>
+      <span class="why">No. 208 µs is 8 bits. The start and stop bits are on the wire too, so a byte is 10 bits.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>BRR</code> = 313; about 260 µs</span>
+      <span class="why">No. 12 000 000 / 38 400 = 312.5 is the value for the 12 MHz reset clock. At 48 MHz it would send four times too fast.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span><code>BRR</code> = 1250; about 26 µs</span>
+      <span class="why">No. 26 µs is one bit. The next byte needs all 10 of its bits before it lands in <code>RDR</code>.</span>
+    </li>
+    <li class="right">
+      <span class="key">D</span>
+      <span><code>BRR</code> = 1250; about 260 µs</span>
+      <span class="why">Correct. 48 000 000 / 38 400 = 1250 clocks per bit, and 10 bits / 38 400 per second ≈ 260 µs per byte.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: D.</strong> <code>BRR</code> counts clocks per bit, so <code>BRR</code> = f / baud = 48 000 000 / 38 400 = 1250, an exact division.</p>
+    <p>The UART holds one received byte. The next byte needs one whole byte time to arrive, and 8N1 puts 10 bits on the wire per byte (start, 8 data, stop): 10 / 38 400 s ≈ 260 µs. If <code>RDR</code> is still unread when that byte completes, it is lost and <code>ORE</code> is set.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Two bytes at 38 400 baud: the second one sets the deadline</h4>
+    </div>
+    <p class="fig-lede">The line idles high. Each byte is a low start bit, 8 data bits sent least significant bit first, and a high stop bit. The three brackets under the first byte are options C, A and D. The first byte is in <code>RDR</code> when its stop bit ends. The handler must read it before the second byte is complete.</p>
+    <div data-viz="frame"></div>
+    <div class="legend">
+      <span><i class="sw-pri"></i>byte 1, <code>'A'</code> = <code>0x41</code></span>
+      <span><i class="sw-sec"></i>byte 2, <code>'B'</code> = <code>0x42</code></span>
+      <span><i class="sw-ok"></i>the time the handler has</span>
+    </div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>BRR is a count of clocks, so it depends on the clock</h4>
+    </div>
+    <p class="fig-lede">One bit at 38 400 baud lasts 26.04 µs whatever the clock. Each tick below is 50 clock cycles. At 48 MHz the bit holds 1250 cycles. At the 12 MHz reset clock it holds only 312.5, which is where option B comes from.</p>
+    <div data-viz="clock"></div>
+    <div data-viz="brr-table"></div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>BRR</code> = f / baud (clocks per bit), and one 8N1 byte takes 10 / baud. At 48 MHz and 38 400 baud: <code>BRR</code> = 1250, and the handler has about 260 µs to read <code>RDR</code>.</p>
+    <p class="source">Source: L08 slide 1b, slide 2 · Notes: L08 › 2. Clock gate, pins and baud rate · L08 › 3. One byte on the wire</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc32" data-part="mc" data-num="32" data-topic="NMEA checksum" data-ref="topic8">
+  <div class="q-head">
+    <p class="eyebrow">Question 32 · L08, NMEA XOR checksum</p>
+    <h3 class="q-title"><code>host.py --frame "PING"</code> prints the NMEA-style frame for the body <code>PING</code>. In ASCII, <code>P</code> = <code>0x50</code>, <code>I</code> = <code>0x49</code>, <code>N</code> = <code>0x4E</code>, <code>G</code> = <code>0x47</code>. What does it print?</h3>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span><code>$PING*2E</code></span>
+      <span class="why">No. That adds the bytes: 50 + 49 + 4E + 47 = 12E, low byte 2E. The checksum is an XOR.</span>
+    </li>
+    <li>
+      <span class="key">B</span>
+      <span><code>$PING*34</code></span>
+      <span class="why">No. That XORs in the <code>$</code> (<code>0x24</code>) as well. The checksum covers only the bytes between <code>$</code> and <code>*</code>.</span>
+    </li>
+    <li class="right">
+      <span class="key">C</span>
+      <span><code>$PING*10</code></span>
+      <span class="why">Correct. 50 ^ 49 = 19, ^ 4E = 57, ^ 47 = 10.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span><code>$PING*16</code></span>
+      <span class="why">No. 16 is <code>0x10</code> written in decimal. The frame carries two hex digits.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: C.</strong> An NMEA 0183 frame is <code>$</code> body <code>*</code> checksum, and the checksum is the XOR of every byte of the body, written as two hex digits. Neither <code>$</code> nor <code>*</code> is included.</p>
+    <p>XOR works bit by bit, so do it in hex or in binary: 50 ^ 49 = 19, 19 ^ 4E = 57, 57 ^ 47 = 10. The frame is <code>$PING*10</code>. Lab Part 1 asks for exactly this sum by hand, checked with <code>--frame</code>.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>The checksum, one byte at a time</h4>
+    </div>
+    <p class="fig-lede">Each row is one byte of the body in binary, bit 7 on the left. The bottom row is the running XOR. A 1 in the new byte flips that bit of the running value, which is marked with an outline. Step through the four bytes.</p>
+    <div data-viz="xor-steps"></div>
+    <p class="step-note" data-role="xor-note" aria-live="polite"></p>
+    <div data-viz="xor"></div>
+    <pre class="calc" data-role="xor-calc"></pre>
+  </figure>
+
+  <div class="q-head">
+    <h4>Why the other options are wrong</h4>
+    <div class="why-grid">
+      <div class="mini">
+        <span class="label">Option A</span>
+        <h5>A sum, not an XOR</h5>
+        <p>Adding carries between bits. XOR does not.</p>
+        <div class="chain">
+          <span>50 + 49 + 4E + 47</span>
+          <span>= 12E → low byte <b>2E</b></span>
+        </div>
+      </div>
+      <div class="mini">
+        <span class="label">Option B</span>
+        <h5>The <code>$</code> was included</h5>
+        <p>The body is the text between <code>$</code> and <code>*</code>.</p>
+        <div class="chain">
+          <span>24 ^ 10</span>
+          <span>= <b>34</b></span>
+        </div>
+      </div>
+      <div class="mini">
+        <span class="label">Option D</span>
+        <h5>Decimal, not hex</h5>
+        <p>The right value printed in base 10. <code>proto_check()</code> would read 16 as <code>0x16</code> and reject the frame.</p>
+        <div class="chips"><span>0x10</span><span class="arrow">=</span><span>16</span><span class="arrow">but</span><span class="out">*10</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p>Checksum = XOR of every byte between <code>$</code> and <code>*</code>, as two hex digits: <code>PING</code> gives 50 ^ 49 ^ 4E ^ 47 = 10, so <code>$PING*10</code>.</p>
+    <p class="source">Source: L08 slide 10, slide 12 · Notes: L08 › 13. The frame: NMEA 0183 and its XOR checksum</p>
+  </div>
+</article>
+
+<article class="q" id="s1-mc33" data-part="mc" data-num="33" data-topic="Clearing ORE" data-ref="topic8">
+  <div class="q-head">
+    <p class="eyebrow">Question 33 · L08, Clearing ORE</p>
+    <h3 class="q-title">A student's <code>USART2_IRQHandler</code> (below) has no <code>ORE</code> branch, so it never writes <code>ICR</code>. Typing works until, once, interrupts stay masked for longer than one byte time: a byte is overwritten and <code>ORE</code> is set. What happens from then on?</h3>
+    <pre class="calc">void USART2_IRQHandler(void)
+{
+    uint32_t isr = USART2-&gt;ISR;
+    if (isr &amp; USART_ISR_RXNE_RXFNE) {
+        uint8_t c = (uint8_t)USART2-&gt;RDR;
+        os_queue_put_from_isr(&amp;rx_queue, &amp;c);
+    }
+    /* TX branch as in the lesson */
+}</pre>
+  </div>
+
+  <ol class="options">
+    <li>
+      <span class="key">A</span>
+      <span>Nothing visible: reading <code>RDR</code> in the handler clears <code>ORE</code> together with <code>RXNE</code></span>
+      <span class="why">No. Reading <code>RDR</code> clears <code>RXNE</code> only. <code>ORE</code> has its own clear bit in <code>ICR</code>.</span>
+    </li>
+    <li class="right">
+      <span class="key">B</span>
+      <span>Reception stops: <code>ORE</code> stays set, and only writing 1 to <code>ORECF</code> in <code>ICR</code> clears it</span>
+      <span class="why">Correct. This is the slide 14 row: forget to clear <code>ORE</code> and reception stops after the first overrun.</span>
+    </li>
+    <li>
+      <span class="key">C</span>
+      <span>One byte is lost and reception carries on: <code>ORE</code> clears itself when the next byte arrives</span>
+      <span class="why">No. No flag on this chip clears itself. One lost byte is what the lesson's handler gives, because it writes <code>ICR</code>.</span>
+    </li>
+    <li>
+      <span class="key">D</span>
+      <span>Reception resumes after the board's next reply: writing <code>TDR</code> clears <code>ORE</code></span>
+      <span class="why">No. Writing <code>TDR</code> clears <code>TXE</code>, the transmit side's flag. It does not touch <code>ORE</code>.</span>
+    </li>
+  </ol>
+
+  <div class="answer">
+    <p><strong>Answer: B.</strong> On this chip <code>ORE</code> is cleared by writing 1 to a different register: <code>USART2-&gt;ICR = USART_ICR_ORECF;</code>, bit 3 of <code>ICR</code> for bit 3 of <code>ISR</code>. Nothing else clears it. Reading <code>RDR</code> clears <code>RXNE</code> and writing <code>TDR</code> clears <code>TXE</code>.</p>
+    <p>While <code>ORE</code> is set it blocks further reception, so the board hears nothing after the first overrun. The comment in <code>uart.c</code> adds that, with <code>RXNEIE</code> set, the stuck flag also keeps the interrupt asserted. The lesson's handler writes <code>ICR</code>, counts the overrun and loses one byte.</p>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 1</span>
+      <h4>Which action clears which bit of ISR</h4>
+    </div>
+    <p class="fig-lede">The low byte of <code>USART2-&gt;ISR</code> just after the overrun: a byte waits in <code>RDR</code> (<code>RXNE</code>), <code>ORE</code> is set, and the transmitter is idle (<code>TC</code>, <code>TXE</code>). Each step tries one option's action and shows the bits afterwards.</p>
+    <div data-viz="isr-steps"></div>
+    <p class="step-note" data-role="isr-note" aria-live="polite"></p>
+    <div data-viz="isr"></div>
+  </figure>
+
+  <figure class="fig">
+    <div class="fig-head">
+      <span class="fig-no">Figure 2</span>
+      <h4>The same typed line, with and without the ICR write</h4>
+    </div>
+    <p class="fig-lede">Someone types <code>led 170</code> and Enter, one byte every 87 µs at 115 200 baud. Interrupts are masked while the first two bytes arrive, so byte 2 finds byte 1 still in <code>RDR</code>: overrun. The lesson's handler clears <code>ORE</code> and loses only that byte. The student's handler never clears it, and nothing more is received.</p>
+    <div data-viz="timeline"></div>
+    <div class="legend">
+      <span><i class="sw-ok"></i>received into the queue</span>
+      <span><i class="sw-bad"></i>lost</span>
+      <span><i class="sw-seg"></i>never received</span>
+    </div>
+  </figure>
+
+  <div class="exam-line">
+    <span class="label">Exam line</span>
+    <p><code>ORE</code> clears only by writing 1 to <code>ORECF</code> in a different register, <code>ICR</code>. Forget it and reception stops after the first overrun. Reading <code>RDR</code> clears <code>RXNE</code>; writing <code>TDR</code> clears <code>TXE</code>.</p>
+    <p class="source">Source: L08 slide 4, slide 14 · Notes: L08 › 6. Five ways a flag clears · L08 › 16. The silent-failure checklist, UART edition</p>
+  </div>
+</article>
