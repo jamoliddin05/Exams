@@ -71,24 +71,26 @@ B is dropped because 2/4 = 50% < 70%.
 **Notes:** [Week 3 › Candidate generation](../notes/03_Week3_DataMining_FrequentPatterns.md#candidate-generation-self-join-and-pruning-examined) · [Week 4 › Another Example](../notes/04_Week4_Apriori_Parallel_Classification_Intro.md#3-apriori-another-example-with-supmin-2-slides-27-35)
 
 **Answer:**
-- 3-itemsets of self-join result = { {A,C,D}, {A,C,E}, {A,D,E} }
+- 3-itemsets of self-join result = { {A,C,D}, {A,C,E}, {A,D,E}, {C,D,E} }
 - Candidate 3-itemsets = { {A,C,D}, {A,D,E} }
 - Frequent 3-itemsets = { {A,C,D}, {A,D,E} }
 
 **How:**
-1. **Self-join L2.** Join two 2-itemsets only when their first item matches. This is the slides' rule: abc+abd gives abcd, but abc+ace is not joined.
-   - {A,C}+{A,D} → {A,C,D}
+1. **Self-join L2.** The professor's answer key joins any two 2-itemsets that share one item, in any position, as long as their union has exactly 3 items. That is how CD+DE gives CDE. The stricter textbook rule (first item must match) would miss {C,D,E}, so use the professor's rule on the exam.
+   - {A,C}+{A,D} → {A,C,D} (also AC+CD, AD+CD)
    - {A,C}+{A,E} → {A,C,E}
-   - {A,D}+{A,E} → {A,D,E}
-   - {C,D} and {D,E} have no partner with the same first item.
+   - {A,D}+{A,E} → {A,D,E} (also AD+DE, AE+DE)
+   - {C,D}+{D,E} → {C,D,E}
+   - Pairs with no shared item, such as AC+DE, would give 4 items, so they are not joined.
 2. **Prune.** Each 3-itemset must have all of its 2-subsets in L2.
    - {A,C,D}: AC ✓, AD ✓, CD ✓ → keep.
    - {A,C,E}: **CE ✗** (CE has only 50% support) → pruned.
    - {A,D,E}: AD ✓, AE ✓, DE ✓ → keep.
+   - {C,D,E}: CD ✓, DE ✓, **CE ✗** → pruned.
 3. **Scan the DB.**
    - {A,C,D} is in T0, T1, T3: count 3, 75% ✓.
    - {A,D,E} is in T1, T2, T3: count 3, 75% ✓.
-4. **Next level.** Self-joining L3 = {ACD, ADE} gives nothing (the prefixes AC and AD differ), so the algorithm stops. The largest frequent itemsets are 3-itemsets.
+4. **Next level.** Self-joining L3 = {ACD, ADE} (they share A and D) gives {A,C,D,E}. Its subsets ACE and CDE are not in L3, so it is pruned and the algorithm stops. The largest frequent itemsets are 3-itemsets.
 
 ### (e) [12] Write all the rules with support and confidence.
 
@@ -423,7 +425,7 @@ Here the classes are balanced, so a high accuracy really does mean a good model;
 | 1a | {A}, {C}, {D}, {E} |
 | 1b | Self-join = Candidates = {A,C}, {A,D}, {A,E}, {C,D}, {C,E}, {D,E} |
 | 1c | {A,C}, {A,D}, {A,E}, {C,D}, {D,E} |
-| 1d | Self-join: {A,C,D}, {A,C,E}, {A,D,E} · Candidates: {A,C,D}, {A,D,E} · Frequent: {A,C,D}, {A,D,E} |
+| 1d | Self-join: {A,C,D}, {A,C,E}, {A,D,E}, {C,D,E} · Candidates: {A,C,D}, {A,D,E} · Frequent: {A,C,D}, {A,D,E} |
 | 1e | C→A (75%,100%) · A→D (100%,100%) · D→A (100%,100%) · E→A (75%,100%) · C→D (75%,100%) · E→D (75%,100%) · C→AD · AC→D · CD→A · E→AD · AE→D · DE→A (all 75%,100%) |
 | 2a | M0: ⟨BTS,D0⟩⟨BLACK,D0⟩⟨PINK,D0⟩⟨MUSIC,D0⟩⟨AWARD,D0⟩ · M1: ⟨BLACK,D1⟩⟨PINK,D1⟩⟨COLOR,D1⟩ · M2: ⟨SONG,D2⟩⟨BLACK,D2⟩⟨PINK,D2⟩ · M3: ⟨MUSIC,D3⟩⟨BTS,D3⟩ |
 | 2b | R0: ⟨AWARD,(D0)⟩⟨BLACK,(D0,D1,D2)⟩⟨BTS,(D0,D3)⟩⟨COLOR,(D1)⟩ · R1: ⟨MUSIC,(D0,D3)⟩⟨PINK,(D0,D1,D2)⟩⟨SONG,(D2)⟩ |

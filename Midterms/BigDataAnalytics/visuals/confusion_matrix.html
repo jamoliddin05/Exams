@@ -1,0 +1,550 @@
+<title>Confusion Matrix by Hand</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; each HW part is a two-column workbench (steps + matrix | dot field + metrics) that stacks on phones */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --fg: #15202b;
+  --muted: #5a6675;
+  --line: #d9e0e7;
+  --accent: #2350c4;
+  --tp: #1d8a5a;
+  --fn: #c43d36;
+  --fp: #b77612;
+  --tn: #9aa5b3;
+  --tp-soft: #dff2e8;
+  --fn-soft: #f8e1df;
+  --fp-soft: #f7ecd6;
+  --tn-soft: #e9edf1;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131a; --surface: #151c25; --fg: #e5eaf0; --muted: #94a1b1; --line: #27313d; --accent: #82a6ff;
+    --tp: #4cc58b; --fn: #f0776f; --fp: #e9b04c; --tn: #556172;
+    --tp-soft: #16322a; --fn-soft: #3a1f20; --fp-soft: #3a2e17; --tn-soft: #1c242f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131a; --surface: #151c25; --fg: #e5eaf0; --muted: #94a1b1; --line: #27313d; --accent: #82a6ff;
+  --tp: #4cc58b; --fn: #f0776f; --fp: #e9b04c; --tn: #556172;
+  --tp-soft: #16322a; --fn-soft: #3a1f20; --fp-soft: #3a2e17; --tn-soft: #1c242f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.6 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+}
+main { max-width: 940px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.01em; }
+h3.sub { font-family: var(--font-body); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+p { margin: 0; max-width: 66ch; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); letter-spacing: 0.02em; }
+.lede { font-size: 1.1rem; color: var(--muted); }
+header { display: flex; flex-direction: column; gap: 14px; }
+section { display: flex; flex-direction: column; gap: 20px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.c-tp { color: var(--tp); } .c-fn { color: var(--fn); } .c-fp { color: var(--fp); } .c-tn { color: var(--muted); }
+strong.c-tp, strong.c-fn, strong.c-fp { font-weight: 600; }
+
+/* Confusion matrix grid */
+.cm-wrap { overflow-x: auto; }
+.cm {
+  display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 4px;
+  min-width: 320px; font-variant-numeric: tabular-nums;
+}
+.cm > div, .cm > button { padding: 10px 12px; border-radius: 6px; }
+.cm .corner { font-size: 0.72rem; color: var(--muted); line-height: 1.3; align-self: end; }
+.cm .colh, .cm .rowh { font-size: 0.85rem; font-weight: 600; }
+.cm .colh { text-align: center; border-bottom: 2px solid var(--line); border-radius: 0; }
+.cm .rowh { display: flex; align-items: center; border-right: 2px solid var(--line); border-radius: 0; }
+.cm .tot { color: var(--muted); font-family: var(--font-mono); font-size: 0.9rem; display: flex; align-items: center; justify-content: center; }
+.cm .tot.h { font-family: var(--font-body); font-weight: 600; font-size: 0.8rem; }
+.cell {
+  font: inherit; color: var(--fg); border: 1.5px solid transparent; cursor: pointer; text-align: left;
+  display: flex; flex-direction: column; gap: 2px; min-height: 76px; justify-content: center;
+  transition: opacity .15s, border-color .15s;
+}
+.cell .tag { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600; }
+.cell .n { font-family: var(--font-display); font-weight: 800; font-size: 1.7rem; line-height: 1.1; }
+.cell .why { font-size: 0.8rem; color: var(--muted); line-height: 1.35; }
+.cell.tp { background: var(--tp-soft); } .cell.tp .tag { color: var(--tp); }
+.cell.fn { background: var(--fn-soft); } .cell.fn .tag { color: var(--fn); }
+.cell.fp { background: var(--fp-soft); } .cell.fp .tag { color: var(--fp); }
+.cell.tn { background: var(--tn-soft); } .cell.tn .tag { color: var(--muted); }
+.cell:focus-visible, .step:focus-visible, .btn:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.diag-note { font-size: 0.85rem; color: var(--muted); }
+
+/* Focus: hovering a cell or step dims everything else of another kind */
+[data-focus="tp"] [data-k]:not([data-k="tp"]),
+[data-focus="fn"] [data-k]:not([data-k="fn"]),
+[data-focus="fp"] [data-k]:not([data-k="fp"]),
+[data-focus="tn"] [data-k]:not([data-k="tn"]) { opacity: 0.22; }
+[data-focus="tp"] .cell[data-k="tp"], [data-focus="fn"] .cell[data-k="fn"],
+[data-focus="fp"] .cell[data-k="fp"], [data-focus="tn"] .cell[data-k="tn"] { border-color: var(--fg); }
+
+/* Anatomy */
+.anatomy { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.rules { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.rules li { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: baseline; }
+.rules .k { font-family: var(--font-mono); font-weight: 600; font-size: 0.85rem; }
+.reading { font-size: 0.9rem; color: var(--muted); }
+
+/* Metric slices */
+.slices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.slice { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.slice h3 { font-size: 1.15rem; font-weight: 800; }
+.slice .q { font-size: 0.92rem; color: var(--muted); }
+.slice .f { font-family: var(--font-mono); font-size: 0.9rem; }
+.mini { display: grid; grid-template-columns: 22px 52px 52px; grid-template-rows: 22px 52px 52px; gap: 4px; font-size: 0.65rem; color: var(--muted); }
+.mini .ax { display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); }
+.mini .sq { border-radius: 5px; border: 2px dashed var(--line); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-weight: 600; font-size: 0.72rem; color: var(--muted); }
+.mini .sq.den { border: 2px solid var(--fg); color: var(--fg); }
+.mini .sq.num.tp { background: var(--tp); border-color: var(--tp); color: var(--surface); }
+.mini .sq.num.tn { background: var(--tn); border-color: var(--tn); color: var(--surface); }
+.key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.85rem; color: var(--muted); }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.sw.fill { background: var(--tp); }
+.sw.outl { border: 2px solid var(--fg); }
+.sw.dash { border: 2px dashed var(--line); }
+
+/* Case workbench */
+.facts { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.facts ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 2px; }
+.case-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.step {
+  width: 100%; font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; text-align: left; cursor: pointer;
+  transition: opacity .15s;
+}
+.step .k { font-family: var(--font-mono); font-weight: 600; font-size: 0.8rem; }
+.step .d { font-size: 0.88rem; color: var(--muted); line-height: 1.35; }
+.step .e { font-family: var(--font-mono); font-size: 0.9rem; white-space: nowrap; }
+.step[data-k="tp"] .k { color: var(--tp); } .step[data-k="fn"] .k { color: var(--fn); }
+.step[data-k="fp"] .k { color: var(--fp); } .step[data-k="tn"] .k { color: var(--muted); }
+
+.dots svg { width: 100%; height: auto; display: block; }
+.dots circle { transition: opacity .15s; }
+.dots .tp { fill: var(--tp); } .dots .fn { fill: var(--fn); } .dots .fp { fill: var(--fp); } .dots .tn { fill: var(--tn); }
+.dots .cap { font-size: 0.85rem; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; transition: opacity .15s; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+.metrics { display: flex; flex-direction: column; gap: 14px; }
+.metric { display: flex; flex-direction: column; gap: 4px; }
+.metric .top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.metric .name { font-weight: 600; }
+.metric .calc { font-family: var(--font-mono); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.metric .calc b { font-weight: 600; }
+.metric .q { font-size: 0.82rem; color: var(--muted); }
+.bar { height: 8px; border-radius: 4px; background: var(--tn-soft); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; }
+.bar.warn span { background: var(--fn); }
+
+.callout { border-left: 3px solid var(--fn); padding: 4px 0 4px 16px; display: flex; flex-direction: column; gap: 8px; }
+.callout.ok { border-left-color: var(--tp); }
+.btn {
+  align-self: flex-start; font: inherit; font-size: 0.9rem; font-weight: 600; color: var(--accent);
+  background: transparent; border: 1.5px solid var(--accent); border-radius: 999px; padding: 6px 16px; cursor: pointer;
+}
+.btn[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+
+/* Comparison chart */
+.compare { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+.cgroup { display: grid; grid-template-columns: 90px 1fr; gap: 6px 14px; align-items: center; }
+.cgroup .lbl { font-weight: 600; grid-row: span 2; }
+.crow { display: grid; grid-template-columns: 34px 1fr 56px; gap: 10px; align-items: center; font-size: 0.85rem; }
+.crow .who { font-family: var(--font-mono); color: var(--muted); }
+.crow .v { font-family: var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.crow .bar { height: 14px; border-radius: 3px; }
+.crow .bar span { border-radius: 3px; }
+.crow.m1 .bar span { background: var(--fp); }
+.crow.m2 .bar span { background: var(--accent); }
+.ticks { display: grid; grid-template-columns: 90px 34px 1fr 56px; gap: 0 14px; font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+.ticks .t { display: flex; justify-content: space-between; grid-column: 3; margin-left: -4px; }
+
+/* Exam answer */
+pre.answer {
+  margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px;
+  font-family: var(--font-mono); font-size: 0.88rem; line-height: 1.7; overflow-x: auto; white-space: pre;
+}
+
+/* Calculator */
+.calc-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.calc-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; color: var(--muted); }
+.calc-form input {
+  font: 600 1rem var(--font-mono); color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%;
+}
+.err { color: var(--fn); font-size: 0.9rem; }
+
+@media (max-width: 760px) {
+  .anatomy, .case-grid { grid-template-columns: minmax(0, 1fr); }
+  .slices { grid-template-columns: minmax(0, 1fr); }
+  .calc-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cgroup { grid-template-columns: minmax(0, 1fr); }
+  .cgroup .lbl { grid-row: auto; }
+  .ticks { grid-template-columns: 34px 1fr 56px; gap: 0 10px; }
+  .ticks .t { grid-column: 2; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Big Data Analytics · HW1 · Problem 5 [16 pts] · Week 5 slides 40–42</span>
+    <h1>Confusion Matrix by Hand</h1>
+    <p class="lede">Both models in this problem score above 99% accuracy. One of them is excellent. The other gets 7 of its 10 fraud alerts wrong. The matrix shows the difference that the accuracy number hides.</p>
+  </header>
+
+  <section id="grid">
+    <h2>How to read the grid</h2>
+    <p>Rows are what really happened. Columns are what the model said. Each of the four boxes counts the cases with one combination. The first word of the name tells you if the model was right, and the second word tells you what it said.</p>
+    <div class="anatomy" data-focus-root>
+      <div class="cm-wrap">
+        <div class="cm">
+          <div class="corner">Actual ↓<br>Predicted →</div>
+          <div class="colh">Yes</div>
+          <div class="colh">No</div>
+          <div class="tot h">Total</div>
+          <div class="rowh">Yes</div>
+          <button class="cell tp" data-k="tp"><span class="tag">TP</span><span class="why">said yes, really yes</span></button>
+          <button class="cell fn" data-k="fn"><span class="tag">FN</span><span class="why">said no, really yes. A miss.</span></button>
+          <div class="tot">P</div>
+          <div class="rowh">No</div>
+          <button class="cell fp" data-k="fp"><span class="tag">FP</span><span class="why">said yes, really no. A false alarm.</span></button>
+          <button class="cell tn" data-k="tn"><span class="tag">TN</span><span class="why">said no, really no</span></button>
+          <div class="tot">N</div>
+          <div class="tot h">Total</div>
+          <div class="tot">P′</div>
+          <div class="tot">N′</div>
+          <div class="tot">All</div>
+        </div>
+      </div>
+      <div class="col">
+        <ul class="rules">
+          <li data-k="tp"><span class="k c-tp">TP</span><span><b>True Positive.</b> Correct, and the model said yes.</span></li>
+          <li data-k="fn"><span class="k c-fn">FN</span><span><b>False Negative.</b> Wrong, and the model said no. A real yes slipped through.</span></li>
+          <li data-k="fp"><span class="k c-fp">FP</span><span><b>False Positive.</b> Wrong, and the model said yes. A false alarm.</span></li>
+          <li data-k="tn"><span class="k c-tn">TN</span><span><b>True Negative.</b> Correct, and the model said no.</span></li>
+        </ul>
+        <p class="reading">The <b>diagonal</b> (TP and TN) holds the correct answers. The row totals P and N count what really happened. The column totals P′ and N′ count what the model said.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="formulas">
+    <h2>Three metrics, three slices of the grid</h2>
+    <p>Each metric is a fraction built from part of the grid. The filled cells go on top of the fraction. The outlined cells go on the bottom.</p>
+    <div class="slices">
+      <div class="slice">
+        <h3>Accuracy</h3>
+        <div class="mini" aria-hidden="true">
+          <span></span><span class="ax">yes</span><span class="ax">no</span>
+          <span class="ax">yes</span><span class="sq num den tp">TP</span><span class="sq den">FN</span>
+          <span class="ax">no</span><span class="sq den">FP</span><span class="sq num den tn">TN</span>
+        </div>
+        <span class="f">(TP + TN) / All</span>
+        <span class="q">Out of everything, how much did the model get right? Uses the diagonal over the whole grid.</span>
+      </div>
+      <div class="slice">
+        <h3>Precision</h3>
+        <div class="mini" aria-hidden="true">
+          <span></span><span class="ax">yes</span><span class="ax">no</span>
+          <span class="ax">yes</span><span class="sq num den tp">TP</span><span class="sq">FN</span>
+          <span class="ax">no</span><span class="sq den">FP</span><span class="sq">TN</span>
+        </div>
+        <span class="f">TP / (TP + FP)</span>
+        <span class="q">When the model says yes, how often is it right? Uses only the <b>predicted-yes column</b>.</span>
+      </div>
+      <div class="slice">
+        <h3>Recall</h3>
+        <div class="mini" aria-hidden="true">
+          <span></span><span class="ax">yes</span><span class="ax">no</span>
+          <span class="ax">yes</span><span class="sq num den tp">TP</span><span class="sq den">FN</span>
+          <span class="ax">no</span><span class="sq">FP</span><span class="sq">TN</span>
+        </div>
+        <span class="f">TP / (TP + FN)</span>
+        <span class="q">Of all the real yeses, how many did the model catch? Uses only the <b>actual-yes row</b>.</span>
+      </div>
+    </div>
+    <div class="key">
+      <span><i class="sw fill"></i>top of the fraction</span>
+      <span><i class="sw outl"></i>bottom of the fraction</span>
+      <span><i class="sw dash"></i>not used</span>
+    </div>
+  </section>
+
+  <section id="a">
+    <span class="eyebrow">Part (a) · 8 pts</span>
+    <h2>M1: catching credit card fraud</h2>
+    <div class="facts">
+      <h3 class="sub">What the question gives you</h3>
+      <ul>
+        <li><span class="mono">1000</span> transactions in the test data</li>
+        <li><span class="mono">5</span> of them are actually fraud (actual yes, the row total P)</li>
+        <li>M1 flagged <span class="mono">10</span> as fraud (predicted yes, the column total P′)</li>
+        <li><span class="mono">3</span> of those flags are real fraud (TP)</li>
+      </ul>
+    </div>
+    <div class="case" id="case-a"></div>
+    <div class="callout" id="lazy-note">
+      <p><b>Why 99.1% accuracy means little here.</b> Only 5 of the 1000 dots are fraud, so the 988 grey dots make the score look great whatever the model does with the rare class. A model that never flags anything does even better on accuracy.</p>
+      <button class="btn" id="lazy-btn" aria-pressed="false">Show a model that never flags fraud</button>
+    </div>
+  </section>
+
+  <section id="b">
+    <span class="eyebrow">Part (b) · 8 pts</span>
+    <h2>M2: approving loans</h2>
+    <div class="facts">
+      <h3 class="sub">What the question gives you</h3>
+      <ul>
+        <li><span class="mono">1000</span> loan reviews in the test data</li>
+        <li><span class="mono">502</span> are actual approvals (actual yes, P)</li>
+        <li>M2 predicted <span class="mono">500</span> approvals (predicted yes, P′)</li>
+        <li><span class="mono">499</span> of those are real approvals (TP)</li>
+      </ul>
+    </div>
+    <div class="case" id="case-b"></div>
+    <div class="callout ok">
+      <p><b>Here the high accuracy is real.</b> The classes are about half and half, so the score cannot hide behind a huge grey majority. Precision and recall are both above 99% too.</p>
+    </div>
+  </section>
+
+  <section id="compare">
+    <h2>M1 vs M2 side by side</h2>
+    <p>The accuracy bars are almost the same length. Precision and recall show how different the two models are.</p>
+    <div class="compare" id="compare-chart"></div>
+  </section>
+
+  <section id="exam">
+    <h2>What to write on the paper</h2>
+    <pre class="answer">(a) M1, positive = Fraud
+                   Pred Yes   Pred No   Total
+    Actual Yes        3          2         5
+    Actual No         7        988       995
+    Total            10        990      1000
+
+    TP = 3,  FP = 10 − 3 = 7,  FN = 5 − 3 = 2,  TN = 1000 − 3 − 7 − 2 = 988
+    Accuracy  = (3 + 988) / 1000 = 99.1%
+    Precision = 3 / 10           = 30%
+    Recall    = 3 / 5            = 60%
+
+(b) M2, positive = Loan approved
+                   Pred Yes   Pred No   Total
+    Actual Yes      499          3       502
+    Actual No         1        497       498
+    Total           500        500      1000
+
+    TP = 499,  FP = 500 − 499 = 1,  FN = 502 − 499 = 3,  TN = 1000 − 499 − 1 − 3 = 497
+    Accuracy  = (499 + 497) / 1000 = 99.6%
+    Precision = 499 / 500          = 99.8%
+    Recall    = 499 / 502          = 99.4%</pre>
+  </section>
+
+  <section id="try">
+    <h2>Try your own numbers</h2>
+    <p>Exam questions give the same four facts every time. Type them in to get the cells, the steps and the metrics. It opens with the example from week 5, slide 40.</p>
+    <form class="calc-form" id="calc" novalidate>
+      <label for="in-total">Total cases<input id="in-total" type="number" min="1" value="10000" inputmode="numeric"></label>
+      <label for="in-ap">Actually yes (P)<input id="in-ap" type="number" min="0" value="7000" inputmode="numeric"></label>
+      <label for="in-pp">Predicted yes (P′)<input id="in-pp" type="number" min="0" value="7366" inputmode="numeric"></label>
+      <label for="in-tp">Both yes (TP)<input id="in-tp" type="number" min="0" value="6954" inputmode="numeric"></label>
+    </form>
+    <p class="err" id="calc-err" hidden></p>
+    <div class="case" id="case-c"></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  const pct = (num, den) => den === 0 ? null : Math.round(num / den * 1000) / 10;
+  const show = v => v === null ? "undefined" : (Number.isInteger(v) ? v : v.toFixed(1)) + "%";
+
+  function cellsFrom(f) {
+    const tp = f.tp, fp = f.predPos - f.tp, fn = f.actualPos - f.tp;
+    return { tp, fp, fn, tn: f.total - tp - fp - fn };
+  }
+
+  function stepsHTML(f, c, w) {
+    const rows = [
+      ["tp", w.tp, "given"],
+      ["fp", w.fp, `${f.predPos} − ${f.tp}`],
+      ["fn", w.fn, `${f.actualPos} − ${f.tp}`],
+      ["tn", w.tn, `${f.total} − ${c.tp} − ${c.fp} − ${c.fn}`],
+    ];
+    return `<ol class="steps">${rows.map(([k, d, e]) =>
+      `<li><button type="button" class="step" data-k="${k}"><span class="k">${k.toUpperCase()}</span><span class="d">${d}</span><span class="e">${e === "given" ? "" : e + " = "}<b>${c[k]}</b></span></button></li>`
+    ).join("")}</ol>`;
+  }
+
+  function matrixHTML(c, label) {
+    const cell = k => `<button type="button" class="cell ${k}" data-k="${k}"><span class="tag">${k.toUpperCase()}</span><span class="n">${c[k]}</span></button>`;
+    const all = c.tp + c.fp + c.fn + c.tn;
+    return `<div class="cm-wrap"><div class="cm">
+      <div class="corner">Actual ↓<br>Predicted →</div>
+      <div class="colh">${label} = Yes</div><div class="colh">${label} = No</div><div class="tot h">Total</div>
+      <div class="rowh">${label} = Yes</div>${cell("tp")}${cell("fn")}<div class="tot">${c.tp + c.fn}</div>
+      <div class="rowh">${label} = No</div>${cell("fp")}${cell("tn")}<div class="tot">${c.fp + c.tn}</div>
+      <div class="tot h">Total</div><div class="tot">${c.tp + c.fp}</div><div class="tot">${c.fn + c.tn}</div><div class="tot">${all}</div>
+    </div></div>`;
+  }
+
+  // Rare cells go first so they sit together in the top-left corner of the field.
+  function dotsHTML(c, noun) {
+    const cols = 50, gap = 12, order = ["tp", "fn", "fp", "tn"];
+    const all = c.tp + c.fp + c.fn + c.tn, rows = Math.ceil(all / cols);
+    let i = 0, circles = "";
+    for (const k of order) {
+      for (let j = 0; j < c[k]; j++, i++) {
+        const x = (i % cols) * gap + gap / 2, y = Math.floor(i / cols) * gap + gap / 2;
+        circles += `<circle class="${k}" data-k="${k}" cx="${x}" cy="${y}" r="4.3"/>`;
+      }
+    }
+    const legend = order.map(k => `<span data-k="${k}"><i style="background:var(--${k})"></i>${k.toUpperCase()} ${c[k]}</span>`).join("");
+    return `<div class="dots"><svg viewBox="0 0 ${cols * gap} ${rows * gap}" role="img" aria-label="${all} ${noun}: ${c.tp} TP, ${c.fn} FN, ${c.fp} FP, ${c.tn} TN">${circles}</svg></div>
+      <div class="legend">${legend}</div>`;
+  }
+
+  function metricsHTML(c, w) {
+    const all = c.tp + c.fp + c.fn + c.tn;
+    const rows = [
+      ["Accuracy", c.tp + c.tn, all, `(${c.tp} + ${c.tn}) / ${all}`, "out of everything, how much was right"],
+      ["Precision", c.tp, c.tp + c.fp, `${c.tp} / ${c.tp + c.fp}`, w.precQ],
+      ["Recall", c.tp, c.tp + c.fn, `${c.tp} / ${c.tp + c.fn}`, w.recQ],
+    ];
+    return `<div class="metrics">${rows.map(([name, num, den, expr, q]) => {
+      const v = pct(num, den);
+      const low = v !== null && v < 80;
+      return `<div class="metric">
+        <div class="top"><span class="name">${name}</span><span class="calc">${expr} = <b>${show(v)}</b>${v === null ? " (0 / 0)" : ""}</span></div>
+        <div class="bar${low || v === null ? " warn" : ""}"><span style="width:${v ?? 0}%"></span></div>
+        <span class="q">${q}</span>
+      </div>`;
+    }).join("")}</div>`;
+  }
+
+  function wireFocus(root) {
+    const set = k => { if (k) root.dataset.focus = k; else delete root.dataset.focus; };
+    root.addEventListener("mouseover", e => { const t = e.target.closest("[data-k]"); set(t && t.dataset.k); });
+    root.addEventListener("mouseleave", () => set(null));
+    root.addEventListener("focusin", e => { const t = e.target.closest("[data-k]"); set(t && t.dataset.k); });
+    root.addEventListener("focusout", () => set(null));
+  }
+
+  function renderCase(root, f, w, opts = {}) {
+    const c = cellsFrom(f);
+    const all = f.total;
+    root.innerHTML = `<div class="case-grid">
+      <div class="col"><h3 class="sub">Step 1 · Fill the cells</h3>${stepsHTML(f, c, w)}
+        <h3 class="sub">Step 2 · The matrix</h3>${matrixHTML(c, w.label)}
+        <p class="diag-note">Correct answers: TP + TN = ${c.tp + c.tn} of ${all}. Hover a cell or a step to find it everywhere.</p></div>
+      <div class="col">${opts.dots === false ? "" : `<h3 class="sub">All ${all} ${w.noun}, one dot each</h3>${dotsHTML(c, w.noun)}`}
+        <h3 class="sub">Step 3 · The metrics</h3>${metricsHTML(c, w)}</div>
+    </div>`;
+  }
+
+  const fraudWords = {
+    label: "Fraud", noun: "transactions",
+    tp: "flagged and really fraud",
+    fp: "flagged, but not fraud: flags minus TP",
+    fn: "real fraud the model missed: actual fraud minus TP",
+    tn: "not flagged and not fraud. Not 990: that column total also holds the 2 missed frauds (FN)",
+    precQ: "of the 10 alerts, how many were real fraud",
+    recQ: "of the 5 real frauds, how many were caught",
+  };
+  const loanWords = {
+    label: "Loan", noun: "loan reviews",
+    tp: "predicted approve and really approved",
+    fp: "predicted approve, really rejected: predicted minus TP",
+    fn: "really approved, predicted reject: actual minus TP",
+    tn: "everything left over",
+    precQ: "of the 500 predicted approvals, how many were right",
+    recQ: "of the 502 real approvals, how many were found",
+  };
+
+  const caseA = document.getElementById("case-a");
+  const caseB = document.getElementById("case-b");
+  const caseC = document.getElementById("case-c");
+  [caseA, caseB, caseC, document.querySelector("[data-focus-root]")].forEach(wireFocus);
+
+  const m1 = { total: 1000, actualPos: 5, predPos: 10, tp: 3 };
+  const lazy = { total: 1000, actualPos: 5, predPos: 0, tp: 0 };
+  renderCase(caseA, m1, fraudWords);
+  renderCase(caseB, { total: 1000, actualPos: 502, predPos: 500, tp: 499 }, loanWords);
+
+  const lazyBtn = document.getElementById("lazy-btn");
+  const lazyNote = document.getElementById("lazy-note");
+  const lazyExtra = document.createElement("p");
+  lazyExtra.innerHTML = "<b>The lazy model</b> answers no for every transaction. Accuracy rises to <b>99.5%</b>, higher than M1, yet it catches 0 of the 5 frauds (recall 0%). Precision is 0 / 0, undefined, because it never says yes. That is the class-imbalance problem from slide 41: with a rare class, report precision and recall rather than accuracy.";
+  lazyExtra.hidden = true;
+  lazyNote.appendChild(lazyExtra);
+  lazyBtn.addEventListener("click", () => {
+    const on = lazyBtn.getAttribute("aria-pressed") !== "true";
+    lazyBtn.setAttribute("aria-pressed", String(on));
+    lazyBtn.textContent = on ? "Back to M1" : "Show a model that never flags fraud";
+    lazyExtra.hidden = !on;
+    renderCase(caseA, on ? lazy : m1, on ? { ...fraudWords, precQ: "it never says fraud, so there is nothing to be right about", recQ: "of the 5 real frauds, how many were caught" } : fraudWords);
+  });
+
+  // Comparison chart
+  const comp = [
+    ["Accuracy", 99.1, 99.6],
+    ["Precision", 30, 99.8],
+    ["Recall", 60, 99.4],
+  ];
+  document.getElementById("compare-chart").innerHTML =
+    comp.map(([name, a, b]) => `<div class="cgroup"><span class="lbl">${name}</span>
+      <div class="crow m1"><span class="who">M1</span><div class="bar"><span style="width:${a}%"></span></div><span class="v">${a}%</span></div>
+      <div class="crow m2"><span class="who">M2</span><div class="bar"><span style="width:${b}%"></span></div><span class="v">${b}%</span></div>
+    </div>`).join("") +
+    `<div class="ticks"><span class="t"><span>0%</span><span>50%</span><span>100%</span></span></div>`;
+
+  // Calculator
+  const ids = ["in-total", "in-ap", "in-pp", "in-tp"];
+  const err = document.getElementById("calc-err");
+  const calcWords = {
+    label: "Class", noun: "cases",
+    tp: "both actually yes and predicted yes",
+    fp: "predicted yes, actually no: P′ minus TP",
+    fn: "actually yes, predicted no: P minus TP",
+    tn: "everything left over",
+    precQ: "when the model says yes, how often is it right",
+    recQ: "of the real yeses, how many were caught",
+  };
+  function runCalc() {
+    const [total, actualPos, predPos, tp] = ids.map(id => Number(document.getElementById(id).value));
+    let msg = "";
+    if ([total, actualPos, predPos, tp].some(v => !Number.isInteger(v) || v < 0)) msg = "Use whole numbers of 0 or more in every box.";
+    else if (total < 1) msg = "Total cases must be at least 1.";
+    else if (actualPos > total || predPos > total) msg = "Actually yes and predicted yes cannot be larger than the total.";
+    else if (tp > actualPos || tp > predPos) msg = "TP cannot be larger than actually yes or predicted yes, since TP is counted inside both.";
+    else if (total - actualPos - predPos + tp < 0) msg = "These numbers would make TN negative. Check that the totals add up.";
+    err.hidden = !msg;
+    err.textContent = msg;
+    caseC.hidden = !!msg;
+    if (!msg) renderCase(caseC, { total, actualPos, predPos, tp }, calcWords, { dots: total <= 2000 });
+  }
+  document.getElementById("calc").addEventListener("input", runCalc);
+  document.getElementById("calc").addEventListener("submit", e => e.preventDefault());
+  runCalc();
+})();
+</script>

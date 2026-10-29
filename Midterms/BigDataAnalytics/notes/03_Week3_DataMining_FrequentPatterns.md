@@ -177,6 +177,7 @@ return ∪k Lk;
 - Pruning: **acde is removed because ade is not in $L_3$** (cde is missing too). abcd: abc, abd, acd, bcd all ∈ $L_3$ → kept.
 - **$C_4$ = {abcd}**. $L_4$ would then need a DB scan (no DB given).
 - (textbook context) Join rule: two k-itemsets are joined only if their **first k−1 items match** (items in sorted order). That is why abc + acd is not joined, and why the self-join gives exactly {abcd, acde} as on the slide.
+- **Professor's HW1 answer key uses a looser rule:** join any two k-itemsets whose union has k+1 items (any k−1 shared items, not only the prefix). From L2 = {AC, AD, AE, CD, DE} the key lists CDE (from CD + DE) in the self-join result. Pruning removes the extra itemsets anyway, so $C_{k+1}$ is the same under both rules. Only the "self-join result" line differs, so on the exam use the looser rule for that line.
 
 ### Full worked example: Supmin 2 (count)
 
