@@ -1,0 +1,21 @@
+{
+  "_help": "Fill the null values after you do the steps in TODO.md, then ask Claude to rebuild. Screenshots go into screens/ with the names listed in TODO.md.",
+
+  "account1_address": null,
+
+  "tx1_course":   {"from": null, "to": "0x02B75C782186B7615730A246D0b366d54Fa38772", "value": "0.001 ETH", "block": null, "status": "Success"},
+  "tx2_account2": {"from": null, "to": null, "value": "0.002 ETH", "block": null, "status": "Success"},
+
+  "_1_4_note": "Expected reactions; change them if what you see is different.",
+  "reaction_metamask": "refused it",
+  "reaction_etherscan": "quietly showed an address page with no history",
+
+  "utxo_screenshot_time": "09.11.2026, 00:13 (Tashkent, UTC+5)",
+
+  "fees_morning":   {"time": null, "low": null, "medium": null, "high": null, "blocks": null},
+  "fees_afternoon": {"time": null, "low": null, "medium": null, "high": null, "blocks": null},
+  "fees_evening":   {"time": null, "low": null, "medium": null, "high": null, "blocks": null},
+
+  "conf_first":  {"time": null, "count": null},
+  "conf_second": {"time": null, "count": null}
+}

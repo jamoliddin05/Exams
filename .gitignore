@@ -30,3 +30,8 @@ secrets*
 
 # Claude Code git worktrees
 .claude/worktrees/
+
+# Assignment screenshots, handwriting photos and built reports stay local
+Finals/**/screens/
+Finals/**/out/
+Finals/**/student.json
